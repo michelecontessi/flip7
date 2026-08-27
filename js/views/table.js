@@ -174,7 +174,32 @@ function turnStrip(g, ctx) {
       ${mine ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
       <span class="avatar" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="ts-txt"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
+      ${trendSpark(g, mySeat(g, ctx))}
     </div>`;
+}
+
+/**
+ * Mini grafico nella striscia del turno: i totali round per round di tutti
+ * (piu' il bottino provvisorio del round in corso), la mia linea in evidenza.
+ */
+function trendSpark(g, me) {
+  const playing = g.status === "playing";
+  const liveTotal = (sid) => (g.seats[sid].total || 0)
+    + (g.hands[sid] && g.hands[sid].out !== "bust" ? engine.handPoints(g.hands[sid]) : 0);
+  const steps = [
+    Object.fromEntries(g.order.map((sid) => [sid, 0])),
+    ...(g.trend || []),
+    ...(playing ? [Object.fromEntries(g.order.map((sid) => [sid, liveTotal(sid)]))] : [])
+  ];
+  if (steps.length < 2) return "";
+  const w = 92, h = 40, pad = 4;
+  const max = Math.max(10, ...steps.flatMap((s) => Object.values(s)));
+  const x = (i) => pad + i * ((w - pad * 2) / (steps.length - 1));
+  const y = (v) => h - pad - (v / max) * (h - pad * 2);
+  return `<span class="ts-spark"><svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    ${g.order.map((sid) => `<polyline class="${sid === me ? "me" : ""}" stroke="${colorOf(g.seats[sid].name)}"
+      points="${steps.map((s, i) => x(i).toFixed(1) + "," + y(s[sid] ?? 0).toFixed(1)).join(" ")}"/>`).join("")}
+  </svg></span>`;
 }
 
 /** Il banco: mazzo con le carte rimaste e ultima carta pescata. */
@@ -206,8 +231,10 @@ function renderSeatRow(g, sid, ctx) {
   const isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
   const isFlip3 = g.flip3 && g.flip3.target === sid;
   const pts = h.out === "bust" ? 0 : engine.handPoints(h);
-  // l'ultima carta pescata si riconosce anche in mano (anello scuro)
-  const just = g.lastDraw && g.lastDraw.seat === sid ? g.lastDraw.card : null;
+  // l'ultima carta pescata si riconosce anche in mano (anello scuro);
+  // se era il doppione dello sballo, l'evidenza ce l'ha gia' il doppione rosso
+  let just = g.lastDraw && g.lastDraw.seat === sid ? g.lastDraw.card : null;
+  if (h.out === "bust" && just === "n" + h.bustCard) just = null;
   const cls = (card) => (card === just ? "mini just" : "mini");
   // due file: sopra azioni e modificatori, sotto tutti i numeri
   const specials = [
@@ -287,6 +314,9 @@ function renderControls(g, ctx, me) {
   return `<p class="hint">Aspetta il tuo turno…</p>`;
 }
 
+/** Il mio posto sta SEMPRE in cima alla lista, chiunque sia a iniziare. */
+const seatOrder = (g, me) => (me ? [me, ...g.order.filter((sid) => sid !== me)] : g.order);
+
 function renderPlaying(g, ctx) {
   const me = mySeat(g, ctx);
   return `
@@ -301,12 +331,10 @@ function renderPlaying(g, ctx) {
           <span class="round-head"><span class="round-word">Round</span>${roundCard(g.round)}</span>
           <span class="round-meta ml-auto"><b>${g.order.length} giocatori</b><span>si vince a ${g.target}</span></span>
         </div>
+        <div class="seat-controls">${renderControls(g, ctx, me)}</div>
         <ul class="seats">
-          ${g.order.map((sid) => renderSeatRow(g, sid, ctx)).join("")}
+          ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
         </ul>
-      </section>
-      <section class="card t-controls">
-        ${renderControls(g, ctx, me)}
         <div class="board-links center-links">
           ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
           <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
@@ -334,6 +362,7 @@ function renderRoundEnd(g, ctx) {
       <section class="card t-side">
         <div class="turn-strip end">
           <div class="ts-txt"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
+          ${trendSpark(g, me)}
         </div>
         ${bankRow(g)}
         ${g.log.length ? `<div class="table-log">${g.log.slice(-3).map((l) => `<span>${esc(l)}</span>`).join("")}</div>` : ""}
@@ -343,13 +372,13 @@ function renderRoundEnd(g, ctx) {
           <span class="round-head"><span class="round-word">Round</span>${roundCard(g.round)}</span>
           <span class="round-meta ml-auto"><b class="done-note">round chiuso</b><span>si vince a ${g.target}</span></span>
         </div>
+        <div class="seat-controls">
+          ${me ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>` : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`}
+          <p class="hint">${esc(shortName(lead))} è in testa: ${left > 0 ? `gli mancano ${left} punti` : "ha raggiunto il traguardo"}.</p>
+        </div>
         <ul class="seats">
-          ${g.order.map((sid) => renderSeatRow(g, sid, ctx)).join("")}
+          ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
         </ul>
-      </section>
-      <section class="card t-controls">
-        ${me ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>` : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`}
-        <p class="hint">${esc(shortName(lead))} è in testa: ${left > 0 ? `gli mancano ${left} punti` : "ha raggiunto il traguardo"}.</p>
         <div class="board-links center-links">
           ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
           <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>

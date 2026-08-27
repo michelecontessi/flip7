@@ -1045,12 +1045,13 @@ table.rounds td.tot { font-weight: 800; }
 .seat-state.s-flip3 { background: rgba(226,96,14,.14); color: #e2600e; }
 /* due file di carte: sopra azioni e modificatori, sotto i numeri */
 .seat-cards { display: flex; flex-direction: column; gap: 4px; min-height: 34px; justify-content: center; align-items: flex-start; }
-.cards-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.cards-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .dup-note { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 650; color: var(--red); }
 .bust-note { color: var(--red) !important; font-weight: 650; }
 .fcard.dup { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2px var(--red), 0 1px 3px rgba(20,20,30,.22); }
-/* l'ultima carta pescata spicca nella mano di chi l'ha presa */
-.fcard.just { outline: 2.5px solid var(--primary); outline-offset: 2px; animation: bump .3s ease-out; }
+/* l'ultima carta pescata spicca nella mano di chi l'ha presa
+   (niente animazione: il tavolo si ridisegna a ogni mossa e ripartirebbe) */
+.fcard.just { outline: 2.5px solid var(--primary); outline-offset: 1.5px; }
 .fcard.bust-draw { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2.5px var(--red), 0 1px 3px rgba(20,20,30,.25); }
 /* punteggi del posto: grande il totale partita, piccolo il round in corso */
 .seat-pts { text-align: right; line-height: 1.1; flex: none; }
@@ -1067,10 +1068,16 @@ table.rounds td.tot { font-weight: 800; }
 .ld-txt { font-size: 14px; color: var(--muted); }
 .ld-txt b { color: var(--text); }
 
-/* pesca / mi fermo: due bottoni pari, verde per rischiare e oro per incassare */
+/* pesca / mi fermo: due bottoni pari, verde per rischiare e rosso per fermarsi */
 .table-actions { display: flex; gap: 9px; }
 .table-actions .btn { flex: 1; }
-.btn.stop { background: var(--gold); color: #241a03; }
+.btn.stop { background: var(--red); color: #fff; }
+/* i comandi vivono sopra il proprio posto, dentro la card dei giocatori */
+.seat-controls { display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
+.seat-controls:empty { display: none; }
+.ts-spark { margin-left: auto; flex: none; display: flex; }
+.ts-spark polyline { fill: none; stroke-width: 1.5; opacity: .45; stroke-linejoin: round; stroke-linecap: round; }
+.ts-spark polyline.me { stroke-width: 2.5; opacity: 1; }
 .table-foot { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
 .table-choose { display: flex; flex-direction: column; gap: 9px; }
 .choose-label { font-weight: 700; font-size: 15px; text-align: center; }
@@ -1229,12 +1236,11 @@ table.rounds td.tot { font-weight: 800; }
   #view.view-tavolo { max-width: 1020px; }
   .table-wrap {
     display: grid; grid-template-columns: 360px minmax(0, 1fr);
-    grid-template-areas: "side seats" "controls seats" ". seats";
+    grid-template-areas: "side seats";
     gap: 14px; align-items: start;
   }
-  .t-side { grid-area: side; }
+  .t-side { grid-area: side; position: sticky; top: 74px; }
   .t-seats { grid-area: seats; }
-  .t-controls { grid-area: controls; }
   /* da pc le carte del tavolo si vedono grandi, mano e banco alla pari */
   .bank .fcard { width: 84px; }
   .fcard.mini { width: 84px; }

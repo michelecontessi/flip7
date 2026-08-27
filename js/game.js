@@ -63,6 +63,7 @@ export function normalizeGame(g) {
   state.log = g.log || [];
   state.lastDraw = g.lastDraw || null;
   state.lastRound = g.lastRound || null;
+  state.trend = g.trend || [];
   return state;
 }
 
@@ -74,7 +75,7 @@ export function createLobby(target = 200) {
 /** Avvia la partita (deckOverride serve ai test). */
 export function startGame(state, rng = Math.random, deckOverride = null) {
   if (state.order.length < 2) throw new Error("Servono almeno 2 giocatori seduti");
-  const s = { ...state, status: "playing", round: 1, discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null };
+  const s = { ...state, status: "playing", round: 1, discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [] };
   s.deck = deckOverride ? [...deckOverride] : shuffle(fullDeck(), rng);
   s.hands = {};
   for (const sid of s.order) s.hands[sid] = emptyHand();
@@ -120,6 +121,8 @@ function endRound(s) {
   }
   s.pending = null;
   s.flip3 = null;
+  // storia dei totali round per round (per il grafico di andamento)
+  s.trend = [...(s.trend || []), Object.fromEntries(s.order.map((sid) => [sid, s.seats[sid].total || 0]))];
   const someoneWon = s.order.some((sid) => (s.seats[sid].total || 0) >= s.target);
   s.status = someoneWon ? "over" : "roundEnd";
   return s;
