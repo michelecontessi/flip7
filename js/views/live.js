@@ -7,7 +7,7 @@
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
 import { esc, initials, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, shareRoom, sheet, fmtDate } from "../ui.js";
-import { icon, wordmark, crownEmblem, numberCard, roundCard, modCard, bustCard, flip7Card } from "../icons.js";
+import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card } from "../icons.js";
 import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry } from "../scoring.js";
 import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed } from "../stats.js";
 
@@ -46,7 +46,7 @@ function renderIdle(room, me) {
     return `
       ${whoAmIBanner(room, me)}
       <section class="card empty-state">
-        <div class="empty-ico">${icon("cardFan")}</div>
+        ${fanArt()}
         <h2 class="empty-title">Nessuna partita in corso</h2>
         <p class="muted">Il tabellone comparirà qui appena il segnapunti la avvia.</p>
       </section>
@@ -369,14 +369,15 @@ function keypadValue(entry) {
 }
 
 function buildHand(e, r) {
-  if (e.busted) return bustCard({ on: true });
   const cards = [
     ...(e.numbers || []).slice().sort((a, b) => a - b).map((n) => numberCard(n, { on: true })),
     ...(e.doubled ? [modCard("x2", { on: true })] : []),
     ...(e.plus || []).slice().sort((a, b) => a - b).map((p) => modCard(p, { on: true })),
     ...(r.flip7 ? [flip7Card()] : [])
   ];
-  return cards.join("") || `<span class="hand-empty">tocca le carte del giocatore</span>`;
+  const inner = cards.join("") || `<span class="hand-empty">tocca le carte del giocatore</span>`;
+  // sballare non e' una carta: le carte restano li', annullate
+  return e.busted ? `<span class="hand-void">${inner}</span><span class="void-flag">SBALLATO · vale 0</span>` : inner;
 }
 
 function noteOf(e, r, isKeypad) {
@@ -430,14 +431,14 @@ export function renderScoreSheet(s) {
       <div class="calc-section">
         <div class="calc-label"><span>Carte numero</span><span class="count-num">${(e.numbers || []).length}/7</span></div>
         <div class="numgrid">
-          ${NUMBER_CARDS.map((n) => `<button class="card-btn" data-action="calc-num" data-n="${n}">${numberCard(n, { on: (e.numbers || []).includes(n) })}</button>`).join("")}
+          ${NUMBER_CARDS.map((n) => `<button class="card-btn" data-action="calc-num" data-n="${n}">${numberCard(n, { on: (e.numbers || []).includes(n) })}<i class="pick">${icon("check")}</i></button>`).join("")}
         </div>
       </div>
       <div class="calc-section">
         <div class="calc-label"><span>Modificatori</span></div>
         <div class="modgrid">
-          ${PLUS_MODIFIERS.map((p) => `<button class="card-btn" data-action="calc-plus" data-n="${p}">${modCard(p, { on: (e.plus || []).includes(p) })}</button>`).join("")}
-          <button class="card-btn" data-action="calc-double">${modCard("x2", { on: Boolean(e.doubled) })}</button>
+          ${PLUS_MODIFIERS.map((p) => `<button class="card-btn" data-action="calc-plus" data-n="${p}">${modCard(p, { on: (e.plus || []).includes(p) })}<i class="pick">${icon("check")}</i></button>`).join("")}
+          <button class="card-btn" data-action="calc-double">${modCard("x2", { on: Boolean(e.doubled) })}<i class="pick">${icon("check")}</i></button>
         </div>
       </div>
     `}

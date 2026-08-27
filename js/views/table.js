@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { esc, initials, colorOf, toast, askText, askConfirm, askChoice } from "../ui.js";
-import { icon, wordmark, crownEmblem, numberCard, modCard, bustCard } from "../icons.js";
+import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard } from "../icons.js";
 import * as engine from "../game.js";
 
 const OUT_LABEL = { stay: "sta", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
@@ -24,16 +24,16 @@ function miniCard(c, cls = "mini") {
   if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls });
   if (engine.CARD.isPlus(c)) return modCard(engine.CARD.plus(c), { on: true, size: cls });
   if (engine.CARD.isX2(c)) return modCard("x2", { on: true, size: cls });
-  if (c === "sc") return `<span class="fcard mod on ${cls}" data-face="SC"><b>SC</b></span>`;
-  if (c === "frz") return `<span class="fcard bust on ${cls}" data-face="❄"><b>❄</b></span>`;
-  return `<span class="fcard mod on ${cls}" data-face="3"><b>3</b></span>`;
+  if (c === "sc") return `<span class="fcard sc on ${cls}" data-face="SC"><b>SC</b></span>`;
+  if (c === "frz") return `<span class="fcard frz on ${cls}" data-face="❄"><b>❄</b></span>`;
+  return `<span class="fcard f3 on ${cls}" data-face="F3"><b>F3</b></span>`;
 }
 
 // --- intro / lobby -----------------------------------------------------------
 function renderIntro(ctx) {
   return `
     <section class="card empty-state">
-      <div class="empty-ico">${icon("cardFan")}</div>
+      ${fanArt()}
       <h2 class="empty-title">Tavolo online</h2>
       <p class="muted">Qui si gioca a Flip 7 per davvero, ognuno dal suo telefono:
         carte, sballi, Congela, Pesca Tre e Seconda Chance — con le regole ufficiali.

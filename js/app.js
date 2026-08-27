@@ -10,7 +10,7 @@ import { historyView } from "./views/history.js";
 import { setupView } from "./views/setup.js";
 import { tableView } from "./views/table.js";
 import { DEFAULTS } from "./config.js";
-import { icon, wordmark } from "./icons.js";
+import { icon, wordmark, fanArt, googleG } from "./icons.js";
 import { applyTheme, watchSystemTheme } from "./theme.js";
 
 const VIEWS = {
@@ -80,6 +80,7 @@ function renderTabbar(c) {
 function renderWelcome() {
   return `
     <section class="gate">
+      ${fanArt()}
       ${wordmark("gate-mark")}
       <h1 class="gate-title">Segnapunti da ufficio</h1>
       <p class="gate-sub">La stanza si crea <b>una volta sola</b>: da lì in poi l'app
@@ -105,14 +106,15 @@ function renderWelcome() {
 function renderSignin() {
   return `
     <section class="gate">
+      ${fanArt()}
       ${wordmark("gate-mark")}
+      <h1 class="gate-title">Ciao! Chi sei?</h1>
+      <p class="gate-sub">Qui dentro ci sono punteggi, classifiche e il tavolo online
+        del gruppo: entra solo chi viene approvato. Accedi e chiedi di entrare.</p>
       <div class="card gate-card center">
-        <div class="empty-ico">${icon("user")}</div>
-        <h2 class="section-title">Accedi con Google</h2>
-        <p class="muted small">Un tocco solo: serve a riconoscerti. Entrano soltanto le
-          persone approvate da chi gestisce la stanza, e l'accesso ti segue anche se
+        <button class="gbtn" data-action="google-signin">${googleG()} Continua con Google</button>
+        <p class="hint">Un tocco, nessuna password: l'accesso ti segue anche se
           cambi telefono o rete.</p>
-        <button class="btn primary big" data-action="google-signin">Accedi con Google</button>
       </div>
     </section>`;
 }

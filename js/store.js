@@ -154,9 +154,14 @@ async function initFirebase() {
 
   // login con Google: l'identita' e' l'account, non il browser, quindi
   // sopravvive a cambio rete, telefono nuovo e pulizia dei dati.
-  const user = await new Promise((resolve) => {
+  let user = await new Promise((resolve) => {
     const stop = authMod.onAuthStateChanged(auth, (u) => { stop(); resolve(u); });
   });
+  // sessioni anonime rimaste da prima del passaggio a Google: non valgono
+  if (user && user.isAnonymous) {
+    await authMod.signOut(auth).catch(() => {});
+    user = null;
+  }
   if (!user) {
     status.ready = true;
     status.access = "signin";
