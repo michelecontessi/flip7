@@ -192,15 +192,12 @@ export async function signIn() {
     await attachRoom();
   } catch (err) {
     if (err && (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request")) return;
-    // alcuni browser mobili bloccano i popup: ripiego sul redirect
-    if (err && (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment")) {
-      await fb.authMod.signInWithRedirect(fb.auth, provider);
-      return;
-    }
     const friendly = {
       "auth/unauthorized-domain": "Questo indirizzo non è autorizzato: in Firebase → Authentication → Impostazioni → Domini autorizzati va aggiunto il dominio del sito.",
       "auth/operation-not-allowed": "L'accesso Google non è abilitato: in Firebase → Authentication → Metodo di accesso attiva Google.",
-      "auth/network-request-failed": "Problema di rete: controlla la connessione e riprova."
+      "auth/network-request-failed": "Problema di rete: controlla la connessione e riprova.",
+      "auth/popup-blocked": "Il browser ha bloccato la finestra di accesso: tocca di nuovo il pulsante.",
+      "auth/operation-not-supported-in-this-environment": "Questo browser non supporta l'accesso: apri il link in Safari o Chrome."
     };
     status.error = friendly[err && err.code] || ("Accesso non riuscito: " + ((err && err.message) || err));
     notify();

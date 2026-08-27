@@ -102,6 +102,12 @@ function renderWelcome() {
     </section>`;
 }
 
+/** Browser "interno" delle app di chat: Google non permette il login li' dentro. */
+function isInAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|Line\/|WhatsApp|Telegram|; wv\)|GSA\//i.test(ua);
+}
+
 // Login con Google: identita' stabile (sopravvive a cambio telefono e rete).
 function renderSignin(c) {
   return `
@@ -111,6 +117,13 @@ function renderSignin(c) {
       <h1 class="gate-title">Ciao! Chi sei?</h1>
       <p class="gate-sub">Qui dentro ci sono punteggi, classifiche e il tavolo online
         del gruppo: entra solo chi viene approvato. Accedi e chiedi di entrare.</p>
+      ${isInAppBrowser() ? `
+      <div class="card gate-card center webview-warn">
+        <h2 class="section-title">Apri nel browser vero</h2>
+        <p class="muted small">Hai aperto il link dentro l'app di chat, e Google non
+          permette l'accesso da lì. Tocca il menu <b>⋮</b> (o <b>condividi</b>) in alto
+          e scegli <b>“Apri nel browser”</b> (Safari o Chrome), poi riprova.</p>
+      </div>` : ""}
       <div class="card gate-card center">
         <button class="gbtn" data-action="google-signin">${googleG()} Continua con Google</button>
         ${c.status.error ? `<p class="err small">${esc(c.status.error)}</p>` : `
