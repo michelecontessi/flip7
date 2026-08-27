@@ -93,6 +93,18 @@ export function winnersOf(standings) {
 // Classifica perpetua
 // ---------------------------------------------------------------------------
 
+/** Filtro sulla provenienza: dal vivo (segnapunti e recuperi a mano) o online. */
+export const SOURCES = {
+  all: { label: "Tutte" },
+  live: { label: "Dal vivo" },
+  online: { label: "Online" }
+};
+
+export const matchesSource = (g, source) =>
+  !source || source === "all" ? true
+    : source === "online" ? g.source === "online"
+    : g.source !== "online";
+
 export const PERIODS = {
   all: { label: "Sempre", since: () => 0 },
   year: { label: "Quest'anno", since: () => new Date(new Date().getFullYear(), 0, 1).getTime() },
@@ -138,7 +150,7 @@ export function leaderboard(history, players, opts = {}) {
 
   const games = Object.entries(history || {})
     .map(([id, g]) => ({ id, ...g }))
-    .filter((g) => (g.playedAt || 0) >= since)
+    .filter((g) => (g.playedAt || 0) >= since && matchesSource(g, opts.source))
     .sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
 
   for (const game of games) {
@@ -194,7 +206,7 @@ export function leaderboardTrend(history, players, opts = {}) {
   const since = (PERIODS[opts.period] || PERIODS.all).since();
   const games = Object.entries(history || {})
     .map(([id, g]) => ({ id, ...g }))
-    .filter((g) => (g.playedAt || 0) >= since)
+    .filter((g) => (g.playedAt || 0) >= since && matchesSource(g, opts.source))
     .sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
 
   const acc = new Map();

@@ -4,9 +4,10 @@
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { icon, crownEmblem } from "../icons.js";
-import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, PERIODS, historyList } from "../stats.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
 
-const localState = { period: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
+const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
+const filters = () => ({ period: localState.period, source: localState.source });
 
 const COLUMNS = [
   { key: "crowns", label: "crown", icon: "crownFill" },
@@ -46,7 +47,7 @@ function crownHero(row, gamesCount) {
 // media punti dopo ogni partita), con l'avatar sul punto piu' recente.
 // ---------------------------------------------------------------------------
 function renderTrend(room, me) {
-  const { steps, series } = leaderboardTrend(room.history, room.players, { period: localState.period });
+  const { steps, series } = leaderboardTrend(room.history, room.players, filters());
   if (steps.length < 2 || series.length < 2) return "";
 
   const byRank = localState.trendMetric !== "avg";
@@ -157,7 +158,7 @@ function trendCaption(step, series, byRank) {
 export const leaderboardView = {
   render(ctx) {
     const { room, me } = ctx;
-    const { rows, gamesCount } = leaderboard(room.history, room.players, { period: localState.period });
+    const { rows, gamesCount } = leaderboard(room.history, room.players, filters());
     const sorted = sortRows(rows);
 
     if (!rows.length) {
@@ -181,6 +182,12 @@ export const leaderboardView = {
           <label class="period-select ml-auto">
             <select data-change="lb-period">
               ${Object.entries(PERIODS).map(([k, v]) => `<option value="${k}" ${localState.period === k ? "selected" : ""}>${v.label}</option>`).join("")}
+            </select>
+            ${icon("chevron", "tiny")}
+          </label>
+          <label class="period-select">
+            <select data-change="lb-source">
+              ${Object.entries(SOURCES).map(([k, v]) => `<option value="${k}" ${localState.source === k ? "selected" : ""}>${v.label}</option>`).join("")}
             </select>
             ${icon("chevron", "tiny")}
           </label>
@@ -239,10 +246,11 @@ export const leaderboardView = {
     "goto-history"() { location.hash = "#storico"; },
     "lb-detail"(ctx, el) {
       const pid = el.dataset.id;
-      const { rows } = leaderboard(ctx.room.history, ctx.room.players, { period: localState.period });
+      const { rows } = leaderboard(ctx.room.history, ctx.room.players, filters());
       const row = rows.find((r) => r.playerId === pid);
       if (!row) return;
-      const games = historyList(ctx.room.history).filter((g) => g.results && g.results[pid]);
+      const games = historyList(ctx.room.history)
+        .filter((g) => g.results && g.results[pid] && matchesSource(g, localState.source));
       openPage({ row, games, pid }, renderPlayerPage);
       // il grafico e' lungo quanto lo storico: lo porto sull'ultima partita
       requestAnimationFrame(() => {
@@ -254,7 +262,8 @@ export const leaderboardView = {
   },
 
   changes: {
-    "lb-period"(ctx, el) { localState.period = el.value; localState.trendSel = null; }
+    "lb-period"(ctx, el) { localState.period = el.value; localState.trendSel = null; },
+    "lb-source"(ctx, el) { localState.source = el.value; localState.trendSel = null; }
   }
 };
 

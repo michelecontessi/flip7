@@ -1087,9 +1087,8 @@ table.rounds td.tot { font-weight: 800; }
 }
 .race-row.me { background: var(--tint); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 .race-track { display: flex; height: 9px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
-/* barre neutre per tutti, lamina olografica solo per me */
+/* barre neutre per tutti; la mia prende il colore del mio avatar (inline) */
 .race-track i { display: block; height: 100%; background: var(--dim); transition: width .4s ease; }
-.race-row.me .race-track i { background: var(--holo); }
 .race-track i.prov { opacity: .35; }
 .race-row > b { font-family: var(--font-display); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
 .race-row > b small { font-size: 10.5px; color: var(--green); font-weight: 700; margin-left: 2px; }

@@ -11,12 +11,19 @@ import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, ca
 import * as engine from "../game.js";
 
 const OUT_LABEL = { stay: "si è fermato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
-const ACTION_NAME = { frz: "Congela", fl3: "Pesca Tre", sc: "Seconda Chance" };
 const BOT_NAMES = ["Bot Ada", "Bot Bruno", "Bot Carla", "Bot Dina"];
 let botTimer = null;
 
 const game = (ctx) => engine.normalizeGame(ctx.room.game);
-const mySeat = (g, ctx) => g && g.order.find((sid) => g.seats[sid] && g.seats[sid].uid === ctx.status.uid);
+/**
+ * Il MIO posto: quello del mio account, mai un bot (i bot hanno lo stesso uid
+ * di chi li ha aggiunti). A parita', vince il posto del giocatore collegato.
+ */
+const mySeat = (g, ctx) => {
+  if (!g) return undefined;
+  const mine = g.order.filter((sid) => g.seats[sid] && g.seats[sid].uid === ctx.status.uid && !g.seats[sid].bot);
+  return mine.find((sid) => ctx.me && g.seats[sid].playerId === ctx.me) || mine[0];
+};
 /** Primo nome per gli umani; i bot tengono il nome intero ("Bot" da solo e' ambiguo). */
 const shortName = (seat) => seat.bot ? seat.name : String(seat.name || "").split(" ")[0];
 
@@ -147,36 +154,6 @@ function renderLobby(g, ctx) {
 }
 
 // --- partita -----------------------------------------------------------------
-/** Striscia sempre visibile: chi deve agire adesso e cosa deve fare. */
-function turnStrip(g, ctx) {
-  const actor = actorOf(g);
-  const seat = g.seats[actor];
-  const mine = controls(g, ctx, actor) && !seat.bot;
-  let title, sub;
-  if (g.pending) {
-    const what = ACTION_NAME[g.pending.type];
-    title = mine ? `Scegli tu: ${what}` : `Sceglie ${shortName(seat)}`;
-    sub = mine ? "decidi il bersaglio qui sotto" : `sta scegliendo il bersaglio di ${what}`;
-  } else if (g.flip3) {
-    const n = g.flip3.left;
-    title = mine ? "Pesca Tre: tocca a te" : `Pesca Tre: ${shortName(seat)}`;
-    sub = `${mine ? "devi" : "deve"} pescare ancora ${n} ${n === 1 ? "carta" : "carte"}`;
-  } else {
-    title = mine ? "Tocca a te" : `Tocca a ${shortName(seat)}`;
-    sub = mine
-      ? (emptyHand(g.hands[actor]) ? "la prima carta arriva da sola" : "pesca (un numero doppio ti sballa) o fermati e incassa")
-      : "sta decidendo se pescare o fermarsi";
-  }
-  if (seat.bot) sub = "il bot gioca da solo, un attimo";
-  if (g.flip3) sub = `le pescate partono da sole · ancora ${g.flip3.left}`;
-  return `
-    <div class="turn-strip ${mine ? "you holo" : ""}">
-      ${mine ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
-      <span class="avatar" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
-      <div class="ts-txt"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
-    </div>`;
-}
-
 /**
  * La corsa al traguardo: una barra per giocatore, ordinata dal primo
  * all'ultimo. Barra piena = punti incassati, coda chiara = bottino
@@ -198,8 +175,8 @@ function raceBoard(g, me) {
         <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}">
           <span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
           <span class="race-track">
-            <i style="width:${((b / max) * 100).toFixed(1)}%"></i>
-            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%"></i>` : ""}
+            <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>
+            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>` : ""}
           </span>
           <b>${b}${r ? `<small>+${r}</small>` : ""}</b>
         </div>`;
@@ -332,10 +309,8 @@ function renderPlaying(g, ctx) {
   return `
     <div class="table-wrap">
       <section class="card t-side">
-        ${turnStrip(g, ctx)}
         ${bankRow(g)}
         ${raceBoard(g, me)}
-        ${g.log.length ? `<div class="table-log">${g.log.slice(-3).map((l) => `<span>${esc(l)}</span>`).join("")}</div>` : ""}
       </section>
       <section class="card t-seats">
         <div class="card-head">
@@ -373,7 +348,6 @@ function renderRoundEnd(g, ctx) {
         </div>
         ${bankRow(g)}
         ${raceBoard(g, me)}
-        ${g.log.length ? `<div class="table-log">${g.log.slice(-3).map((l) => `<span>${esc(l)}</span>`).join("")}</div>` : ""}
       </section>
       <section class="card t-seats">
         <div class="card-head">
