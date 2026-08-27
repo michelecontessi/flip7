@@ -198,8 +198,8 @@ function raceBoard(g, me) {
         <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}">
           <span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
           <span class="race-track">
-            <i style="width:${((b / max) * 100).toFixed(1)}%; background:${colorOf(seat.name)}"></i>
-            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%; background:${colorOf(seat.name)}"></i>` : ""}
+            <i style="width:${((b / max) * 100).toFixed(1)}%"></i>
+            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%"></i>` : ""}
           </span>
           <b>${b}${r ? `<small>+${r}</small>` : ""}</b>
         </div>`;
@@ -235,6 +235,7 @@ function renderSeatRow(g, sid, ctx) {
   const h = g.hands[sid];
   const isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
   const isFlip3 = g.flip3 && g.flip3.target === sid;
+  const isChoosing = g.pending && g.pending.chooser === sid;
   const pts = h.out === "bust" ? 0 : engine.handPoints(h);
   // l'ultima carta pescata si riconosce anche in mano (anello scuro);
   // se era il doppione dello sballo, l'evidenza ce l'ha gia' il doppione rosso
@@ -249,6 +250,8 @@ function renderSeatRow(g, sid, ctx) {
   ];
   // chi e' stato congelato mostra la carta Congela ricevuta
   if (h.out === "frozen") specials.push(miniCard("frz"));
+  // la carta azione appena pescata resta in mano finche' non viene assegnata
+  if (g.pending && g.pending.chooser === sid) specials.push(miniCard(g.pending.type, "mini just"));
   const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n)));
   if (h.out === "flip7") nums.push(flip7Card({ size: "mini" }));
   // il doppione che ha sballato resta in vista, marcato in rosso
@@ -256,10 +259,12 @@ function renderSeatRow(g, sid, ctx) {
     nums.push(miniCard("n" + h.bustCard, "mini dup"));
   }
   const state = h.out ? `<i class="seat-state s-${h.out}">${OUT_LABEL[h.out]}</i>`
+    : isChoosing ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "scegli tu" : "sta scegliendo"}</i>`
     : isFlip3 ? `<i class="seat-state s-flip3">pesca ancora ${g.flip3.left}</i>`
-    : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>` : "";
+    : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>`
+    : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   return `
-    <li class="seat ${isTurn || isFlip3 ? "turn" : ""} ${h.out ? "out-" + h.out : ""}">
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${h.out ? "out-" + h.out : ""}">
       <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="seat-main">
         <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>
@@ -291,7 +296,7 @@ function renderControls(g, ctx, me) {
           <div class="pgrid">
             ${p.options.map((sid) => `
               <button class="pg" data-action="tbl-target" data-id="${sid}">
-                <span class="pg-ava" style="--pc:${colorOf(g.seats[sid].name)}">
+                <span class="pg-ava ${sid === p.chooser ? "holo-ring" : ""}" style="--pc:${colorOf(g.seats[sid].name)}">
                   <span class="avatar lg" style="background:${colorOf(g.seats[sid].name)}">${initials(g.seats[sid].name)}</span>
                 </span>
                 <span class="pg-name">${sid === p.chooser ? "me stesso" : esc(g.seats[sid].name)}</span>

@@ -900,6 +900,8 @@ table.rounds td.tot { font-weight: 800; }
 }
 .pg { background: none; border: 0; padding: 4px 2px; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 .pg-ava { position: relative; display: block; border-radius: 50%; padding: 3px; }
+/* anello olografico attorno al proprio avatar (es. "me stesso" nelle scelte) */
+.pg-ava.holo-ring { background: var(--holo); }
 .pg .avatar.lg { width: 52px; height: 52px; font-size: 18px; }
 .pg.on .pg-ava { box-shadow: 0 0 0 2.5px var(--pc, var(--green)); }
 .pg-check {
@@ -1043,6 +1045,7 @@ table.rounds td.tot { font-weight: 800; }
 .seat-state.s-frozen { background: rgba(60,140,220,.13); color: var(--c-blue); }
 .seat-state.s-flip7 { background: var(--holo); color: #3b2703; }
 .seat-state.s-flip3 { background: rgba(226,96,14,.14); color: #e2600e; }
+.seat-state.s-wait { background: rgba(130,90,220,.12); color: var(--c-violet); }
 /* due file di carte: sopra azioni e modificatori, sotto i numeri */
 .seat-cards { display: flex; flex-direction: column; gap: 4px; min-height: 34px; justify-content: center; align-items: flex-start; }
 .cards-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -1084,8 +1087,10 @@ table.rounds td.tot { font-weight: 800; }
 }
 .race-row.me { background: var(--tint); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 .race-track { display: flex; height: 9px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
-.race-track i { display: block; height: 100%; transition: width .4s ease; }
-.race-track i.prov { opacity: .4; }
+/* barre neutre per tutti, lamina olografica solo per me */
+.race-track i { display: block; height: 100%; background: var(--dim); transition: width .4s ease; }
+.race-row.me .race-track i { background: var(--holo); }
+.race-track i.prov { opacity: .35; }
 .race-row > b { font-family: var(--font-display); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
 .race-row > b small { font-size: 10.5px; color: var(--green); font-weight: 700; margin-left: 2px; }
 
