@@ -178,3 +178,11 @@ test("abbandono del bersaglio di una scelta: l'opzione sparisce", () => {
   s = leaveSeat(s, "s2");             // Caio (fra le opzioni) abbandona
   assert.ok(!s.pending.options.includes("s2"));
 });
+
+test("lo sballo registra quale doppione l'ha causato", () => {
+  // pescate (dalla fine): Ada n3, Bea n5, Ada n3 di nuovo -> sballa
+  let s = table(["Ada", "Bea"], ["n3", "n5", "n3"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s0");
+  assert.equal(s.hands.s0.out, "bust");
+  assert.equal(s.hands.s0.bustCard, 3);
+});

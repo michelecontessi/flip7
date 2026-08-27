@@ -49,21 +49,35 @@ function botMove(g, sid) {
   return g;
 }
 
-/** I bot li muove (con una piccola pausa) il dispositivo che li ha aggiunti. */
-function scheduleBots(ctx) {
+/** La mano e' completamente vuota? (inizio del proprio turno nel round) */
+const emptyHand = (h) => !h.nums.length && !h.plus.length && !h.x2;
+
+/**
+ * Mosse che partono da sole: quelle dei bot, le pescate del Pesca Tre
+ * e la prima carta quando si e' senza carte (pescarla e' obbligato).
+ */
+function needsAuto(g, sid) {
+  const seat = g.seats[sid];
+  if (seat.bot) return true;
+  if (g.flip3 && g.flip3.target === sid && !g.hands[sid].out) return true;
+  return !g.pending && !g.flip3 && g.turn === sid && !g.hands[sid].out && emptyHand(g.hands[sid]);
+}
+
+/** Le esegue (con una piccola pausa) il dispositivo che controlla quel posto. */
+function scheduleAuto(ctx) {
   const g = game(ctx);
   if (!g || g.status !== "playing" || botTimer) return;
   const actor = actorOf(g);
   const seat = actor && g.seats[actor];
-  if (!seat || !seat.bot || seat.uid !== ctx.status.uid) return;
+  if (!seat || seat.uid !== ctx.status.uid || !needsAuto(g, actor)) return;
   botTimer = setTimeout(() => {
     botTimer = null;
     const g2 = engine.normalizeGame(store.getRoom().game);
     if (!g2 || g2.status !== "playing") return;
     const a2 = actorOf(g2);
     const s2 = a2 && g2.seats[a2];
-    if (!s2 || !s2.bot || s2.uid !== store.getStatus().uid) return;
-    const next = botMove(g2, a2);
+    if (!s2 || s2.uid !== store.getStatus().uid || !needsAuto(g2, a2)) return;
+    const next = s2.bot ? botMove(g2, a2) : engine.hit(g2, a2);
     if (next !== g2) store.commitGame(next).catch(() => {});
   }, 900);
 }
@@ -148,9 +162,12 @@ function turnStrip(g, ctx) {
     sub = `${mine ? "devi" : "deve"} pescare ancora ${n} ${n === 1 ? "carta" : "carte"}`;
   } else {
     title = mine ? "Tocca a te" : `Tocca a ${shortName(seat)}`;
-    sub = mine ? "pesca una carta oppure fermati e incassa" : "sta decidendo se pescare o fermarsi";
+    sub = mine
+      ? (emptyHand(g.hands[actor]) ? "la prima carta arriva da sola" : "pesca (un numero doppio ti sballa) o fermati e incassa")
+      : "sta decidendo se pescare o fermarsi";
   }
   if (seat.bot) sub = "il bot gioca da solo, un attimo";
+  if (g.flip3) sub = `le pescate partono da sole · ancora ${g.flip3.left}`;
   return `
     <div class="turn-strip ${mine ? "you holo" : ""}">
       ${mine ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
@@ -162,6 +179,8 @@ function turnStrip(g, ctx) {
 /** Il banco: mazzo con le carte rimaste e ultima carta pescata. */
 function bankRow(g) {
   const last = g.lastDraw;
+  // il doppione appena pescato ha fatto sballare: va urlato
+  const bustNow = last && g.hands[last.seat] && g.hands[last.seat].out === "bust" && engine.CARD.isNum(last.card);
   return `
     <div class="bank">
       <div class="bank-slot">
@@ -170,8 +189,12 @@ function bankRow(g) {
       </div>
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">
-        ${last ? miniCard(last.card, "drawn") : `<span class="fcard slot"></span>`}
-        <small>${last ? `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>` : "qui compare l'ultima carta pescata"}</small>
+        ${last ? miniCard(last.card, "drawn" + (bustNow ? " bust-draw" : "")) : `<span class="fcard slot"></span>`}
+        <small class="${bustNow ? "bust-note" : ""}">${last
+          ? bustNow
+            ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: SBALLATO`
+            : `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>`
+          : "qui compare l'ultima carta pescata"}</small>
       </div>
     </div>`;
 }
@@ -182,12 +205,17 @@ function renderSeatRow(g, sid, ctx) {
   const isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
   const isFlip3 = g.flip3 && g.flip3.target === sid;
   const pts = h.out === "bust" ? 0 : engine.handPoints(h);
-  const cards = [
-    ...h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n)),
+  // due file: sopra azioni e modificatori, sotto tutti i numeri
+  const specials = [
     ...(h.x2 ? [miniCard("x2")] : []),
-    ...h.plus.map((p) => miniCard("p" + p)),
+    ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p)),
     ...(h.sc ? [miniCard("sc")] : [])
   ];
+  const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n));
+  // il doppione che ha sballato resta in vista, marcato in rosso
+  if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
+    nums.push(miniCard("n" + h.bustCard, "mini dup"));
+  }
   const state = h.out ? `<i class="seat-state s-${h.out}">${OUT_LABEL[h.out]}</i>`
     : isFlip3 ? `<i class="seat-state s-flip3">pesca ancora ${g.flip3.left}</i>`
     : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>` : "";
@@ -196,7 +224,12 @@ function renderSeatRow(g, sid, ctx) {
       <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="seat-main">
         <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>
-        <div class="seat-cards">${cards.join("") || '<span class="hand-empty">nessuna carta in mano</span>'}</div>
+        <div class="seat-cards">
+          ${specials.length ? `<div class="cards-row special">${specials.join("")}</div>` : ""}
+          <div class="cards-row">${nums.join("") || '<span class="hand-empty">nessuna carta in mano</span>'}</div>
+          ${h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined
+            ? `<span class="dup-note">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}
+        </div>
       </div>
       <div class="seat-pts">
         <b>${seat.total || 0}</b>
@@ -216,9 +249,14 @@ function renderControls(g, ctx, me) {
       return `
         <div class="table-choose">
           <p class="choose-label">${label}</p>
-          <div class="chips">
-            ${p.options.map((sid) => `<button class="chip" data-action="tbl-target" data-id="${sid}">
-              <span class="avatar xs" style="background:${colorOf(g.seats[sid].name)}">${initials(g.seats[sid].name)}</span>${sid === p.chooser ? "me stesso" : esc(g.seats[sid].name)}</button>`).join("")}
+          <div class="pgrid">
+            ${p.options.map((sid) => `
+              <button class="pg" data-action="tbl-target" data-id="${sid}">
+                <span class="pg-ava" style="--pc:${colorOf(g.seats[sid].name)}">
+                  <span class="avatar lg" style="background:${colorOf(g.seats[sid].name)}">${initials(g.seats[sid].name)}</span>
+                </span>
+                <span class="pg-name">${sid === p.chooser ? "me stesso" : esc(g.seats[sid].name)}</span>
+              </button>`).join("")}
           </div>
         </div>`;
     }
@@ -226,13 +264,11 @@ function renderControls(g, ctx, me) {
   }
 
   if (g.flip3) {
-    if (iAct && !g.hands[actor].out) {
-      return `<button class="btn go big" data-action="tbl-hit">Pesca · ancora ${g.flip3.left}</button>`;
-    }
-    return `<p class="hint">${esc(g.seats[g.flip3.target].name)} deve pescare ancora ${g.flip3.left}…</p>`;
+    return `<p class="hint">Pesca Tre: le carte di ${esc(shortName(g.seats[g.flip3.target]))} arrivano da sole (ancora ${g.flip3.left})…</p>`;
   }
 
   if (iAct && !g.hands[actor].out) {
+    if (emptyHand(g.hands[actor])) return `<p class="hint">Mano vuota: la prima carta arriva da sola…</p>`;
     return `
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit">Pesca</button>
@@ -327,7 +363,7 @@ export const tableView = {
   render(ctx) {
     const g = game(ctx);
     if (!g) return renderIntro(ctx);
-    if (g.status === "playing") scheduleBots(ctx);
+    if (g.status === "playing") scheduleAuto(ctx);
     if (g.status === "lobby") return renderLobby(g, ctx);
     if (g.status === "roundEnd") return renderRoundEnd(g, ctx);
     if (g.status === "over") return renderOver(g, ctx);

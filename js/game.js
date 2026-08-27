@@ -43,7 +43,7 @@ export function shuffle(cards, rng = Math.random) {
   return a;
 }
 
-const emptyHand = () => ({ nums: [], plus: [], x2: false, sc: false, out: null });
+const emptyHand = () => ({ nums: [], plus: [], x2: false, sc: false, out: null, bustCard: null });
 
 /** Normalizza uno stato letto dal database (gli array vuoti spariscono). */
 export function normalizeGame(g) {
@@ -56,7 +56,7 @@ export function normalizeGame(g) {
   state.hands = {};
   for (const sid of state.order) {
     const h = (g.hands || {})[sid] || {};
-    state.hands[sid] = { nums: h.nums || [], plus: h.plus || [], x2: Boolean(h.x2), sc: Boolean(h.sc), out: h.out || null };
+    state.hands[sid] = { nums: h.nums || [], plus: h.plus || [], x2: Boolean(h.x2), sc: Boolean(h.sc), out: h.out || null, bustCard: h.bustCard ?? null };
   }
   state.pending = g.pending || null;
   state.flip3 = g.flip3 ? { ...g.flip3, deferred: g.flip3.deferred || [] } : null;
@@ -229,6 +229,7 @@ function applyCard(s, seatId, card, duringFlip3, rng) {
         return "sc-used";
       }
       h.out = "bust";
+      h.bustCard = n; // per far VEDERE il doppione che ha sballato
       s.discard = [...s.discard, card];
       logIt(s, `${s.seats[seatId].name} sballa con il ${n}`);
       return "bust";

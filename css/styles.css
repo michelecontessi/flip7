@@ -1033,7 +1033,13 @@ table.rounds td.tot { font-weight: 800; }
 .seat-state.s-frozen { background: rgba(60,140,220,.13); color: var(--c-blue); }
 .seat-state.s-flip7 { background: var(--holo); color: #3b2703; }
 .seat-state.s-flip3 { background: rgba(226,96,14,.14); color: #e2600e; }
-.seat-cards { display: flex; flex-wrap: wrap; gap: 3px; min-height: 34px; align-items: center; }
+/* due file di carte: sopra azioni e modificatori, sotto i numeri */
+.seat-cards { display: flex; flex-direction: column; gap: 4px; min-height: 34px; justify-content: center; align-items: flex-start; }
+.cards-row { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.dup-note { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 650; color: var(--red); }
+.bust-note { color: var(--red) !important; font-weight: 650; }
+.fcard.dup { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2px var(--red), 0 1px 3px rgba(20,20,30,.22); }
+.fcard.bust-draw { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2.5px var(--red), 0 1px 3px rgba(20,20,30,.25); }
 /* punteggi del posto: grande il totale partita, piccolo il round in corso */
 .seat-pts { text-align: right; line-height: 1.1; flex: none; }
 .seat-pts b { font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -1208,17 +1214,21 @@ table.rounds td.tot { font-weight: 800; }
 
   /* tavolo online su desktop: vista larga a due colonne, con banco e comandi
      fissi a sinistra e i posti a destra (su mobile resta tutto in colonna) */
-  #view.view-tavolo { max-width: 940px; }
+  #view.view-tavolo { max-width: 1020px; }
   .table-wrap {
-    display: grid; grid-template-columns: 320px minmax(0, 1fr);
+    display: grid; grid-template-columns: 360px minmax(0, 1fr);
     grid-template-areas: "side seats" "controls seats" ". seats";
     gap: 14px; align-items: start;
   }
   .t-side { grid-area: side; }
   .t-seats { grid-area: seats; }
   .t-controls { grid-area: controls; }
-  .bank .fcard { width: 64px; }
-  .seat-cards .fcard.mini { width: 30px; }
+  /* da pc le carte del tavolo si vedono grandi */
+  .bank .fcard { width: 92px; }
+  .seat-cards .fcard.mini { width: 46px; border-radius: 7px; }
+  .seat-cards .fcard.mini b { font-size: 17px; }
+  .seat { padding: 14px 6px; gap: 12px; }
+  .seat .avatar.sm { width: 36px; height: 36px; }
   .sd-hand .fcard { width: 42px; }
   .fcard b { font-size: 19px; }
   .board-cols, .brow { grid-template-columns: 24px 1fr 86px 68px; }
