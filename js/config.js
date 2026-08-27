@@ -8,11 +8,11 @@
 // ---------------------------------------------------------------------------
 
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "", // <-- https://<progetto>-default-rtdb.<regione>.firebasedatabase.app
-  projectId: "",
-  appId: ""
+  apiKey: "AIzaSyBnwT4BlFlFUFExHfzZ3dHPx27AQFNr-1M",
+  authDomain: "flip7-ufficio.firebaseapp.com",
+  databaseURL: "https://flip7-ufficio-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "flip7-ufficio",
+  appId: "1:144024516928:web:d207646bc41d22b74ca2a5"
 };
 
 // Versione dell'SDK Firebase caricata da CDN. Se un giorno vuoi aggiornarla,
