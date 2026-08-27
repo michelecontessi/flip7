@@ -103,7 +103,11 @@ export async function init(id) {
   roomId = String(chosen).trim().toLowerCase();
   prefs.set("roomId", roomId);
 
-  if (isFirebaseConfigured) {
+  // ?local=1 forza la modalita' locale: utile per rileggere i dati salvati su
+  // QUESTO dispositivo prima del collegamento a Firebase (e per recuperarli
+  // con Setup -> Esporta, da reimportare poi nella stanza online).
+  const forceLocal = new URLSearchParams(location.search).get("local") === "1";
+  if (isFirebaseConfigured && !forceLocal) {
     try {
       await initFirebase();
       return;

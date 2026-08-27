@@ -93,16 +93,22 @@ export function toast(message, kind = "info") {
 // --- bottom sheet -----------------------------------------------------------
 // Lo sheet vive in un contenitore separato: cosi' gli aggiornamenti live
 // (che ridisegnano la view principale) non chiudono quello che stai compilando.
-export const sheet = { state: null, render: null };
+export const sheet = { state: null, render: null, patch: null };
 
-export function openSheet(state, renderFn) {
+/**
+ * `patchFn` (facoltativa) aggiorna il pannello sul posto invece di ridisegnarlo:
+ * niente sfarfallio quando si tocca una carta o si digita.
+ */
+export function openSheet(state, renderFn, patchFn = null) {
   sheet.state = state;
   sheet.render = renderFn;
+  sheet.patch = patchFn;
   drawSheet();
 }
 export function closeSheet() {
   sheet.state = null;
   sheet.render = null;
+  sheet.patch = null;
   drawSheet();
 }
 export function drawSheet() {

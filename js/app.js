@@ -182,7 +182,11 @@ async function run(fn, el, ev) {
       return;
     }
   }
-  if (result === "sheet") drawSheet();
+  if (result === "sheet") {
+    if (sheet.patch) sheet.patch(sheet.state);
+    else drawSheet();
+  }
+  else if (result === "sheet-full") drawSheet();
   else if (result === "page") drawPage();
   else if (result === "sheet-quiet") { /* niente redraw: preserva il focus */ }
   else { render(); if (sheet.state) drawSheet(); if (page.state) drawPage(); }

@@ -337,7 +337,7 @@ function openScoreSheet(room, live, startPid) {
   const order = boardOrder(live);
   const r = live.round || 0;
   const pid = startPid || missingIds(live)[0] || order[0];
-  openSheet(buildSheetState(room, live, order, r, pid), renderScoreSheet);
+  openSheet(buildSheetState(room, live, order, r, pid), renderScoreSheet, patchCalcSheet);
 }
 
 function buildSheetState(room, live, order, roundIndex, pid) {
@@ -362,18 +362,27 @@ function keypadValue(entry) {
   return entry.manual === null || entry.manual === undefined ? "" : String(entry.manual);
 }
 
-export function renderScoreSheet(s) {
-  const e = s.entry;
-  const r = computeRound(e);
-  const isKeypad = localState.mode === "keypad";
-  const filledElsewhere = s.order.filter((pid) => pid !== s.playerId);
-
-  const hand = [
+function buildHand(e, r) {
+  if (e.busted) return bustCard({ on: true });
+  const cards = [
     ...(e.numbers || []).slice().sort((a, b) => a - b).map((n) => numberCard(n, { on: true })),
     ...(e.doubled ? [modCard("x2", { on: true })] : []),
     ...(e.plus || []).slice().sort((a, b) => a - b).map((p) => modCard(p, { on: true })),
     ...(r.flip7 ? [flip7Card()] : [])
   ];
+  return cards.join("") || `<span class="hand-empty">tocca le carte del giocatore</span>`;
+}
+
+function noteOf(e, r, isKeypad) {
+  if (e.busted) return "sballato";
+  if (isKeypad) return r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round";
+  return formulaOf(e);
+}
+
+export function renderScoreSheet(s) {
+  const e = s.entry;
+  const r = computeRound(e);
+  const isKeypad = localState.mode === "keypad";
 
   const keys = ["7", "8", "9", "4", "5", "6", "1", "2", "3"];
   const typed = keypadValue(e);
@@ -393,10 +402,10 @@ export function renderScoreSheet(s) {
     </div>
 
     <div class="score-display ${e.busted ? "bust" : r.flip7 ? "flip7" : ""}">
-      ${r.flip7 ? `<div class="flip7-badge">${wordmark()}<span>+15</span></div>` : ""}
+      <div class="flip7-badge" ${r.flip7 ? "" : 'style="display:none"'}>${wordmark()}<span>+15</span></div>
       <div class="sd-value">${e.busted ? "0" : r.total}</div>
-      <div class="sd-note">${e.busted ? "sballato" : (isKeypad ? (r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round") : esc(formulaOf(e)))}</div>
-      ${!isKeypad && !e.busted ? `<div class="sd-hand">${hand.join("") || `<span class="hand-empty">tocca le carte del giocatore</span>`}</div>` : ""}
+      <div class="sd-note">${esc(noteOf(e, r, isKeypad))}</div>
+      ${!isKeypad ? `<div class="sd-hand">${buildHand(e, r)}</div>` : ""}
     </div>
 
     <div class="mode-switch">
@@ -418,7 +427,7 @@ export function renderScoreSheet(s) {
       ${typed === "" && !e.busted ? `<p class="hint">Somma delle carte del giocatore. Il bonus Flip 7 lo aggiungi col tasto.</p>` : ""}
     ` : `
       <div class="calc-section">
-        <div class="calc-label"><span>Carte numero</span><span>${(e.numbers || []).length}/7</span></div>
+        <div class="calc-label"><span>Carte numero</span><span class="count-num">${(e.numbers || []).length}/7</span></div>
         <div class="numgrid">
           ${NUMBER_CARDS.map((n) => `<button class="card-btn" data-action="calc-num" data-n="${n}">${numberCard(n, { on: (e.numbers || []).includes(n) })}</button>`).join("")}
         </div>
@@ -439,6 +448,42 @@ export function renderScoreSheet(s) {
       <button class="btn" data-action="calc-clear">Azzera</button>
       <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
     </div>`;
+}
+
+/** Aggiorna il pannello punti sul posto, senza ridisegnarlo (niente flicker). */
+function patchCalcSheet(s) {
+  const root = document.getElementById("sheet-root");
+  if (!root || !s) return;
+  const e = s.entry;
+  const r = computeRound(e);
+  const isKeypad = localState.mode === "keypad";
+
+  root.querySelectorAll('[data-action="calc-num"]').forEach((btn) => {
+    btn.querySelector(".fcard").classList.toggle("on", (e.numbers || []).includes(Number(btn.dataset.n)));
+  });
+  root.querySelectorAll('[data-action="calc-plus"]').forEach((btn) => {
+    btn.querySelector(".fcard").classList.toggle("on", (e.plus || []).includes(Number(btn.dataset.n)));
+  });
+  const dbl = root.querySelector('[data-action="calc-double"] .fcard');
+  if (dbl) dbl.classList.toggle("on", Boolean(e.doubled));
+
+  const disp = root.querySelector(".score-display");
+  if (disp) disp.className = "score-display " + (e.busted ? "bust" : r.flip7 ? "flip7" : "");
+  const badge = root.querySelector(".flip7-badge");
+  if (badge) badge.style.display = r.flip7 ? "" : "none";
+  const val = root.querySelector(".sd-value");
+  if (val) val.textContent = e.busted ? "0" : r.total;
+  const note = root.querySelector(".sd-note");
+  if (note) note.textContent = noteOf(e, r, isKeypad);
+  const count = root.querySelector(".count-num");
+  if (count) count.textContent = `${(e.numbers || []).length}/7`;
+  const hand = root.querySelector(".sd-hand");
+  if (hand) hand.innerHTML = buildHand(e, r);
+
+  const q7 = root.querySelector('[data-action="calc-flip7"]');
+  if (q7) q7.className = "quick " + (e.flip7 ? "on gold" : "");
+  const qb = root.querySelector('[data-action="calc-bust"]');
+  if (qb) qb.className = "quick " + (e.busted ? "on red" : "");
 }
 
 function nextLabel(s) {
@@ -547,12 +592,12 @@ export const liveView = {
     async "calc-prev"() {
       await persistEntry(sheet.state);
       gotoPlayer(sheet.state.order[Math.max(0, sheet.state.pos - 1)]);
-      return "sheet";
+      return "sheet-full";
     },
     async "calc-next-player"() {
       await persistEntry(sheet.state);
       gotoPlayer(sheet.state.order[Math.min(sheet.state.order.length - 1, sheet.state.pos + 1)]);
-      return "sheet";
+      return "sheet-full";
     },
     async "calc-save"() {
       const s = sheet.state;
@@ -561,14 +606,14 @@ export const liveView = {
       if (scored.flip7) toast(`FLIP 7! +15 a ${s.playerName}`, "party");
       const live = store.getRoom().live;
       const next = live ? missingIds(live).filter((id) => id !== s.playerId)[0] : null;
-      if (next) { gotoPlayer(next); return "sheet"; }
+      if (next) { gotoPlayer(next); return "sheet-full"; }
       closeSheet();
       toast("Round completo: chiudi il round");
     },
 
     "calc-mode"(ctx, el) {
       localState.mode = el.dataset.m;
-      return "sheet";
+      return "sheet-full";
     },
     "key"(ctx, el) {
       const e = sheet.state.entry;
