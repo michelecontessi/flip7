@@ -59,7 +59,6 @@ function renderIdle(room, me) {
     ${whoAmIBanner(room, me)}
     <section class="card">
       <h2 class="section-title">Nuova partita</h2>
-      <p class="muted small">Tocca chi gioca stasera.</p>
       <div class="pgrid">
         ${list.map(([id, p]) => `
           <button class="pg ${localState.selected.has(id) ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">

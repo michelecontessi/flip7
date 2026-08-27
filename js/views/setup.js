@@ -123,7 +123,8 @@ export const setupView = {
             ${Object.entries(room.requests).map(([uid, r]) => `
               <div class="req-row">
                 <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
-                <span class="pname">${esc(r.name || "Sconosciuto")}<small class="req-sub">vuole entrare</small></span>
+                <span class="pname">${esc(r.name || "Sconosciuto")}
+                  <small class="req-sub">${r.email ? `<span class="mono">${esc(r.email)}</span> · ` : ""}${r.playerId && room.players[r.playerId] ? `entra come ${esc(room.players[r.playerId].name)}` : "vuole entrare"}</small></span>
                 <button class="btn small primary" data-action="member-approve" data-id="${uid}">Approva</button>
                 <button class="icon-btn danger" data-action="member-reject" data-id="${uid}" aria-label="Rifiuta">${icon("close")}</button>
               </div>`).join("")}

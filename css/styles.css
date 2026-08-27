@@ -651,9 +651,11 @@ table.rounds td.tot { font-weight: 800; }
 }
 @keyframes slideup { from { transform: translateY(24px); } }
 .sheet.full {
-  top: 0; max-height: none; height: 100dvh;
+  position: fixed; inset: 0;
+  top: 0; bottom: 0; height: auto; max-height: none;
   border-radius: 0; border-top: 0;
   padding-top: calc(12px + var(--safe-t));
+  animation: none;
 }
 .sheet-grab {
   width: 42px; height: 5px; border-radius: 99px; border: 0;

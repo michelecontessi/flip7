@@ -275,8 +275,25 @@ async function bootstrapOwner(roomExists) {
   notify();
 }
 
+/**
+ * Dal cancello (accesso non ancora approvato) si possono leggere i soli
+ * nomi dei giocatori e i collegamenti: servono per presentarsi come
+ * "uno dei censiti". Il resto della stanza resta invisibile.
+ */
+function watchGateRoster() {
+  fb.onValue(fb.ref(fb.db, `rooms/${roomId}/players`), (snap) => {
+    status.gatePlayers = snap.val() || {};
+    notify();
+  }, () => {});
+  fb.onValue(fb.ref(fb.db, `rooms/${roomId}/bindings`), (snap) => {
+    status.gateBindings = snap.val() || {};
+    notify();
+  }, () => {});
+}
+
 /** In attesa: ascolta la propria voce membri e la propria richiesta. */
 function watchApproval() {
+  watchGateRoster();
   const memberRef = fb.ref(fb.db, `rooms/${roomId}/members/${status.uid}`);
   fb.onValue(memberRef, (snap) => {
     if (snap.exists()) {
@@ -299,12 +316,12 @@ function watchApproval() {
 // ---------------------------------------------------------------------------
 
 /** Chiede di entrare nella stanza (scrive la propria richiesta). */
-export async function requestAccess(name) {
+export async function requestAccess(name, playerId = null) {
   if (!fb) return;
   const clean = String(name || (status.user && status.user.name) || "").trim().slice(0, 40) || "Sconosciuto";
   prefs.set("requestName", clean);
   await fb.update(fb.ref(fb.db, `rooms/${roomId}/requests`), {
-    [status.uid]: { name: clean, email: (status.user && status.user.email) || null, at: Date.now() }
+    [status.uid]: { name: clean, playerId: playerId || null, email: (status.user && status.user.email) || null, at: Date.now() }
   });
   status.access = "pending";
   notify();
@@ -313,10 +330,13 @@ export async function requestAccess(name) {
 /** Approva una richiesta (funziona solo per il proprietario). */
 export function approveRequest(uid) {
   const req = room.requests[uid] || {};
-  return commit({
+  const updates = {
     [`members/${uid}`]: { name: req.name || "Membro", email: req.email || null, at: Date.now() },
     [`requests/${uid}`]: null
-  });
+  };
+  // se ha detto chi e' fra i censiti, il collegamento nasce con l'approvazione
+  if (req.playerId && room.players[req.playerId]) updates[`bindings/${uid}`] = req.playerId;
+  return commit(updates);
 }
 export function rejectRequest(uid) {
   return commit({ [`requests/${uid}`]: null });

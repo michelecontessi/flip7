@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "./store.js";
 import { prefs } from "./prefs.js";
-import { esc, initials, colorOf, toast, drawSheet, closeSheet, sheet, captureSheetInputs, shareRoom, roomUrl, drawPage, closePage, page, askText } from "./ui.js";
+import { esc, initials, colorOf, toast, drawSheet, closeSheet, sheet, captureSheetInputs, shareRoom, roomUrl, drawPage, closePage, page, askText, askChoice } from "./ui.js";
 import { liveView } from "./views/live.js";
 import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
@@ -53,7 +53,6 @@ function renderTopbar(c) {
     <div class="brand">
       ${wordmark("brand-mark")}
       <div class="brand-txt">
-        <div class="room-name">${esc(room.meta.name || DEFAULTS.roomName)}</div>
         <div class="room-sub"><i class="dot-status ${dot}"></i>${status.mode === "firebase" ? (status.online ? "in diretta" : "riconnessione…") : "solo locale"}${live ? " · partita in corso" : ""}</div>
       </div>
     </div>
@@ -259,8 +258,28 @@ document.addEventListener("click", (ev) => {
   if (name === "google-signin") { ev.preventDefault(); store.signIn().then(() => render()); return; }
   if (name === "request-access") {
     ev.preventDefault();
-    askText("Come ti chiami?", { placeholder: "Nome e cognome", message: "Chi gestisce la stanza vedrà questo nome nella richiesta.", confirmLabel: "Invia richiesta" })
-      .then((name) => { if (name) store.requestAccess(name).then(() => render()); });
+    (async () => {
+      const st = store.getStatus();
+      const players = st.gatePlayers || {};
+      const bound = new Set(Object.values(st.gateBindings || {}));
+      // solo i giocatori censiti NON ancora agganciati a un account
+      const free = Object.entries(players)
+        .filter(([id, p]) => p && !p.archived && !bound.has(id))
+        .sort((a, b) => a[1].name.localeCompare(b[1].name, "it"))
+        .map(([id, p]) => ({ id, label: p.name }));
+      if (free.length) {
+        free.push({ id: "__altro", label: "Non sono nell'elenco…" });
+        const pick = await askChoice("Chi sei?", free, { message: "Chi gestisce la stanza confermerà la tua richiesta." });
+        if (!pick) return;
+        if (pick !== "__altro") {
+          await store.requestAccess(players[pick].name, pick);
+          render();
+          return;
+        }
+      }
+      const name = await askText("Come ti chiami?", { placeholder: "Nome e cognome", message: "Chi gestisce la stanza vedrà questo nome nella richiesta.", confirmLabel: "Invia richiesta" });
+      if (name) { await store.requestAccess(name); render(); }
+    })();
     return;
   }
   if (name === "page-close") { ev.preventDefault(); closePage(); return; }
@@ -340,7 +359,7 @@ async function boot() {
   });
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
   }
 }
 
