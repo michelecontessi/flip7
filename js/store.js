@@ -197,7 +197,12 @@ export async function signIn() {
       await fb.authMod.signInWithRedirect(fb.auth, provider);
       return;
     }
-    status.error = "Accesso non riuscito: " + (err.message || err);
+    const friendly = {
+      "auth/unauthorized-domain": "Questo indirizzo non è autorizzato: in Firebase → Authentication → Impostazioni → Domini autorizzati va aggiunto il dominio del sito.",
+      "auth/operation-not-allowed": "L'accesso Google non è abilitato: in Firebase → Authentication → Metodo di accesso attiva Google.",
+      "auth/network-request-failed": "Problema di rete: controlla la connessione e riprova."
+    };
+    status.error = friendly[err && err.code] || ("Accesso non riuscito: " + ((err && err.message) || err));
     notify();
   }
 }

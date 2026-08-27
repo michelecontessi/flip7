@@ -103,7 +103,7 @@ function renderWelcome() {
 }
 
 // Login con Google: identita' stabile (sopravvive a cambio telefono e rete).
-function renderSignin() {
+function renderSignin(c) {
   return `
     <section class="gate">
       ${fanArt()}
@@ -113,8 +113,9 @@ function renderSignin() {
         del gruppo: entra solo chi viene approvato. Accedi e chiedi di entrare.</p>
       <div class="card gate-card center">
         <button class="gbtn" data-action="google-signin">${googleG()} Continua con Google</button>
+        ${c.status.error ? `<p class="err small">${esc(c.status.error)}</p>` : `
         <p class="hint">Un tocco, nessuna password: l'accesso ti segue anche se
-          cambi telefono o rete.</p>
+          cambi telefono o rete.</p>`}
       </div>
     </section>`;
 }
@@ -138,6 +139,8 @@ function renderAccessGate(c) {
           <p class="muted small">Questa stanza fa entrare solo le persone approvate.
             Presentati: chi la gestisce vedrà la tua richiesta.</p>
           <button class="btn primary big" data-action="request-access">Chiedi di entrare</button>
+          <p class="hint">Ti hanno mandato un link? Assicurati di aver aperto <b>quello</b>:
+            ogni stanza ha il suo.</p>
         </div>`}
       <button class="ghost-btn" data-action="gate-switch">Non è la stanza giusta? Cambia stanza</button>
     </section>`;
@@ -165,7 +168,7 @@ export function render() {
       tabs.style.display = "none";
       main.className = "view-gate";
       main.innerHTML = c.status.mode === "none" ? renderWelcome()
-        : c.status.access === "signin" ? renderSignin()
+        : c.status.access === "signin" ? renderSignin(c)
         : renderAccessGate(c);
       return;
     }
