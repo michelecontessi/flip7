@@ -86,6 +86,8 @@ function scheduleAuto(ctx) {
     if (!s2 || s2.uid !== store.getStatus().uid || !needsAuto(g2, a2)) return;
     const next = s2.bot ? botMove(g2, a2) : engine.hit(g2, a2);
     if (next !== g2) store.commitGame(next).catch(() => {});
+    // mossa a vuoto (stato incoerente?): meglio ritentare che restare fermi
+    else setTimeout(() => scheduleAuto({ room: store.getRoom(), status: store.getStatus(), me: null }), 2500);
   }, 900);
 }
 
@@ -193,7 +195,9 @@ function bankRow(g) {
     <div class="bank">
       <div class="bank-slot">
         <span class="deck-stack">${cardBack()}<b class="deck-count">${g.deck.length}</b></span>
-        <small>carte nel mazzo</small>
+        <small>${g.deck.length <= 3
+          ? `agli sgoccioli: si rimescolano gli scarti (${g.discard.length}) da soli`
+          : `carte nel mazzo${g.discard.length ? ` · ${g.discard.length} scartate` : ""}`}</small>
       </div>
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">

@@ -202,3 +202,39 @@ test("Pesca Tre annidato: prima si completa la tripla, poi parte il secondo", ()
   assert.equal(s.flip3.target, "s0");     // nuovo Pesca Tre, tripla piena
   assert.equal(s.flip3.left, 3);
 });
+
+test("flip7 durante un Pesca Tre: le azioni accantonate finiscono negli scarti", () => {
+  let s = table(["Ada", "Bea"], ["n7", "frz", "fl3"]);
+  s.hands.s1.nums = [1, 2, 3, 4, 5, 6];
+  s = hit(s, "s0");                 // Ada pesca il Pesca Tre
+  s = chooseTarget(s, "s0", "s1");  // e lo gira a Bea
+  s = hit(s, "s1");                 // Congela -> accantonata
+  s = hit(s, "s1");                 // settimo numero: FLIP 7, round chiuso subito
+  assert.ok(s.status === "roundEnd" || s.status === "over");
+  assert.ok(s.discard.includes("frz")); // la carta accantonata non sparisce
+});
+
+test("nessuna carta sparisce mai: mazzo + scarti + mani = totale", () => {
+  const deck = ["n5", "n4", "frz", "n3", "n2", "n1"];
+  let s = table(["Ada", "Bea"], deck);
+  const count = (st) => st.deck.length + st.discard.length +
+    st.order.reduce((a, sid) => {
+      const h = st.hands[sid];
+      return a + h.nums.length + h.plus.length + (h.x2 ? 1 : 0) + (h.sc ? 1 : 0);
+    }, 0);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s0"); // n1, n2, n3
+  s = hit(s, "s1");                                     // frz con 2 attivi -> pending
+  s = chooseTarget(s, "s1", "s0");                      // congela Ada
+  assert.equal(count(s), deck.length);
+  s = stay(s, "s1");                                    // round chiuso: le mani sono
+  // gia' negli scarti (restano in vista solo per la UI): conta mazzo + scarti
+  assert.equal(s.deck.length + s.discard.length, deck.length);
+});
+
+test("appena il mazzo si svuota, gli scarti rientrano subito", () => {
+  let s = table(["Anna", "Bruno"], ["n3"]);
+  s.discard = ["n5", "n6"];
+  s = hit(s, "s0");                  // pesca l'ultima: il mazzo si ricarica al volo
+  assert.equal(s.deck.length, 2);
+  assert.equal(s.discard.length, 0);
+});

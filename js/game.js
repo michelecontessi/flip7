@@ -90,13 +90,20 @@ function logIt(s, msg) {
   s.log = [...(s.log || []), msg].slice(-8);
 }
 
+function reshuffle(s, rng) {
+  if (!s.discard.length) return;
+  s.deck = shuffle([...s.deck, ...s.discard], rng);
+  s.discard = [];
+  logIt(s, "Mazzo rimescolato con gli scarti");
+}
+
+/** Pesca una carta. Appena il mazzo si svuota, gli scarti rientrano SUBITO:
+    il gioco non deve mai fermarsi con il contatore a zero. */
 function drawOne(s, rng) {
-  if (!s.deck.length) {
-    s.deck = shuffle(s.discard, rng);
-    s.discard = [];
-    logIt(s, "Mazzo finito: rimescolo gli scarti");
-  }
-  return s.deck.pop() || null;
+  if (!s.deck.length) reshuffle(s, rng);
+  const card = s.deck.pop() || null;
+  if (!s.deck.length) reshuffle(s, rng);
+  return card;
 }
 
 /** Punti di una mano (senza il bonus, che dipende da out === "flip7"). */
@@ -107,6 +114,10 @@ export function handPoints(h) {
 }
 
 function endRound(s) {
+  // niente carte perse: le azioni rimaste appese (accantonate da un Pesca Tre
+  // o in attesa di bersaglio) tornano negli scarti, pronte per il rimescolo
+  if (s.flip3 && s.flip3.deferred && s.flip3.deferred.length) s.discard = [...s.discard, ...s.flip3.deferred];
+  if (s.pending) s.discard = [...s.discard, s.pending.type];
   s.lastRound = {};
   for (const sid of s.order) {
     const h = s.hands[sid];
@@ -173,10 +184,12 @@ export function leaveSeat(state, sid) {
     s.flip3 = null;
   }
   if (s.pending) {
-    if (s.pending.chooser === sid) s.pending = null;
-    else {
+    if (s.pending.chooser === sid) {
+      s.discard = [...s.discard, s.pending.type]; // la carta non svanisce
+      s.pending = null;
+    } else {
       s.pending.options = s.pending.options.filter((x) => x !== sid);
-      if (!s.pending.options.length) s.pending = null;
+      if (!s.pending.options.length) { s.discard = [...s.discard, s.pending.type]; s.pending = null; }
     }
   }
 
