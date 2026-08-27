@@ -8,21 +8,19 @@ import { liveView } from "./views/live.js";
 import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
 import { setupView } from "./views/setup.js";
-// Tavolo online: momentaneamente spento su richiesta (si riaccende
-// togliendo questi commenti e rimettendo "tavolo" in VIEWS e ORDER).
-// import { tableView } from "./views/table.js";
+import { tableView } from "./views/table.js";
 import { DEFAULTS } from "./config.js";
 import { icon, wordmark, fanArt, googleG } from "./icons.js";
 import { applyTheme, watchSystemTheme } from "./theme.js";
 
 const VIEWS = {
   partita:    { title: "Partita",    ico: "cards",   view: liveView },
-  // tavolo:  { title: "Tavolo",     ico: "cardFan", view: tableView },
+  tavolo:     { title: "Tavolo",     ico: "cardFan", view: tableView },
   classifica: { title: "Classifica", ico: "crown",   view: leaderboardView },
   storico:    { title: "Storico",    ico: "history", view: historyView },
   setup:      { title: "Setup",      ico: "sliders", view: setupView }
 };
-const ORDER = ["partita", "classifica", "storico", "setup"];
+const ORDER = ["partita", "tavolo", "classifica", "storico", "setup"];
 
 let route = "partita";
 
@@ -67,10 +65,11 @@ function renderTopbar(c) {
 }
 
 function renderTabbar(c) {
-  const badge = c.room.live && c.room.live.status === "playing";
+  const liveOn = c.room.live && c.room.live.status === "playing";
+  const tableOn = Boolean(c.room.game);
   return ORDER.map((key) => `
     <a class="tab ${route === key ? "on" : ""}" href="#${key}">
-      <span class="tab-ico">${icon(VIEWS[key].ico)}${key === "partita" && badge ? '<i class="live-dot"></i>' : ""}</span>
+      <span class="tab-ico">${icon(VIEWS[key].ico)}${(key === "partita" && liveOn) || (key === "tavolo" && tableOn) ? '<i class="live-dot"></i>' : ""}</span>
       <span class="tab-lbl">${VIEWS[key].title}</span>
     </a>`).join("");
 }
@@ -346,17 +345,6 @@ async function boot() {
 
   await store.init(roomId);
   render();
-
-  // Il tavolo online e' spento: se nella stanza e' rimasta una partita online
-  // aperta, la si chiude (richiesto esplicitamente; lo storico non si tocca).
-  let gamePulito = false;
-  store.subscribe(() => {
-    const r = store.getRoom();
-    if (!gamePulito && r.game && store.getStatus().access === "ok") {
-      gamePulito = true;
-      store.commitGame(null).catch(() => { gamePulito = false; });
-    }
-  });
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});

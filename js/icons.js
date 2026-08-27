@@ -155,3 +155,8 @@ export function googleG() {
 export function flip7Card({ size = "" } = {}) {
   return `<span class="fcard flip7 on ${size}" data-face="7"><b>+15</b></span>`;
 }
+
+/** Dorso della carta (il mazzo del tavolo online). */
+export function cardBack({ size = "" } = {}) {
+  return `<span class="fcard back ${size}"><b>FLIP<i>7</i></b></span>`;
+}

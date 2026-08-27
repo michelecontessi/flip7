@@ -39,7 +39,7 @@ export const historyView = {
           <span class="hmain">
             <span class="hwin">${crownEmblem("mini")}${esc(winners.map(([, r]) => r.name).join(" e ") || "—")}</span>
             <span class="hplayers">${rows.map(([id, r]) => `<i class="hp ${g.winnerIds && g.winnerIds[id] ? "w" : ""}" style="background:${colorOf(r.name)}" title="${esc(r.name)}">${initials(r.name)[0]}</i>`).join("")}
-              <span class="muted small">${rows.length} giocatori</span></span>
+              <span class="muted small">${rows.length} giocatori</span>${g.source === "online" ? '<span class="tag online">online</span>' : g.source === "manual" ? '<span class="tag">a mano</span>' : ""}</span>
           </span>
           <span class="htop"><b>${rows[0] ? rows[0][1].total : ""}</b><span>pt</span></span>
         </li>`;
@@ -150,7 +150,7 @@ function renderGameSheet(s) {
     <div class="sheet-head">
       <div>
         <div class="sheet-title">${fmtDate(g.playedAt)}</div>
-        <div class="sheet-sub">${g.source === "manual" ? "inserita a mano" : fmtDateTime(g.playedAt)} · obiettivo ${g.targetScore || "—"}</div>
+        <div class="sheet-sub">${g.source === "manual" ? "inserita a mano" : g.source === "online" ? "giocata al tavolo online" : fmtDateTime(g.playedAt)} · obiettivo ${g.targetScore || "—"}</div>
       </div>
       <button class="icon-btn" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
     </div>

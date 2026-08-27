@@ -249,7 +249,7 @@ h1, h2, h3 { margin: 0; font-weight: 700; }
 /* ---------- tab ---------- */
 #tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
   padding: 8px 8px calc(8px + var(--safe-b));
   background: var(--surface);
   border-top: 1px solid var(--line);
@@ -261,6 +261,7 @@ h1, h2, h3 { margin: 0; font-weight: 700; }
 }
 .tab.on { color: var(--text); }
 .tab.on[href="#partita"] .ico    { color: #2f9fe0; }
+.tab.on[href="#tavolo"] .ico     { color: #e2600e; }
 .tab.on[href="#classifica"] .ico { color: #d99a12; }
 .tab.on[href="#storico"] .ico    { color: #23a172; }
 .tab.on[href="#setup"] .ico      { color: #9366e0; }
@@ -386,6 +387,7 @@ select {
   margin-left: 6px; font-size: 10.5px; font-weight: 650;
   padding: 2px 7px; border-radius: 6px; background: var(--surface-2); color: var(--muted);
 }
+.tag.online { background: rgba(26,162,160,.15); color: #1a9b99; }
 
 /* ---------- segnapunti ---------- */
 .sk-card { background: var(--holo-soft); box-shadow: var(--shadow-1); }
@@ -768,47 +770,56 @@ table.rounds td.tot { font-weight: 800; }
 .modgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 7px; padding: 2px; }
 
 /* ---------- carte ----------
-   Come nel gioco vero: faccia chiara, numero gigante colorato con la parola in
-   inglese sotto, cornice del colore del numero, indici agli angoli.
-   I modificatori restano arancioni a fondo pieno. ---------- */
+   Ricalcano il mazzo vero in stile art déco: faccia crema, cornice sottile
+   d'inchiostro, numerone colorato con il contorno scuro, la parola in un
+   cartiglio e i ventagli decorativi ai lati. I modificatori sono ambra con
+   la cifra rossa; le azioni hanno i loro colori (gelo, giallo, corallo). */
 .fcard {
   position: relative; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 0;
   aspect-ratio: 5 / 7; width: 100%;
-  border-radius: 9px;
-  background: #fffdf4; color: var(--cn, #47505f);
+  border-radius: 9px; overflow: hidden;
+  background: #f6efdc; color: var(--cn, #47505f);
   border: 2px solid #fff;
-  box-shadow: inset 0 0 0 2px var(--cn, #47505f),
+  box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45),
               0 1px 3px rgba(20,20,30,.22), 0 0 0 1px var(--card-ring);
   font-weight: 800;
   transition: transform .12s ease, filter .12s ease, opacity .12s ease;
 }
-.fcard b { font-size: clamp(16px, 5.4vw, 23px); line-height: 1; font-weight: 600; color: var(--cn); }
+.fcard b {
+  font-size: clamp(16px, 5.4vw, 23px); line-height: 1; font-weight: 600;
+  color: var(--cn); -webkit-text-stroke: .045em #303356; paint-order: stroke fill;
+  position: relative; z-index: 1;
+}
 .fcard small {
   font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(4px, 1.3vw, 6.5px); letter-spacing: .12em;
-  color: var(--cn); opacity: .85; margin-top: 1px;
+  font-size: clamp(4px, 1.3vw, 6.5px); letter-spacing: .14em;
+  color: #303356; opacity: .8; margin-top: 2px;
+  padding: 1px 5px; border-radius: 2px;
+  background: rgba(255,255,255,.78); box-shadow: 0 0 0 .5px rgba(48,51,86,.45);
+  position: relative; z-index: 1;
 }
+/* ventagli laterali, come le conchiglie del mazzo originale */
 .fcard::before, .fcard::after {
-  content: attr(data-face); position: absolute;
-  font-family: var(--font-display); font-size: 8.5px; font-weight: 600;
-  color: var(--cn); line-height: 1;
+  content: ""; position: absolute; top: 50%; width: 46%; aspect-ratio: 1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from -90deg, var(--sc, var(--cn, #9aa0a6)) 0 11deg, transparent 11deg 26deg);
+  opacity: .35;
 }
-.fcard::before { top: 4px; left: 5px; }
-.fcard::after { bottom: 4px; right: 5px; transform: rotate(180deg); }
+.fcard::before { left: 0; transform: translate(-58%, -50%); }
+.fcard::after { right: 0; transform: translate(58%, -50%) scaleX(-1); }
 
 .card-btn { background: none; border: 0; padding: 0; display: block; }
 /* nel selettore le carte restano a colori come un mazzo vero;
    quella scelta si riconosce da anello scuro e spunta, senza muoversi */
 .card-btn .fcard { border-width: 1.5px; }
-.card-btn .fcard:not(.on) { opacity: .62; box-shadow: inset 0 0 0 2px var(--cn), 0 0 0 1px var(--card-ring); }
+.card-btn .fcard:not(.on) { opacity: .62; box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 1px var(--card-ring); }
 .card-btn .fcard.on {
-  box-shadow: inset 0 0 0 2px var(--cn), 0 0 0 2px var(--primary),
+  box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2px var(--primary),
               0 2px 6px rgba(20,20,30,.18);
 }
 .card-btn:active .fcard { transform: scale(.93); }
-/* niente indice capovolto ne' parola nel selettore: solo il numero, pulito */
-.numgrid .fcard::after, .modgrid .fcard::after { display: none; }
+/* niente parola nel selettore: solo il numero, pulito */
 .numgrid .fcard small, .modgrid .fcard small { display: none; }
 /* spunta di selezione */
 .card-btn { position: relative; }
@@ -822,38 +833,56 @@ table.rounds td.tot { font-weight: 800; }
 .card-btn .pick .ico { width: 9px; height: 9px; }
 .card-btn .fcard.on ~ .pick, .card-btn:has(.fcard.on) .pick { display: flex; }
 
-/* tinta per numero (regolala qui se il mazzo originale differisce) */
-.n0  { --cn: #6b7684; }
-.n1  { --cn: #3fa8e0; }
-.n2  { --cn: #2467c9; }
-.n3  { --cn: #0e93ad; }
-.n4  { --cn: #0e9488; }
-.n5  { --cn: #269e48; }
-.n6  { --cn: #7ba318; }
-.n7  { --cn: #d9a012; }
-.n8  { --cn: #dd8206; }
-.n9  { --cn: #e2600e; }
-.n10 { --cn: #d93a30; }
-.n11 { --cn: #d2308d; }
-.n12 { --cn: #8b39d4; }
+/* tinta per numero, presa dal mazzo originale */
+.n0  { --cn: #9088a8; }
+.n1  { --cn: #9aa0a6; }
+.n2  { --cn: #b1cb31; }
+.n3  { --cn: #e04a63; }
+.n4  { --cn: #2fa7a4; }
+.n5  { --cn: #3aa246; }
+.n6  { --cn: #8a56c2; }
+.n7  { --cn: #c96f4a; }
+.n8  { --cn: #8fc665; }
+.n9  { --cn: #ef8c34; }
+.n10 { --cn: #e03c31; }
+.n11 { --cn: #6fa8dc; }
+.n12 { --cn: #8d8272; }
 
-/* modificatori: fondo arancione pieno, come nel gioco */
+/* modificatori: faccia ambra e cifra rossa contornata, come nel gioco */
 .fcard.mod, .fcard.x2 {
-  --cn: #fff;
-  background: #f28c1b; color: #fff;
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,.55),
+  --cn: #d84343; --sc: rgba(255,255,255,.9);
+  background: #f2a93b; color: #d84343;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.6),
               0 1px 3px rgba(20,20,30,.22), 0 0 0 1px var(--card-ring);
 }
-.fcard.mod b, .fcard.x2 b { color: #fff; font-size: clamp(12px, 3.8vw, 16px); }
-.fcard.x2 { background: #e05e0a; }
+.fcard.mod b, .fcard.x2 b { font-size: clamp(12px, 3.8vw, 16px); }
+.fcard.x2 { background: #ec9633; }
 
-/* carte azione (esistono nel mazzo vero) */
-.fcard.frz { --cn: #fff; background: #4aa8e8; color: #fff; box-shadow: inset 0 0 0 2px rgba(255,255,255,.55), 0 1px 3px rgba(20,20,30,.22); }
-.fcard.sc  { --cn: #fff; background: #d2549e; color: #fff; box-shadow: inset 0 0 0 2px rgba(255,255,255,.55), 0 1px 3px rgba(20,20,30,.22); }
-.fcard.f3  { --cn: #fff; background: #8a5ad6; color: #fff; box-shadow: inset 0 0 0 2px rgba(255,255,255,.55), 0 1px 3px rgba(20,20,30,.22); }
+/* carte azione (esistono nel mazzo vero): gelo, giallo, corallo */
+.fcard.frz, .fcard.sc, .fcard.f3 {
+  --sc: rgba(255,255,255,.85);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.6), 0 1px 3px rgba(20,20,30,.22), 0 0 0 1px var(--card-ring);
+}
+.fcard.frz { --cn: #fff; background: #56b5e5; color: #fff; }
+.fcard.f3  { --cn: #303356; --sc: rgba(48,51,86,.5); background: #f0e23e; color: #303356; }
+.fcard.f3 b { -webkit-text-stroke: 0; }
+.fcard.sc  { --cn: #fff; background: #e25549; color: #fff; }
 .fcard.sc b, .fcard.frz b, .fcard.f3 b { font-size: clamp(10px, 3.2vw, 13px); }
-.fcard.flip7 { --cn: #3b2703; background: var(--holo); color: #3b2703; box-shadow: inset 0 0 0 2px rgba(255,255,255,.65), 0 1px 3px rgba(20,20,30,.22); }
-.fcard.flip7 b { color: #3b2703; font-size: clamp(11px, 3.4vw, 14px); }
+.fcard.flip7 { --cn: #3b2703; --sc: rgba(59,39,3,.5); background: var(--holo); color: #3b2703; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.65), 0 1px 3px rgba(20,20,30,.22); }
+.fcard.flip7 b { color: #3b2703; -webkit-text-stroke: 0; font-size: clamp(11px, 3.4vw, 14px); }
+
+/* dorso del mazzo: verde acqua con il marchio */
+.fcard.back {
+  --sc: rgba(255,255,255,.6);
+  background: #1aa2a0; color: #fff;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.6), 0 1px 3px rgba(20,20,30,.25), 0 0 0 1px var(--card-ring);
+}
+.fcard.back b {
+  -webkit-text-stroke: 0; color: #fff; font-family: var(--font-display);
+  font-size: clamp(8px, 2.4vw, 11px); letter-spacing: .03em;
+  display: inline-flex; align-items: center; gap: 2px; transform: rotate(-7deg);
+}
+.fcard.back b i { font-style: normal; background: #fff; color: #17908e; border-radius: 2px; padding: 0 2px; }
 
 /* ---------- griglia giocatori ---------- */
 .pgrid {
@@ -948,6 +977,37 @@ table.rounds td.tot { font-weight: 800; }
 .you-name .crown-emblem { display: inline-block; vertical-align: -3px; margin-left: 4px; }
 
 /* ---------- tavolo online ---------- */
+.table-wrap { display: flex; flex-direction: column; gap: 12px; }
+
+/* striscia del turno: dice sempre chi deve agire e cosa deve fare */
+.turn-strip {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 11px;
+  padding: 12px 13px; border-radius: 14px;
+  background: var(--surface-2);
+}
+.turn-strip.you { background: var(--holo-soft); }
+.ts-txt { min-width: 0; }
+.ts-txt b { display: block; font-family: var(--font-display); font-size: 17px; font-weight: 600; line-height: 1.2; }
+.ts-txt small { display: block; font-size: 12.5px; color: var(--muted); }
+.turn-strip.you .ts-txt small { color: #6b5a2c; }
+
+/* il banco: mazzo a sinistra, ultima carta pescata a destra */
+.bank { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 4px 0 2px; }
+.bank-slot { display: grid; justify-items: center; gap: 6px; }
+.bank-slot > small { font-size: 11.5px; color: var(--muted); text-align: center; max-width: 120px; line-height: 1.25; }
+.bank .fcard { width: 52px; flex: none; }
+.deck-stack .fcard {
+  box-shadow: -3px 3px 0 -1px #157f7d, -6px 6px 0 -2px rgba(21,127,125,.45),
+              inset 0 0 0 1.5px rgba(255,255,255,.6), 0 1px 3px rgba(20,20,30,.25);
+  margin-left: 6px;
+}
+.bank-arrow { color: var(--dim); display: flex; }
+.fcard.slot { background: transparent; border: 1.5px dashed var(--line-strong); box-shadow: none; }
+.fcard.slot::before, .fcard.slot::after { display: none; }
+
+.center-links { justify-content: center; }
+
 .fcard.mini { width: 24px; flex: none; border-width: 1.5px; border-radius: 5px; }
 .fcard.mini b { font-size: 11px; }
 .fcard.mini small, .fcard.mini::before, .fcard.mini::after { display: none; }
@@ -972,10 +1032,12 @@ table.rounds td.tot { font-weight: 800; }
 .seat-state.s-flip7 { background: var(--holo); color: #3b2703; }
 .seat-state.s-flip3 { background: rgba(226,96,14,.14); color: #e2600e; }
 .seat-cards { display: flex; flex-wrap: wrap; gap: 3px; min-height: 34px; align-items: center; }
+/* punteggi del posto: grande il totale partita, piccolo il round in corso */
 .seat-pts { text-align: right; line-height: 1.1; flex: none; }
-.seat-pts b { font-family: var(--font-display); font-size: 21px; font-weight: 600; }
-.seat-pts b.bust { color: var(--red); }
-.seat-pts small { display: block; font-size: 11px; color: var(--dim); }
+.seat-pts b { font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.seat-pts small { display: block; font-size: 11px; color: var(--dim); font-weight: 600; }
+.seat-pts small.up { color: var(--green); }
+.seat-pts small.bust { color: var(--red); }
 
 .last-draw {
   display: flex; align-items: center; gap: 11px;
@@ -1140,6 +1202,20 @@ table.rounds td.tot { font-weight: 800; }
   .numgrid { grid-template-columns: repeat(13, 1fr); }
   /* stessa taglia delle carte numero: senza, i modificatori vengono giganti */
   .modgrid { grid-template-columns: repeat(13, 1fr); }
+
+  /* tavolo online su desktop: vista larga a due colonne, con banco e comandi
+     fissi a sinistra e i posti a destra (su mobile resta tutto in colonna) */
+  #view.view-tavolo { max-width: 940px; }
+  .table-wrap {
+    display: grid; grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-areas: "side seats" "controls seats" ". seats";
+    gap: 14px; align-items: start;
+  }
+  .t-side { grid-area: side; }
+  .t-seats { grid-area: seats; }
+  .t-controls { grid-area: controls; }
+  .bank .fcard { width: 64px; }
+  .seat-cards .fcard.mini { width: 30px; }
   .sd-hand .fcard { width: 42px; }
   .fcard b { font-size: 19px; }
   .board-cols, .brow { grid-template-columns: 24px 1fr 86px 68px; }
