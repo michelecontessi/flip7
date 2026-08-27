@@ -89,13 +89,6 @@ export const historyView = {
       closeSheet();
       toast("Partita eliminata");
     },
-    async "game-set-winner"(ctx, el) {
-      const s = sheet.state;
-      await store.updateGameWinners(s.id, [el.dataset.id]);
-      s.game = { ...s.game, winnerIds: { [el.dataset.id]: true } };
-      toast("Crown assegnata a " + (s.game.results[el.dataset.id] || {}).name);
-      return "sheet";
-    },
 
     "man-add-row"() {
       captureSheetInputs();
@@ -193,16 +186,6 @@ function renderGameSheet(s) {
           </table>
         </div>
       </div>` : ""}
-
-    <div class="calc-section">
-      <div class="calc-label"><span>Assegna la Crown</span></div>
-      <div class="chips">
-        ${rows.map(([id, r]) => `
-          <button class="chip ${g.winnerIds && g.winnerIds[id] ? "on gold" : ""}" data-action="game-set-winner" data-id="${id}">
-            ${g.winnerIds && g.winnerIds[id] ? icon("crownFill", "tiny") : ""}${esc(r.name)}
-          </button>`).join("")}
-      </div>
-    </div>
 
     <div class="sheet-actions">
       <button class="btn ghost danger" data-action="game-delete">${icon("trash", "tiny")} Elimina</button>
