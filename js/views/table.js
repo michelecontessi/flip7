@@ -113,6 +113,9 @@ let lastAnimKey = null;
 // mosse dei bot) non la fanno comparire in anticipo sul tavolo
 let landingActive = false;
 let landingToken = 0;
+// niente spoiler: gli indizi dello sballo (chip, nota del doppione, riga
+// spenta) restano nascosti finche' la carta pescata non si e' girata
+let spoilerHold = false;
 
 function scheduleDrawAnim(g) {
   const key = g.lastDraw ? `${g.lastDraw.seat}:${g.lastDraw.card}:${g.deck.length}` : "nessuna";
@@ -123,8 +126,19 @@ function scheduleDrawAnim(g) {
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const card = g.lastDraw.card;
   landingActive = true;
+  spoilerHold = true;
   const token = ++landingToken;
-  requestAnimationFrame(() => runDrawAnim(card, token));
+  deferFrame(() => runDrawAnim(card, token));
+}
+
+/** requestAnimationFrame non scatta a pagina nascosta: fallback su timer,
+    cosi' animazioni e pulizie non restano appese in background. */
+const deferFrame = (fn) => (document.hidden ? setTimeout(fn, 0) : requestAnimationFrame(fn));
+
+function revealSpoilers() {
+  spoilerHold = false;
+  document.querySelectorAll(".spoiler-veil").forEach((el) => el.classList.remove("spoiler-veil"));
+  document.querySelectorAll(".seat.spoiler-hold").forEach((el) => el.classList.remove("spoiler-hold"));
 }
 
 function runDrawAnim(card, token) {
@@ -177,11 +191,12 @@ function runDrawAnim(card, token) {
     // ...di taglio si scambia il contenuto, poi si finisce il giro di faccia
     inner.innerHTML = miniCard(card, "drawn");
     if (caption) caption.style.opacity = "";
+    revealSpoilers();
     inner.animate([{ transform: "rotateY(-90deg)" }, { transform: "rotateY(0deg)" }],
       { duration: 400, easing: "ease-out", fill: "forwards" });
   }, 850);
 
-  const finish = () => { fly.remove(); openLanding(); if (caption) caption.style.opacity = ""; };
+  const finish = () => { fly.remove(); openLanding(); revealSpoilers(); if (caption) caption.style.opacity = ""; };
   const gNow = engine.normalizeGame(store.getRoom().game);
   const parkHere = gNow && gNow.pending && gNow.pending.type === card;
   if (parkHere) {
@@ -228,7 +243,7 @@ function checkPendingFlight(g) {
   landingActive = true;
   const token = ++landingToken;
   resolveTargetSid = target; // il render tiene collassata la carta ricevuta
-  requestAnimationFrame(() => { runResolveFly(card, token, target); });
+  deferFrame(() => { runResolveFly(card, token, target); });
 }
 
 function runResolveFly(card, token, targetSid) {
@@ -384,7 +399,7 @@ function bankRow(g) {
         ${g.pending
           ? miniCard(g.pending.type, "drawn parked" + (landingActive ? " veil" : ""))
           : `<span class="fcard slot"></span>`}
-        <small class="${bustNow ? "bust-note" : ""}">${last
+        <small class="${bustNow ? "bust-note" : ""}${spoilerHold && last ? " spoiler-veil" : ""}">${last
           ? bustNow
             ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: SBALLATO`
             : `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>`
@@ -406,6 +421,9 @@ function renderSeatRow(g, sid, ctx) {
   if (h.out === "bust" && just === "n" + h.bustCard) just = null;
   const justCls = "mini just" + (landingActive ? " landing" : "");
   const cls = (card) => (card === just ? justCls : "mini");
+  // lo sballo di QUESTA pescata resta segreto finche' la carta non si gira
+  const bustSpoiler = spoilerHold && h.out === "bust" && g.lastDraw
+    && g.lastDraw.seat === sid && g.lastDraw.card === "n" + h.bustCard;
   // due file: sopra azioni e modificatori, sotto tutti i numeri
   const resolvedHere = landingActive && resolveTargetSid === sid;
   const specials = [
@@ -421,13 +439,13 @@ function renderSeatRow(g, sid, ctx) {
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
     nums.push(miniCard("n" + h.bustCard, "mini dup" + (landingActive && g.lastDraw && g.lastDraw.seat === sid ? " landing" : "")));
   }
-  const state = h.out ? `<i class="seat-state s-${h.out}">${OUT_LABEL[h.out]}</i>`
+  const state = h.out ? `<i class="seat-state s-${h.out}${bustSpoiler ? " spoiler-veil" : ""}">${OUT_LABEL[h.out]}</i>`
     : isChoosing ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "scegli tu" : "sta scegliendo"}</i>`
     : isFlip3 ? `<i class="seat-state s-flip3">pesca ancora ${g.flip3.left}</i>`
     : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   return `
-    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${h.out ? "out-" + h.out : ""}" data-sid="${sid}">
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${h.out ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}">
       <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="seat-main">
         <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>
@@ -435,12 +453,12 @@ function renderSeatRow(g, sid, ctx) {
           ${specials.length ? `<div class="cards-row special">${specials.join("")}</div>` : ""}
           <div class="cards-row">${nums.join("") || '<span class="hand-empty">nessuna carta in mano</span>'}</div>
           ${h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined
-            ? `<span class="dup-note">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}
+            ? `<span class="dup-note${bustSpoiler ? " spoiler-veil" : ""}">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}
         </div>
       </div>
       <div class="seat-pts">
         <b>${seat.total || 0}</b>
-        <small class="${h.out === "bust" ? "bust" : pts > 0 ? "up" : ""}">+${pts} nel round</small>
+        <small class="${h.out === "bust" ? "bust" : pts > 0 ? "up" : ""}${bustSpoiler ? " spoiler-veil" : ""}">+${pts} nel round</small>
       </div>
     </li>`;
 }
@@ -531,7 +549,7 @@ function renderRoundEnd(g, ctx) {
     <div class="table-wrap">
       <section class="card t-side">
         <div class="turn-strip end">
-          <div class="ts-txt"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
+          <div class="ts-txt ${spoilerHold && buster ? "spoiler-veil" : ""}"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
         </div>
         ${raceBoard(g, me)}
       </section>
