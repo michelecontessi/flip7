@@ -8,26 +8,32 @@ import { liveView } from "./views/live.js";
 import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
 import { setupView } from "./views/setup.js";
+import { tableView } from "./views/table.js";
 import { DEFAULTS } from "./config.js";
 import { icon, wordmark } from "./icons.js";
 import { applyTheme, watchSystemTheme } from "./theme.js";
 
 const VIEWS = {
   partita:    { title: "Partita",    ico: "cards",   view: liveView },
+  tavolo:     { title: "Tavolo",     ico: "cardFan", view: tableView },
   classifica: { title: "Classifica", ico: "crown",   view: leaderboardView },
   storico:    { title: "Storico",    ico: "history", view: historyView },
   setup:      { title: "Setup",      ico: "sliders", view: setupView }
 };
-const ORDER = ["partita", "classifica", "storico", "setup"];
+const ORDER = ["partita", "tavolo", "classifica", "storico", "setup"];
 
 let route = "partita";
 
 function ctx() {
   const room = store.getRoom();
+  const status = store.getStatus();
+  const bound = (room.bindings || {})[status.uid];
   return {
     room,
-    status: store.getStatus(),
-    me: prefs.get("me"),
+    status,
+    // il giocatore "mio": il collegamento fisso account -> giocatore vince
+    // sulla scelta locale (che resta come ripiego in modalita' locale)
+    me: (bound && room.players[bound]) ? bound : prefs.get("me"),
     isScorekeeper: store.isScorekeeper()
   };
 }
@@ -63,7 +69,7 @@ function renderTabbar(c) {
   const badge = c.room.live && c.room.live.status === "playing";
   return ORDER.map((key) => `
     <a class="tab ${route === key ? "on" : ""}" href="#${key}">
-      <span class="tab-ico">${icon(VIEWS[key].ico)}${key === "partita" && badge ? '<i class="live-dot"></i>' : ""}</span>
+      <span class="tab-ico">${icon(VIEWS[key].ico)}${(key === "partita" && badge) || (key === "tavolo" && c.room.game && c.room.game.status === "playing") ? '<i class="live-dot"></i>' : ""}</span>
       <span class="tab-lbl">${VIEWS[key].title}</span>
     </a>`).join("");
 }
@@ -91,6 +97,22 @@ function renderWelcome() {
         <p class="muted small">Aprilo e basta: entri direttamente nella stanza giusta.
           Se hai solo il codice, inseriscilo qui.</p>
         <button class="btn" data-action="join-room">Ho un codice stanza</button>
+      </div>
+    </section>`;
+}
+
+// Login con Google: identita' stabile (sopravvive a cambio telefono e rete).
+function renderSignin() {
+  return `
+    <section class="gate">
+      ${wordmark("gate-mark")}
+      <div class="card gate-card center">
+        <div class="empty-ico">${icon("user")}</div>
+        <h2 class="section-title">Accedi con Google</h2>
+        <p class="muted small">Un tocco solo: serve a riconoscerti. Entrano soltanto le
+          persone approvate da chi gestisce la stanza, e l'accesso ti segue anche se
+          cambi telefono o rete.</p>
+        <button class="btn primary big" data-action="google-signin">Accedi con Google</button>
       </div>
     </section>`;
 }
@@ -140,7 +162,9 @@ export function render() {
       tabs.innerHTML = "";
       tabs.style.display = "none";
       main.className = "view-gate";
-      main.innerHTML = c.status.mode === "none" ? renderWelcome() : renderAccessGate(c);
+      main.innerHTML = c.status.mode === "none" ? renderWelcome()
+        : c.status.access === "signin" ? renderSignin()
+        : renderAccessGate(c);
       return;
     }
     tabs.style.display = "";
@@ -212,6 +236,7 @@ document.addEventListener("click", (ev) => {
       .then((code) => { if (code) store.switchRoom(code); });
     return;
   }
+  if (name === "google-signin") { ev.preventDefault(); store.signIn().then(() => render()); return; }
   if (name === "request-access") {
     ev.preventDefault();
     askText("Come ti chiami?", { placeholder: "Nome e cognome", message: "Chi gestisce la stanza vedrà questo nome nella richiesta.", confirmLabel: "Invia richiesta" })

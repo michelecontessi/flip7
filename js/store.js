@@ -24,7 +24,9 @@ export function emptyRoom() {
     live: null,
     history: {},
     members: {},
-    requests: {}
+    requests: {},
+    bindings: {},
+    game: null
   };
 }
 
@@ -38,7 +40,9 @@ function normalize(v) {
     live: v.live || null,
     history: v.history || {},
     members: v.members || {},
-    requests: v.requests || {}
+    requests: v.requests || {},
+    bindings: v.bindings || {},
+    game: v.game || null
   };
 }
 
@@ -139,19 +143,65 @@ async function initFirebase() {
   const auth = authMod.getAuth(app);
   const db = dbMod.getDatabase(app);
 
-  const cred = await authMod.signInAnonymously(auth);
-  const uid = cred.user.uid;
-
   const roomRef = dbMod.ref(db, `rooms/${roomId}`);
-  fb = { db, roomRef, update: dbMod.update, ref: dbMod.ref, onValue: dbMod.onValue };
-  status = { ...status, mode: "firebase", uid, ready: false, access: "checking", error: null };
+  fb = { db, roomRef, update: dbMod.update, ref: dbMod.ref, onValue: dbMod.onValue, auth, authMod };
+  status = { ...status, mode: "firebase", ready: false, access: "checking", error: null };
 
   dbMod.onValue(dbMod.ref(db, ".info/connected"), (snap) => {
     status.online = Boolean(snap.val());
     notify();
   });
 
+  // login con Google: l'identita' e' l'account, non il browser, quindi
+  // sopravvive a cambio rete, telefono nuovo e pulizia dei dati.
+  const user = await new Promise((resolve) => {
+    const stop = authMod.onAuthStateChanged(auth, (u) => { stop(); resolve(u); });
+  });
+  if (!user) {
+    status.ready = true;
+    status.access = "signin";
+    notify();
+    return;
+  }
+  adoptUser(user);
   await attachRoom();
+}
+
+function adoptUser(u) {
+  status.uid = u.uid;
+  status.user = {
+    name: u.displayName || u.email || "Utente",
+    email: u.email || "",
+    photo: u.photoURL || ""
+  };
+}
+
+/** Avvia il login con Google (va chiamato da un gesto dell'utente). */
+export async function signIn() {
+  const provider = new fb.authMod.GoogleAuthProvider();
+  try {
+    const cred = await fb.authMod.signInWithPopup(fb.auth, provider);
+    adoptUser(cred.user);
+    status.access = "checking";
+    notify();
+    await attachRoom();
+  } catch (err) {
+    if (err && (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request")) return;
+    // alcuni browser mobili bloccano i popup: ripiego sul redirect
+    if (err && (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment")) {
+      await fb.authMod.signInWithRedirect(fb.auth, provider);
+      return;
+    }
+    status.error = "Accesso non riuscito: " + (err.message || err);
+    notify();
+  }
+}
+
+export async function signOutUser() {
+  await fb.authMod.signOut(fb.auth);
+  status.access = "signin";
+  status.user = null;
+  notify();
 }
 
 /**
@@ -196,7 +246,7 @@ let bootstrapTried = false;
 async function bootstrapOwner(roomExists) {
   try {
     await fb.update(fb.roomRef, {
-      [`members/${status.uid}`]: { name: prefs.get("ownerName", "Proprietario"), at: Date.now() }
+      [`members/${status.uid}`]: { name: (status.user && status.user.name) || "Proprietario", email: (status.user && status.user.email) || null, at: Date.now() }
     });
     prefs.set("owner", true);
   } catch {
@@ -244,10 +294,10 @@ function watchApproval() {
 /** Chiede di entrare nella stanza (scrive la propria richiesta). */
 export async function requestAccess(name) {
   if (!fb) return;
-  const clean = String(name || "").trim().slice(0, 40) || "Sconosciuto";
+  const clean = String(name || (status.user && status.user.name) || "").trim().slice(0, 40) || "Sconosciuto";
   prefs.set("requestName", clean);
   await fb.update(fb.ref(fb.db, `rooms/${roomId}/requests`), {
-    [status.uid]: { name: clean, at: Date.now() }
+    [status.uid]: { name: clean, email: (status.user && status.user.email) || null, at: Date.now() }
   });
   status.access = "pending";
   notify();
@@ -257,7 +307,7 @@ export async function requestAccess(name) {
 export function approveRequest(uid) {
   const req = room.requests[uid] || {};
   return commit({
-    [`members/${uid}`]: { name: req.name || "Membro", at: Date.now() },
+    [`members/${uid}`]: { name: req.name || "Membro", email: req.email || null, at: Date.now() },
     [`requests/${uid}`]: null
   });
 }
@@ -265,7 +315,22 @@ export function rejectRequest(uid) {
   return commit({ [`requests/${uid}`]: null });
 }
 export function revokeMember(uid) {
-  return commit({ [`members/${uid}`]: null });
+  return commit({ [`members/${uid}`]: null, [`bindings/${uid}`]: null });
+}
+
+/**
+ * Lega questo account a un giocatore del roster. Il primo collegamento lo fa
+ * l'interessato; da li' in poi puo' cambiarlo solo il proprietario (regole).
+ */
+export function bindSelf(playerId) {
+  return commit({ [`bindings/${status.uid}`]: playerId });
+}
+export function bindMember(uid, playerId) {
+  return commit({ [`bindings/${uid}`]: playerId || null });
+}
+/** Il giocatore legato a questo account (null se non ancora scelto). */
+export function myPlayerId() {
+  return (room.bindings || {})[status.uid] || null;
 }
 
 /** Crea una stanza nuova con codice segreto e la apre. */
@@ -449,6 +514,39 @@ export function saveGameToHistory() {
 
 export function cancelGame() {
   return commit({ live: null });
+}
+
+// ---------------------------------------------------------------------------
+// Tavolo online
+// ---------------------------------------------------------------------------
+/** Sovrascrive lo stato del tavolo (JSON pulito: Firebase rifiuta undefined). */
+export function commitGame(state) {
+  return commit({ game: state === null ? null : JSON.parse(JSON.stringify(state)) });
+}
+
+/** Archivia una partita online conclusa e libera il tavolo. */
+export function saveOnlineGame(state) {
+  const results = {};
+  for (const sid of state.order) {
+    const seat = state.seats[sid];
+    const key = seat.playerId || sid;
+    results[key] = { name: seat.name, total: Number(seat.total) || 0 };
+  }
+  const top = Math.max(...Object.values(results).map((r) => r.total));
+  const winnerIds = Object.fromEntries(Object.entries(results).filter(([, r]) => r.total === top).map(([id]) => [id, true]));
+  const gameId = newId();
+  return commit({
+    [`history/${gameId}`]: {
+      playedAt: Date.now(),
+      targetScore: state.target || 200,
+      source: "online",
+      results,
+      winnerIds,
+      rounds: null,
+      createdAt: Date.now()
+    },
+    game: null
+  }).then(() => gameId);
 }
 
 // ---------------------------------------------------------------------------

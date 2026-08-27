@@ -1,11 +1,12 @@
 // Service worker minimale: network-first, cache solo come rete di sicurezza.
 // Cosi' gli aggiornamenti arrivano sempre e l'app si apre anche senza rete.
-const CACHE = "flip7-v9";
+const CACHE = "flip7-v10";
 const SHELL = [
   "./", "./index.html", "./css/styles.css", "./icon.svg", "./manifest.webmanifest",
   "./js/app.js", "./js/store.js", "./js/stats.js", "./js/scoring.js", "./js/ui.js",
   "./js/prefs.js", "./js/config.js", "./js/icons.js", "./js/theme.js",
-  "./js/views/live.js", "./js/views/leaderboard.js", "./js/views/history.js", "./js/views/setup.js"
+  "./js/views/live.js", "./js/views/leaderboard.js", "./js/views/history.js", "./js/views/setup.js",
+  "./js/views/table.js", "./js/game.js"
 ];
 
 self.addEventListener("install", (e) => {

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, initials, colorOf, toast, askText, askConfirm, fmtDate, shareRoom, roomUrl } from "../ui.js";
+import { esc, initials, colorOf, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, roomUrl } from "../ui.js";
 import { isFirebaseConfigured } from "../config.js";
 import { icon } from "../icons.js";
 import { applyTheme } from "../theme.js";
@@ -102,6 +102,14 @@ export const setupView = {
         ${!isFirebaseConfigured ? `<p class="warn-note small">Firebase non è configurato: i dati restano su questo dispositivo. Vedi <b>README.md</b> per attivare la sincronia live.</p>` : ""}
       </section>
 
+      ${status.mode === "firebase" && status.user ? `
+      <section class="card">
+        <div class="card-head">${icon("user")}<span class="card-title">Account</span></div>
+        <div class="kv"><span>Accesso come</span><b>${esc(status.user.name)}</b></div>
+        ${status.user.email ? `<div class="kv"><span>Email</span><span class="mono">${esc(status.user.email)}</span></div>` : ""}
+        <button class="btn ghost small" data-action="google-signout">Esci dall'account</button>
+      </section>` : ""}
+
       ${status.mode === "firebase" ? `
       <section class="card">
         <div class="card-head">${icon("user")}<span class="card-title">Membri</span>
@@ -119,13 +127,21 @@ export const setupView = {
               </div>`).join("")}
           </div>` : ""}
         <ul class="plist">
-          ${Object.entries(room.members || {}).map(([uid, m]) => `
+          ${Object.entries(room.members || {}).map(([uid, m]) => {
+            const boundId = (room.bindings || {})[uid];
+            const bound = boundId && room.players[boundId] ? room.players[boundId].name : null;
+            return `
             <li>
               <span class="avatar sm" style="background:${colorOf(m.name)}">${initials(m.name)}</span>
-              <span class="pname">${esc(m.name || "Membro")}${uid === status.uid ? '<span class="tag">questo dispositivo</span>' : ""}</span>
+              <span class="pname">${esc(m.name || "Membro")}${uid === status.uid ? '<span class="tag">tu</span>' : ""}
+                <small class="req-sub">${bound ? `gioca come ${esc(bound)}` : "nessun giocatore collegato"}</small></span>
+              <button class="icon-btn" data-action="member-bind" data-id="${uid}" aria-label="Collega giocatore">${icon("pencil")}</button>
               ${uid === status.uid ? "" : `<button class="icon-btn danger" data-action="member-revoke" data-id="${uid}" aria-label="Revoca">${icon("close")}</button>`}
-            </li>`).join("") || `<li class="muted small">Ancora nessun membro registrato.</li>`}
+            </li>`;
+          }).join("") || `<li class="muted small">Ancora nessun membro registrato.</li>`}
         </ul>
+        <p class="muted small">Il collegamento account → giocatore lo scegli tu:
+          ogni persona resterà per sempre il suo giocatore, su qualsiasi dispositivo.</p>
       </section>` : ""}
 
       <section class="card">
@@ -171,6 +187,11 @@ export const setupView = {
     },
     "sk-release"() { return store.releaseScorekeeper(); },
 
+    async "google-signout"(ctx) {
+      const ok = await askConfirm("Uscire dall'account?", { message: "Per rientrare dovrai rifare l'accesso con Google.", confirmLabel: "Esci" });
+      if (ok) await store.signOutUser();
+    },
+
     async "copy-uid"(ctx) {
       try {
         await navigator.clipboard.writeText(ctx.status.uid);
@@ -188,6 +209,16 @@ export const setupView = {
     async "member-reject"(ctx, el) {
       try { await store.rejectRequest(el.dataset.id); }
       catch { toast("Solo il proprietario può farlo", "warn"); }
+    },
+    async "member-bind"(ctx, el) {
+      const uid = el.dataset.id;
+      const roster = Object.entries(ctx.room.players || {}).filter(([, p]) => !p.archived)
+        .map(([id, p]) => ({ id, label: p.name }));
+      if (!roster.length) return toast("Prima aggiungi i giocatori", "warn");
+      const pick = await askChoice(`Chi è ${((ctx.room.members || {})[uid] || {}).name || "questo account"}?`, roster);
+      if (!pick) return;
+      try { await store.bindMember(uid, pick); toast("Collegamento aggiornato"); }
+      catch { toast("Solo il proprietario può cambiarlo", "warn"); }
     },
     async "member-revoke"(ctx, el) {
       const name = ((ctx.room.members || {})[el.dataset.id] || {}).name || "questo dispositivo";

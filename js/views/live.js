@@ -133,7 +133,8 @@ function whoAmIBanner(room, me) {
   return `
     <section class="card">
       <h2 class="section-title">Chi sei?</h2>
-      <p class="muted small">Scegli il tuo nome: vedrai il tuo punteggio in grande.</p>
+      <p class="muted small">Scegli il tuo nome una volta sola: il tuo account resterà
+        collegato a quel giocatore (lo cambia solo chi gestisce la stanza).</p>
       <div class="pgrid">
         ${list.map(([id, p]) => `
           <button class="pg" data-action="set-me" data-id="${id}">
@@ -142,6 +143,10 @@ function whoAmIBanner(room, me) {
             </span>
             <span class="pg-name">${esc(p.name)}</span>
           </button>`).join("")}
+        <button class="pg add" data-action="me-new">
+          <span class="pg-ava"><span class="avatar lg ghost">${icon("plus")}</span></span>
+          <span class="pg-name muted">sono nuovo</span>
+        </button>
       </div>
     </section>`;
 }
@@ -162,7 +167,7 @@ function renderYouCard(live, standings, me) {
     <section class="you-card">
       <div class="you-head">
         <span class="avatar" style="background:${colorOf(mine.name)}">${initials(mine.name)}</span>
-        <span class="you-name">${esc(mine.name)}</span>
+        <span class="you-name">${esc(mine.name)}${mine.rank === 1 && mine.total > 0 ? ` ${crownEmblem("mini")}` : ""}</span>
         <span class="you-pos">${mine.rank}º di ${standings.length}</span>
       </div>
       <div class="you-score">
@@ -175,7 +180,7 @@ function renderYouCard(live, standings, me) {
           })()}
         </span>
       </div>
-      <div class="you-bar"><i style="width:${pct}%"></i></div>
+      <div class="you-bar"><i style="width:${pct}%; background:${colorOf(mine.name)}"></i></div>
       <div class="you-foot">
         <span class="${mine.total >= target ? "goal" : ""}">
           ${mine.total >= target ? `traguardo tagliato` : `ti mancano <b>${target - mine.total}</b> punti`}
@@ -214,6 +219,7 @@ function renderBoard(room, live, standings, me, { editable }) {
         <span class="round-meta">${finished
           ? "partita chiusa"
           : `${ids.length - missing.length} di ${ids.length} segnati<br>si vince a ${target}`}</span>
+        ${!editable && !finished ? `<span class="live-pill"><i></i>LIVE</span>` : ""}
         <button class="ghost-btn ml-auto" data-action="share-room">${icon("link", "tiny")} Invita</button>
       </div>
 
@@ -234,7 +240,7 @@ function renderBoard(room, live, standings, me, { editable }) {
           if (row.busts) notes.push(row.busts + "× sballo");
           return `
             <li class="brow ${row.playerId === me ? "me" : ""} ${row.rank === 1 ? "leader" : ""}">
-              <span class="rank r${row.rank}">${row.rank}</span>
+              <span class="rank r${row.rank}">${row.rank === 1 && row.total > 0 ? crownEmblem("rank-crown") : row.rank}</span>
               <span class="bname">
                 <span class="avatar sm" style="background:${colorOf(row.name)}">${initials(row.name)}</span>
                 <span class="txt">${esc(row.name)}${notes.length ? `<small>${notes.join(" · ")}</small>` : ""}</span>
@@ -420,11 +426,6 @@ export function renderScoreSheet(s) {
         <button class="key" data-action="key" data-k="0">0</button>
         <button class="key sub" data-action="key-back" aria-label="Cancella">${icon("backspace")}</button>
       </div>
-      <div class="quick-row">
-        <button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>
-        <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
-      </div>
-      ${typed === "" && !e.busted ? `<p class="hint">Somma delle carte del giocatore. Il bonus Flip 7 lo aggiungi col tasto.</p>` : ""}
     ` : `
       <div class="calc-section">
         <div class="calc-label"><span>Carte numero</span><span class="count-num">${(e.numbers || []).length}/7</span></div>
@@ -439,14 +440,17 @@ export function renderScoreSheet(s) {
           <button class="card-btn" data-action="calc-double">${modCard("x2", { on: Boolean(e.doubled) })}</button>
         </div>
       </div>
-      <div class="quick-row">
-        <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
-      </div>
     `}
 
-    <div class="sheet-actions">
-      <button class="btn" data-action="calc-clear">Azzera</button>
-      <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
+    <div class="sheet-actions col">
+      <div class="quick-row">
+        ${isKeypad ? `<button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>` : ""}
+        <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
+      </div>
+      <div class="act-row">
+        <button class="btn" data-action="calc-clear">Azzera</button>
+        <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
+      </div>
     </div>`;
 }
 
@@ -537,9 +541,23 @@ export const liveView = {
   },
 
   actions: {
-    "set-me"(ctx, el) {
-      prefs.set("me", el.dataset.id);
-      toast("Ciao " + (ctx.room.players[el.dataset.id] || {}).name);
+    async "set-me"(ctx, el) {
+      const id = el.dataset.id;
+      prefs.set("me", id);
+      try {
+        await store.bindSelf(id);
+        toast("Ciao " + (ctx.room.players[id] || {}).name + "! D'ora in poi sei tu.");
+      } catch {
+        toast("Il collegamento lo può cambiare solo chi gestisce la stanza", "warn");
+      }
+    },
+    async "me-new"(ctx) {
+      const name = await askText("Come ti chiami?", { placeholder: "Nome", confirmLabel: "Crea" });
+      if (!name) return;
+      const id = await store.addPlayer(name);
+      prefs.set("me", id);
+      try { await store.bindSelf(id); } catch { /* gia' collegato */ }
+      toast("Benvenuto " + name + "!");
     },
     "toggle-lineup"(ctx, el) {
       const id = el.dataset.id;

@@ -37,7 +37,12 @@ quello che consuma questa app.
    - posizione: `europe-west1`
    - modalità: **bloccata** (le regole giuste le mettiamo al punto 4)
 3. Menu **Crea** → **Authentication** → **Inizia** → scheda **Metodo di accesso** →
-   abilita **Anonimo**. Serve perché i telefoni possano leggere/scrivere senza registrarsi.
+   abilita **Google** (ti chiede solo un'email di supporto). L'accesso è con
+   l'account Google: un tocco, niente password da inventare, e l'identità segue
+   la persona anche se cambia telefono o rete.
+   Poi scheda **Impostazioni** → **Domini autorizzati** → *Aggiungi dominio* →
+   inserisci il dominio del sito pubblicato (es. `TUO-UTENTE.github.io`),
+   altrimenti il popup di Google verrà rifiutato.
 4. Torna in **Realtime Database** → scheda **Regole**, incolla il contenuto del file
    [`database.rules.json`](database.rules.json) e premi **Pubblica** — ma prima
    sostituisci `OWNER_UID` con l'**ID del tuo dispositivo** (lo trovi nell'app,
@@ -114,8 +119,11 @@ Per aggiornarla in futuro basta un `git push`: Pages ripubblica da solo.
    dell'ufficio. I colleghi non creano niente: aprono il link, chiedono di entrare,
    tu li approvi da **Setup → Membri** ed è fatta, per sempre.
 
-**Ogni collega**, aperto il link, va in **Setup** → *Io sono* e sceglie il proprio nome:
-da lì in poi vedrà il proprio punteggio in grande sopra al tabellone.
+**Ogni collega**, aperto il link: accede con Google → chiede di entrare → tu lo
+approvi. Alla prima visita sceglie **chi è** fra i giocatori (o si crea): da quel
+momento il suo account resta **collegato per sempre a quel giocatore**, su qualunque
+dispositivo — e il collegamento può cambiarlo solo il proprietario, da
+**Setup → Membri** (matita accanto al nome).
 
 > **Il ruolo di segnapunti è di un dispositivo alla volta**, ed è chi lo prende a decidere:
 > non si assegna a distanza. Chi non ce l'ha vede in cima la striscia
@@ -158,7 +166,29 @@ punteggi finali. Il vincitore è automatico (punteggio più alto) o lo scegli tu
 
 ---
 
-## 5. Classifica e Crown
+## 5. Tavolo online
+
+La scheda **Tavolo** è separata apposta dal segnapunti: lì non si contano punti di una
+partita fisica, **si gioca a Flip 7 per davvero**, ognuno dal proprio telefono, con le
+regole ufficiali del gioco:
+
+- mazzo da 94 carte (un 0, un 1, due 2… dodici 12, i sei modificatori, tre copie di
+  ogni carta azione), che continua fra i round e si rimescola dagli scarti quando finisce;
+- al tuo turno **peschi o ti fermi**; il numero doppio ti fa sballare;
+- **Seconda Chance** annulla un doppione (la seconda va regalata a chi non ce l'ha);
+- **Congela** fa incassare e uscire dal round il bersaglio (anche te stesso, e se sono
+  tutti fuori il bersaglio sei tu per forza);
+- **Pesca Tre** obbliga il bersaglio a pescare tre carte; le azioni pescate nel mentre
+  si mettono da parte e si risolvono dopo (perse se sballa);
+- **FLIP 7**: sette numeri diversi → +15 e il round si chiude all'istante per tutti
+  (chi era ancora in gioco incassa comunque le proprie carte);
+- punteggio: somma dei numeri, ×2 se hai il ×2, poi i +, come da regolamento.
+
+Si apre un tavolo, ci si siede (ognuno è il **suo** giocatore, grazie al collegamento
+account→giocatore), e a fine partita **la vittoria vale una Crown** nello storico, come
+le partite dal vivo. Possono giocare solo i membri approvati.
+
+## 6. Classifica e Crown
 
 Una **vittoria = una Crown**, punto. Nessuna formula strana: in classifica le Crown
 sono la colonna con la coroncina, e in cima c'è chi ne ha di più.
@@ -191,7 +221,7 @@ I giocatori sono identificati da un id interno, quindi:
 
 ---
 
-## 6. Look & feel
+## 7. Look & feel
 
 L'app ha un suo marchio: la scritta **FLIP** con la cartina del **7** inclinata — in
 lamina olografica — che ritrovi nella barra in alto, sul banner del vincitore e
@@ -222,7 +252,7 @@ Momenti "da tavolo": quando qualcuno fa **Flip 7** compare la coccarda iridescen
 parte un avviso dedicato; a fine partita il vincitore si prende coriandoli e corona.
 Durante la partita ogni giocatore ha la sua rotaia, nel suo colore.
 
-## 7. File del progetto
+## 8. File del progetto
 
 ```
 index.html               pagina unica
@@ -235,7 +265,8 @@ js/stats.js              totali di partita e classifica perpetua
 js/icons.js              icone SVG, marchio FLIP 7 e facce delle carte
 js/ui.js                 helper: date, toast, bottom sheet, dialoghi, condivisione
 js/theme.js              tema chiaro/scuro
-js/views/                partita · classifica · storico · setup
+js/game.js               motore del gioco online (regole ufficiali, logica pura)
+js/views/                partita · tavolo · classifica · storico · setup
 database.rules.json      regole di sicurezza del database
 sw.js, manifest.webmanifest, icon.svg    supporto PWA
 server.mjs               server di sviluppo locale (npm start)
@@ -250,7 +281,7 @@ npm test
 
 ---
 
-## 8. Domande rapide
+## 9. Domande rapide
 
 **Quanto costa?** Zero. GitHub Pages è gratuito per i repo pubblici e il piano Spark di
 Firebase non scade e non chiede metodi di pagamento. Una partita muove qualche decina di KB.
@@ -273,7 +304,10 @@ segreto e non sta nel repository; il tuo ID di proprietario è scolpito nelle re
 che si cambiano solo dalla console Firebase con il tuo account Google. Dentro la
 stanza, il tabellone live resta scrivibile dal solo segnapunti in carica.
 
-**E se cambio telefono o cancello i dati del browser?** L'identità del proprietario è
-legata al dispositivo: se la perdi, apri la console Firebase → Regole e sostituisci
-il vecchio ID con quello nuovo (l'app te lo mostra in Setup). Per questo conviene
-registrare **due** dispositivi come proprietari fin dall'inizio.
+**E se cambio telefono, rete o cancello i dati del browser?** Nessun problema:
+l'identità è l'**account Google**, non il dispositivo. Stesso account = stesso accesso
+e stesso giocatore, ovunque. La rete non c'entra mai nulla.
+
+**E se il proprietario non c'è?** Chi è già stato approvato entra e fa tutto da solo
+(segnapunti compreso): il proprietario serve soltanto per approvare le persone **nuove**
+e per cambiare i collegamenti account→giocatore.

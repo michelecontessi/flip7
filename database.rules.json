@@ -33,6 +33,17 @@
         "history": { ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()" },
         "control": { ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()" },
 
+        "bindings": {
+          "$uid": {
+            ".write": "auth != null && ((auth.uid === $uid && !data.exists()) || auth.uid === 'OWNER_UID')",
+            ".validate": "newData.isString() && newData.val().length < 60"
+          }
+        },
+
+        "game": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+        },
+
         "live": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists() && (!root.child('rooms/' + $roomId + '/control/uid').exists() || root.child('rooms/' + $roomId + '/control/uid').val() === auth.uid)"
         }
