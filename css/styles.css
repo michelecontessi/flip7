@@ -427,8 +427,14 @@ select {
 .board-head { display: flex; align-items: center; gap: 9px; }
 .round-head { display: flex; align-items: center; gap: 9px; flex: none; }
 .round-word { font-family: var(--font-display); font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
-.fcard.round-card { width: 40px; flex: none; }
-.sheet-nav .fcard.round-card { width: 34px; }
+/* numero del round: come sui numeri delle carte, ma senza la carta attorno */
+.round-num { display: inline-flex; align-items: center; }
+.round-num b {
+  font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1;
+  color: var(--cn, #47505f); -webkit-text-stroke: .05em #303356; paint-order: stroke fill;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-nav .round-num b { font-size: 24px; }
 .round-meta {
   display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
   text-align: right; font-size: 12px; color: var(--muted); line-height: 1.3; min-width: 0;
@@ -780,6 +786,7 @@ table.rounds td.tot { font-weight: 800; }
   align-items: center; justify-content: center; gap: 0;
   aspect-ratio: 5 / 7; width: 100%;
   border-radius: 9px; overflow: hidden;
+  container-type: inline-size; /* i numeri si dimensionano sulla carta */
   background: #f6efdc; color: var(--cn, #47505f);
   border: 2px solid #fff;
   box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45),
@@ -866,9 +873,10 @@ table.rounds td.tot { font-weight: 800; }
 }
 .fcard.frz { --cn: #fff; background: #56b5e5; color: #fff; }
 .fcard.f3  { --cn: #303356; --sc: rgba(48,51,86,.5); background: #f0e23e; color: #303356; }
-.fcard.f3 b { -webkit-text-stroke: 0; }
 .fcard.sc  { --cn: #fff; background: #e25549; color: #fff; }
-.fcard.sc b, .fcard.frz b, .fcard.f3 b { font-size: clamp(10px, 3.2vw, 13px); }
+/* icona grande al centro delle carte azione */
+.fcard .acard { display: block; width: 60%; position: relative; z-index: 1; }
+.fcard .acard .ico { width: 100%; height: auto; }
 .fcard.flip7 { --cn: #3b2703; --sc: rgba(59,39,3,.5); background: var(--holo); color: #3b2703; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.65), 0 1px 3px rgba(20,20,30,.22); }
 .fcard.flip7 b { color: #3b2703; -webkit-text-stroke: 0; font-size: clamp(11px, 3.4vw, 14px); }
 
@@ -1041,6 +1049,8 @@ table.rounds td.tot { font-weight: 800; }
 .dup-note { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 650; color: var(--red); }
 .bust-note { color: var(--red) !important; font-weight: 650; }
 .fcard.dup { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2px var(--red), 0 1px 3px rgba(20,20,30,.22); }
+/* l'ultima carta pescata spicca nella mano di chi l'ha presa */
+.fcard.just { outline: 2.5px solid var(--primary); outline-offset: 2px; animation: bump .3s ease-out; }
 .fcard.bust-draw { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2.5px var(--red), 0 1px 3px rgba(20,20,30,.25); }
 /* punteggi del posto: grande il totale partita, piccolo il round in corso */
 .seat-pts { text-align: right; line-height: 1.1; flex: none; }
@@ -1234,6 +1244,17 @@ table.rounds td.tot { font-weight: 800; }
   .fcard b { font-size: 19px; }
   .board-cols, .brow { grid-template-columns: 24px 1fr 86px 68px; }
   #tabbar { max-width: 660px; margin: 0 auto; border-radius: 16px 16px 0 0; border: 1px solid var(--line); border-bottom: 0; }
+}
+
+/* ---------- numeroni proporzionali alla carta ----------
+   Come sugli asset veri: il numero occupa meta' carta, qualsiasi taglia abbia.
+   (nei browser senza container query restano i clamp px di sopra) */
+@supports (font-size: 1cqw) {
+  .fcard b { font-size: 52cqw; }
+  .fcard small { font-size: 9cqw; padding: 1cqw 5cqw; margin-top: 2cqw; }
+  .fcard.mod b, .fcard.x2 b { font-size: 38cqw; }
+  .fcard.flip7 b { font-size: 30cqw; }
+  .fcard.back b { font-size: 21cqw; }
 }
 
 @media (prefers-reduced-motion: reduce) {

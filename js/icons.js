@@ -48,7 +48,10 @@ const PATHS = {
   refresh: `<path d="M20.4 12a8.4 8.4 0 1 1-2.5-6"/><path d="M21 3.4v4.4h-4.4"/>`,
   cardFan: `<rect x="1.8" y="7" width="8.4" height="12.4" rx="2" transform="rotate(-18 6 13.2)"/>
             <rect x="7.8" y="4.6" width="8.4" height="13.6" rx="2"/>
-            <rect x="13.8" y="7" width="8.4" height="12.4" rx="2" transform="rotate(18 18 13.2)"/>`
+            <rect x="13.8" y="7" width="8.4" height="12.4" rx="2" transform="rotate(18 18 13.2)"/>`,
+  heartFill: `<path d="M12 20.6C6.8 16.8 3.2 13.5 3.2 9.7a4.8 4.8 0 0 1 8.8-2.7 4.8 4.8 0 0 1 8.8 2.7c0 3.8-3.6 7.1-8.8 10.9Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round"/>`,
+  snow: `<path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/>
+         <path d="M9.4 4.4 12 6.6l2.6-2.2M9.4 19.6 12 17.4l2.6 2.2M3.9 10.7l3.2.6.7-3.2M20.1 13.3l-3.2-.6-.7 3.2M3.9 13.3l3.2-.6.7 3.2M20.1 10.7l-3.2.6-.7-3.2"/>`
 };
 
 /** Restituisce l'SVG dell'icona. `cls` aggiunge classi (es. "big", "gold"). */
@@ -119,12 +122,12 @@ export function numberCard(n, { on = false, size = "" } = {}) {
 }
 
 /**
- * Carta del round: mostra il numero vero del round, colorato con la tinta della
- * carta corrispondente (dopo il 12 la tavolozza riparte).
+ * Numero del round: disegnato come i numeri sulle carte (tinta del numero
+ * corrispondente e contorno d'inchiostro), ma SENZA la carta attorno.
  */
 export function roundCard(n) {
   const tone = ((n - 1) % 12) + 1;
-  return `<span class="fcard round-card n${tone}" data-face="${n}"><b>${n}</b></span>`;
+  return `<span class="round-num n${tone}"><b>${n}</b></span>`;
 }
 
 /** Faccia di un modificatore (+2 … +10 oppure x2). */

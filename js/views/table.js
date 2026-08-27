@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { esc, initials, colorOf, toast, askText, askConfirm, askChoice } from "../ui.js";
-import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack } from "../icons.js";
+import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card } from "../icons.js";
 import * as engine from "../game.js";
 
 const OUT_LABEL = { stay: "si è fermato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
@@ -86,9 +86,10 @@ function miniCard(c, cls = "mini") {
   if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls });
   if (engine.CARD.isPlus(c)) return modCard(engine.CARD.plus(c), { on: true, size: cls });
   if (engine.CARD.isX2(c)) return modCard("x2", { on: true, size: cls });
-  if (c === "sc") return `<span class="fcard sc on ${cls}"><b>SC</b></span>`;
-  if (c === "frz") return `<span class="fcard frz on ${cls}"><b>FRZ</b></span>`;
-  return `<span class="fcard f3 on ${cls}"><b>F3</b></span>`;
+  // azioni a colpo d'occhio: cuore, fiocco di neve, tre carte
+  if (c === "sc") return `<span class="fcard sc on ${cls}"><i class="acard">${icon("heartFill")}</i></span>`;
+  if (c === "frz") return `<span class="fcard frz on ${cls}"><i class="acard">${icon("snow")}</i></span>`;
+  return `<span class="fcard f3 on ${cls}"><i class="acard">${icon("cardFan")}</i></span>`;
 }
 
 // --- intro / lobby -----------------------------------------------------------
@@ -205,13 +206,19 @@ function renderSeatRow(g, sid, ctx) {
   const isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
   const isFlip3 = g.flip3 && g.flip3.target === sid;
   const pts = h.out === "bust" ? 0 : engine.handPoints(h);
+  // l'ultima carta pescata si riconosce anche in mano (anello scuro)
+  const just = g.lastDraw && g.lastDraw.seat === sid ? g.lastDraw.card : null;
+  const cls = (card) => (card === just ? "mini just" : "mini");
   // due file: sopra azioni e modificatori, sotto tutti i numeri
   const specials = [
-    ...(h.x2 ? [miniCard("x2")] : []),
-    ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p)),
-    ...(h.sc ? [miniCard("sc")] : [])
+    ...(h.x2 ? [miniCard("x2", cls("x2"))] : []),
+    ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p, cls("p" + p))),
+    ...(h.sc ? [miniCard("sc", cls("sc"))] : [])
   ];
-  const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n));
+  // chi e' stato congelato mostra la carta Congela ricevuta
+  if (h.out === "frozen") specials.push(miniCard("frz"));
+  const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n)));
+  if (h.out === "flip7") nums.push(flip7Card({ size: "mini" }));
   // il doppione che ha sballato resta in vista, marcato in rosso
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
     nums.push(miniCard("n" + h.bustCard, "mini dup"));
