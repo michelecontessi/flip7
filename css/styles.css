@@ -670,7 +670,13 @@ table.rounds td.tot { font-weight: 800; }
 .act-row { display: flex; gap: 8px; }
 .act-row .btn { flex: 1; min-height: 52px; }
 .act-row .btn.primary { flex: 1.5; }
-.act-row .quick.bust3 { flex: 1; min-height: 52px; border-radius: var(--radius-sm); }
+.act-row .quick.bust3 {
+  flex: 1; min-height: 52px; border-radius: var(--radius-sm);
+  background: transparent; color: var(--red);
+  box-shadow: inset 0 0 0 1.5px var(--red);
+  font-weight: 700;
+}
+.act-row .quick.bust3.on { background: var(--red); color: #fff; box-shadow: none; }
 
 /* ---------- inserimento punti ---------- */
 .sheet-nav { display: flex; align-items: center; gap: 10px; }
