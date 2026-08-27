@@ -1032,7 +1032,13 @@ table.rounds td.tot { font-weight: 800; }
 }
 .seat:last-child { border-bottom: 0; }
 .seat.turn { background: var(--holo-soft); border-radius: 12px; padding-left: 10px; padding-right: 8px; margin: 0 -6px; border-bottom-color: transparent; }
+/* turno chiuso (fermo, congelato, sballato): la riga si spegne in grigio */
 .seat.out-bust { opacity: .55; }
+.seat.out-stay, .seat.out-frozen { opacity: .58; }
+.seat.out-stay .seat-cards .fcard,
+.seat.out-frozen .seat-cards .fcard,
+.seat.out-bust .seat-cards .fcard { filter: grayscale(.55); }
+.seat .seat-cards .fcard.dup { filter: none; } /* il doppione resta acceso */
 .seat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .seat-head { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .seat-state {

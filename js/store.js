@@ -546,8 +546,10 @@ export function cancelGame() {
 // ---------------------------------------------------------------------------
 // Tavolo online
 // ---------------------------------------------------------------------------
-/** Sovrascrive lo stato del tavolo (JSON pulito: Firebase rifiuta undefined). */
+/** Sovrascrive lo stato del tavolo (JSON pulito: Firebase rifiuta undefined).
+    Ogni mossa aggiorna updatedAt: serve a riconoscere i tavoli abbandonati. */
 export function commitGame(state) {
+  if (state !== null) state = { ...state, updatedAt: Date.now() };
   return commit({ game: state === null ? null : JSON.parse(JSON.stringify(state)) });
 }
 

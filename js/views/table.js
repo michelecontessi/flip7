@@ -6,7 +6,7 @@
 // su desktop due colonne, con banco e comandi a sinistra e i posti a destra.
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
-import { esc, initials, colorOf, toast, askText, askConfirm, askChoice } from "../ui.js";
+import { esc, initials, colorOf, toast, askText, askConfirm, askChoice, relTime } from "../ui.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card } from "../icons.js";
 import * as engine from "../game.js";
 
@@ -393,16 +393,33 @@ function renderOver(g, ctx) {
     </section>`;
 }
 
+/**
+ * Tavolo fermo da ore: chi entra lo vede subito e puo' liberarlo con un
+ * tocco, cosi' una partita lasciata a meta' non blocca le successive.
+ */
+const STALE_MS = 3 * 36e5; // 3 ore senza mosse
+function staleNotice(g) {
+  if (!g.updatedAt || Date.now() - g.updatedAt < STALE_MS) return "";
+  return `
+    <section class="card stale-card">
+      <p class="muted small">Ultima mossa <b>${relTime(g.updatedAt)}</b>: questo tavolo
+        sembra abbandonato. Puoi guardarlo, oppure chiuderlo per aprirne uno nuovo
+        (lo storico non si tocca).</p>
+      <button class="btn danger" data-action="tbl-close">Chiudi il tavolo abbandonato</button>
+    </section>`;
+}
+
 // --- export ------------------------------------------------------------------
 export const tableView = {
   render(ctx) {
     const g = game(ctx);
     if (!g) return renderIntro(ctx);
     if (g.status === "playing") scheduleAuto(ctx);
-    if (g.status === "lobby") return renderLobby(g, ctx);
-    if (g.status === "roundEnd") return renderRoundEnd(g, ctx);
-    if (g.status === "over") return renderOver(g, ctx);
-    return renderPlaying(g, ctx);
+    const stale = staleNotice(g);
+    if (g.status === "lobby") return stale + renderLobby(g, ctx);
+    if (g.status === "roundEnd") return stale + renderRoundEnd(g, ctx);
+    if (g.status === "over") return stale + renderOver(g, ctx);
+    return stale + renderPlaying(g, ctx);
   },
 
   actions: {
