@@ -989,6 +989,8 @@ table.rounds td.tot { font-weight: 800; }
   background: var(--surface-2);
 }
 .turn-strip.you { background: var(--holo-soft); }
+.turn-strip.end { background: rgba(28,122,86,.12); }
+.turn-strip.end .ts-txt b { color: var(--green); }
 .ts-txt { min-width: 0; }
 .ts-txt b { display: block; font-family: var(--font-display); font-size: 17px; font-weight: 600; line-height: 1.2; }
 .ts-txt small { display: block; font-size: 12.5px; color: var(--muted); }
@@ -1010,9 +1012,9 @@ table.rounds td.tot { font-weight: 800; }
 
 .center-links { justify-content: center; }
 
-.fcard.mini { width: 24px; flex: none; border-width: 1.5px; border-radius: 5px; }
-.fcard.mini b { font-size: 11px; }
-.fcard.mini small, .fcard.mini::before, .fcard.mini::after { display: none; }
+/* le carte in mano ai posti hanno la STESSA taglia della pescata nel banco:
+   niente versione ridotta, si vedono parola e ventagli come su una carta vera */
+.fcard.mini { width: 52px; flex: none; }
 .seats { display: flex; flex-direction: column; }
 .seat {
   display: flex; align-items: flex-start; gap: 10px;
@@ -1223,10 +1225,9 @@ table.rounds td.tot { font-weight: 800; }
   .t-side { grid-area: side; }
   .t-seats { grid-area: seats; }
   .t-controls { grid-area: controls; }
-  /* da pc le carte del tavolo si vedono grandi */
-  .bank .fcard { width: 92px; }
-  .seat-cards .fcard.mini { width: 46px; border-radius: 7px; }
-  .seat-cards .fcard.mini b { font-size: 17px; }
+  /* da pc le carte del tavolo si vedono grandi, mano e banco alla pari */
+  .bank .fcard { width: 84px; }
+  .fcard.mini { width: 84px; }
   .seat { padding: 14px 6px; gap: 12px; }
   .seat .avatar.sm { width: 36px; height: 36px; }
   .sd-hand .fcard { width: 42px; }

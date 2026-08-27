@@ -186,3 +186,19 @@ test("lo sballo registra quale doppione l'ha causato", () => {
   assert.equal(s.hands.s0.out, "bust");
   assert.equal(s.hands.s0.bustCard, 3);
 });
+
+test("Pesca Tre annidato: prima si completa la tripla, poi parte il secondo", () => {
+  // pescate (dalla fine): fl3 (Anna) -> Bruno pesca 2, un ALTRO fl3, 5
+  let s = table(["Anna", "Bruno"], ["n1", "n3", "n4", "n5", "fl3", "n2", "fl3"]);
+  s = hit(s, "s0");
+  s = chooseTarget(s, "s0", "s1");
+  s = hit(s, "s1");                       // 1a pescata: 2
+  s = hit(s, "s1");                       // 2a: un altro Pesca Tre -> accantonato
+  assert.equal(s.flip3.left, 1);          // la tripla continua comunque
+  s = hit(s, "s1");                       // 3a: 5 -> tripla completata
+  assert.ok(s.pending);                   // solo ORA si risolve il fl3 accantonato
+  assert.equal(s.pending.chooser, "s1");  // sceglie chi l'ha pescato
+  s = chooseTarget(s, "s1", "s0");
+  assert.equal(s.flip3.target, "s0");     // nuovo Pesca Tre, tripla piena
+  assert.equal(s.flip3.left, 3);
+});

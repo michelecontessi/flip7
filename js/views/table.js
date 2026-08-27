@@ -308,30 +308,47 @@ function renderPlaying(g, ctx) {
     </div>`;
 }
 
+/**
+ * Fine round SENZA schermata di riepilogo: si resta sul tavolo con le mani
+ * in vista (sballi compresi) e si riparte da li' col bottone verde.
+ */
 function renderRoundEnd(g, ctx) {
   const me = mySeat(g, ctx);
-  const rows = g.order.map((sid) => ({ sid, seat: g.seats[sid], pts: (g.lastRound || {})[sid] || 0 }))
-    .sort((a, b) => (b.seat.total || 0) - (a.seat.total || 0));
-  const lead = rows[0];
-  const left = lead ? Math.max(0, g.target - (lead.seat.total || 0)) : 0;
+  const f7 = g.order.find((sid) => g.hands[sid].out === "flip7");
+  const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust" ? g.lastDraw.seat : null;
+  const sub = f7 ? `FLIP 7 di ${shortName(g.seats[f7])}: +15 e round chiuso per tutti`
+    : buster ? `lo sballo di ${shortName(g.seats[buster])} chiude il giro: punti incassati`
+    : "tutti fermi, congelati o sballati: punti incassati";
+  const sorted = [...g.order].sort((a, b) => (g.seats[b].total || 0) - (g.seats[a].total || 0));
+  const lead = g.seats[sorted[0]];
+  const left = Math.max(0, g.target - (lead.total || 0));
   return `
-    <section class="card">
-      <div class="card-head">
-        <span class="round-head"><span class="round-word">Round</span>${roundCard(g.round)}</span>
-        <span class="round-meta ml-auto"><b class="done-note">round finito</b><span>si vince a ${g.target}</span></span>
-      </div>
-      <ul class="mini-list">
-        ${rows.map(({ seat, pts }) => `
-          <li><span class="mini-name"><span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>${esc(seat.name)}
-            <small class="${pts ? "done-note" : "muted"}">+${pts}</small></span><b>${seat.total || 0}</b></li>`).join("")}
-      </ul>
-      ${lead ? `<p class="hint">${esc(shortName(lead.seat))} è in testa: gli mancano ${left} punti al traguardo.</p>` : ""}
-      ${me ? `<button class="btn primary big" data-action="tbl-nextround">Via al round ${g.round + 1}</button>` : ""}
-      <div class="board-links center-links">
-        ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
-        <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
-      </div>
-    </section>`;
+    <div class="table-wrap">
+      <section class="card t-side">
+        <div class="turn-strip end">
+          <div class="ts-txt"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
+        </div>
+        ${bankRow(g)}
+        ${g.log.length ? `<div class="table-log">${g.log.slice(-3).map((l) => `<span>${esc(l)}</span>`).join("")}</div>` : ""}
+      </section>
+      <section class="card t-seats">
+        <div class="card-head">
+          <span class="round-head"><span class="round-word">Round</span>${roundCard(g.round)}</span>
+          <span class="round-meta ml-auto"><b class="done-note">round chiuso</b><span>si vince a ${g.target}</span></span>
+        </div>
+        <ul class="seats">
+          ${g.order.map((sid) => renderSeatRow(g, sid, ctx)).join("")}
+        </ul>
+      </section>
+      <section class="card t-controls">
+        ${me ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>` : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`}
+        <p class="hint">${esc(shortName(lead))} è in testa: ${left > 0 ? `gli mancano ${left} punti` : "ha raggiunto il traguardo"}.</p>
+        <div class="board-links center-links">
+          ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
+          <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
+        </div>
+      </section>
+    </div>`;
 }
 
 function renderOver(g, ctx) {
