@@ -14,6 +14,7 @@ export const setupView = {
   render(ctx) {
     const { room, status, me } = ctx;
     const players = Object.entries(room.players || {}).sort((a, b) => a[1].name.localeCompare(b[1].name, "it"));
+    const isOwner = status.mode !== "firebase" || Boolean(prefs.get("owner"));
     const visible = players.filter(([, p]) => localState.showArchived || !p.archived);
     const sk = room.control;
 
@@ -49,8 +50,9 @@ export const setupView = {
             <li class="${p.archived ? "arch" : ""}">
               <span class="avatar sm" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
               <span class="pname">${esc(p.name)}${p.archived ? '<span class="tag">archiviato</span>' : ""}</span>
+              ${isOwner ? `
               <button class="icon-btn" data-action="rename-player" data-id="${id}" aria-label="Rinomina">${icon("pencil")}</button>
-              <button class="icon-btn" data-action="archive-player" data-id="${id}" aria-label="${p.archived ? "Riattiva" : "Archivia"}">${icon(p.archived ? "restore" : "archive")}</button>
+              <button class="icon-btn" data-action="archive-player" data-id="${id}" aria-label="${p.archived ? "Riattiva" : "Archivia"}">${icon(p.archived ? "restore" : "archive")}</button>` : ""}
             </li>`).join("") || `<li class="muted">Nessun giocatore</li>`}
         </ul>
         <button class="btn ghost small" data-action="toggle-archived">${localState.showArchived ? "Nascondi archiviati" : "Mostra archiviati"}</button>
@@ -134,7 +136,7 @@ export const setupView = {
             <li>
               <span class="avatar sm" style="background:${colorOf(m.name)}">${initials(m.name)}</span>
               <span class="pname">${esc(m.name || "Membro")}${uid === status.uid ? '<span class="tag">tu</span>' : ""}
-                <small class="req-sub">${bound ? `gioca come ${esc(bound)}` : "nessun giocatore collegato"}</small></span>
+                <small class="req-sub">${m.email ? `<span class="mono">${esc(m.email)}</span> · ` : ""}${bound ? `gioca come ${esc(bound)}` : "nessun giocatore collegato"}</small></span>
               <button class="icon-btn" data-action="member-bind" data-id="${uid}" aria-label="Collega giocatore">${icon("pencil")}</button>
               ${uid === status.uid ? "" : `<button class="icon-btn danger" data-action="member-revoke" data-id="${uid}" aria-label="Revoca">${icon("close")}</button>`}
             </li>`;
@@ -166,11 +168,14 @@ export const setupView = {
       const id = el.dataset.id;
       const cur = (ctx.room.players[id] || {}).name || "";
       const name = await askText("Rinomina giocatore", { value: cur });
-      if (name && name !== cur) await store.renamePlayer(id, name);
+      if (!name || name === cur) return;
+      try { await store.renamePlayer(id, name); }
+      catch { toast("Solo il proprietario può modificare i giocatori", "warn"); }
     },
-    "archive-player"(ctx, el) {
+    async "archive-player"(ctx, el) {
       const id = el.dataset.id;
-      return store.setPlayerArchived(id, !(ctx.room.players[id] || {}).archived);
+      try { await store.setPlayerArchived(id, !(ctx.room.players[id] || {}).archived); }
+      catch { toast("Solo il proprietario può archiviare i giocatori", "warn"); }
     },
 
     async "sk-claim"(ctx) {

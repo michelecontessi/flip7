@@ -218,7 +218,9 @@ function renderBoard(room, live, standings, me, { editable }) {
         </span>
         <span class="round-meta">${finished
           ? "partita chiusa"
-          : `${ids.length - missing.length} di ${ids.length} segnati<br>si vince a ${target}`}</span>
+          : missing.length
+            ? `${ids.length - missing.length} di ${ids.length} segnati<br>si vince a ${target}`
+            : `<b class="done-note">round completo ✓</b><br>si vince a ${target}`}</span>
         ${!editable && !finished ? `<span class="live-pill"><i></i>LIVE</span>` : ""}
         <button class="ghost-btn ml-auto" data-action="share-room">${icon("link", "tiny")} Invita</button>
       </div>
@@ -259,7 +261,9 @@ function renderBoard(room, live, standings, me, { editable }) {
         <div class="board-cta">
           ${missing.length
             ? `<button class="btn primary big" data-action="score-next">Segna i punti · ${ids.length - missing.length}/${ids.length}</button>`
-            : `<button class="btn primary big" data-action="round-close">Chiudi round ${r + 1} e vai avanti</button>`}
+            : `
+            <div class="round-done">${icon("check", "tiny")} Tutti i punteggi del round ${r + 1} sono segnati</div>
+            <button class="btn go big pulse" data-action="round-close">Chiudi round ${r + 1} — via al round ${r + 2} →</button>`}
         </div>
         <div class="board-links">
           ${r > 0 ? `<button class="ghost-btn" data-action="round-back">${icon("arrowLeft", "tiny")} Round ${r}</button>` : "<span></span>"}
@@ -406,6 +410,7 @@ export function renderScoreSheet(s) {
         ${roundCard(s.roundIndex + 1)}
       </div>
       <button class="nav-btn" data-action="calc-next-player" ${s.pos >= s.order.length - 1 ? "disabled" : ""}>${icon("arrowLeft", "flip")}</button>
+      <button class="nav-btn nav-close" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
     </div>
 
     <div class="score-display ${e.busted ? "bust" : r.flip7 ? "flip7" : ""}">
@@ -444,14 +449,20 @@ export function renderScoreSheet(s) {
     `}
 
     <div class="sheet-actions col">
+      ${isKeypad ? `
       <div class="quick-row">
-        ${isKeypad ? `<button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>` : ""}
+        <button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>
         <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
       </div>
       <div class="act-row">
         <button class="btn" data-action="calc-clear">Azzera</button>
         <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
-      </div>
+      </div>` : `
+      <div class="act-row">
+        <button class="quick bust3 ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballo</button>
+        <button class="btn" data-action="calc-clear">Azzera</button>
+        <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
+      </div>`}
     </div>`;
 }
 
@@ -495,7 +506,7 @@ function nextLabel(s) {
   const live = store.getRoom().live;
   if (!live) return "Salva";
   const others = missingIds(live).filter((id) => id !== s.playerId);
-  return others.length ? "Salva e avanti ›" : "Salva e chiudi";
+  return others.length ? "Salva ›" : "Salva ✓";
 }
 
 async function persistEntry(s) {

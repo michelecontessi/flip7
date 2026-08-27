@@ -21,7 +21,9 @@
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
         },
         "players": {
-          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+          "$pid": {
+            ".write": "auth != null && (auth.uid === 'OWNER_UID' || (!data.exists() && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()))"
+          }
         },
         "history": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
