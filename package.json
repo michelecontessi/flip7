@@ -1,0 +1,11 @@
+{
+  "name": "flip7-scoreboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Segnapunti live per Flip 7 con classifica perpetua (Crown) e storico partite.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "start": "node server.mjs"
+  }
+}

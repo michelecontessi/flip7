@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null",
+
+        "meta":    { ".write": "auth != null" },
+        "players": { ".write": "auth != null" },
+        "history": { ".write": "auth != null" },
+        "control": { ".write": "auth != null" },
+
+        "live": {
+          ".write": "auth != null && (!root.child('rooms/' + $roomId + '/control/uid').exists() || root.child('rooms/' + $roomId + '/control/uid').val() === auth.uid)"
+        }
+      }
+    }
+  }
+}

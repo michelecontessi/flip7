@@ -1,0 +1,16 @@
+{
+  "name": "Flip 7 — Segnapunti",
+  "short_name": "Flip 7",
+  "description": "Segnapunti live per Flip 7 con classifica perpetua e storico partite.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f4ef",
+  "theme_color": "#f7f4ef",
+  "lang": "it",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

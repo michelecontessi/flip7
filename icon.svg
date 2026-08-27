@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="44" fill="#f7f4ef"/>
+  <!-- ventaglio di carte -->
+  <g stroke="#ffffff" stroke-width="6">
+    <rect x="24" y="58" width="62" height="88" rx="11" fill="#38bdf8" transform="rotate(-17 55 102)"/>
+    <rect x="106" y="58" width="62" height="88" rx="11" fill="#4ade80" transform="rotate(17 137 102)"/>
+    <rect x="63" y="44" width="66" height="96" rx="12" fill="#efb63c"/>
+  </g>
+  <text x="96" y="117" text-anchor="middle"
+        font-family="Fredoka, ui-rounded, 'SF Pro Rounded', system-ui, sans-serif"
+        font-size="66" font-weight="600" fill="#2a1c02">7</text>
+</svg>
