@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fullDeck, createLobby, startGame, hit, stay, chooseTarget, nextRound, handPoints, normalizeGame } from "../js/game.js";
+import { fullDeck, createLobby, startGame, hit, stay, chooseTarget, nextRound, handPoints, normalizeGame, leaveSeat } from "../js/game.js";
 
 // tavolo di prova: 2-3 giocatori con un mazzo costruito a mano.
 // ATTENZIONE: si pesca dalla FINE dell'array (deck.pop()).
@@ -151,4 +151,30 @@ test("normalizeGame ripara gli array che Firebase omette", () => {
   assert.deepEqual(g.hands.a.nums, []);
   assert.deepEqual(g.deck, []);
   assert.equal(g.pending, null);
+});
+
+test("abbandono: carte negli scarti e turno al successivo nell'ordine", () => {
+  let s = table(["Ada", "Bea", "Caio"], ["n5", "n3"]);
+  s = hit(s, "s0");                   // Ada pesca il 3, tocca a Bea
+  s = leaveSeat(s, "s1");             // Bea abbandona mentre e' di turno
+  assert.equal(s.order.length, 2);
+  assert.ok(!s.seats.s1);
+  assert.equal(s.turn, "s2");         // passa a Caio, non torna ad Ada
+  assert.ok(s.discard.length >= 0);
+});
+
+test("abbandono: se resta uno solo la partita finisce subito", () => {
+  let s = table(["Ada", "Bea"], ["n5", "n3"]);
+  s = leaveSeat(s, "s0");
+  assert.equal(s.status, "over");
+  assert.deepEqual(s.order, ["s1"]);
+});
+
+test("abbandono del bersaglio di una scelta: l'opzione sparisce", () => {
+  // mazzo: Ada pesca subito un Congela con 3 giocatori attivi -> pending
+  let s = table(["Ada", "Bea", "Caio"], ["n2", "n4", "frz"]);
+  s = hit(s, "s0");
+  assert.ok(s.pending);
+  s = leaveSeat(s, "s2");             // Caio (fra le opzioni) abbandona
+  assert.ok(!s.pending.options.includes("s2"));
 });

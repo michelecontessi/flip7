@@ -729,7 +729,8 @@ table.rounds td.tot { font-weight: 800; }
 .sd-note { font-size: 13px; color: var(--muted); height: 18px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sd-running { font-size: 13px; color: var(--muted); }
 .sd-running b { font-family: var(--font-display); font-size: 15px; color: var(--green); }
-.sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 4px; height: 52px; align-items: center; max-width: 100%; overflow-x: auto; padding: 0 2px; }
+/* niente altezza fissa: le carte su desktop sono piu' alte e verrebbero tagliate */
+.sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 4px; min-height: 52px; align-items: center; max-width: 100%; overflow-x: auto; padding: 2px; }
 .hand-void { display: inline-flex; gap: 6px; filter: grayscale(1) opacity(.4); }
 .void-flag {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-5deg);
@@ -910,6 +911,7 @@ table.rounds td.tot { font-weight: 800; }
 }
 .pg.on .pg-name { color: var(--text); font-weight: 700; }
 .pg.add .avatar.ghost { display: grid; place-items: center; }
+.bot-note { display: block; font-size: 9.5px; font-weight: 500; color: var(--dim); }
 .pg:active .pg-ava { transform: scale(.93); }
 
 /* ---------- richieste di accesso ---------- */
@@ -1047,9 +1049,10 @@ table.rounds td.tot { font-weight: 800; }
 .ld-txt { font-size: 14px; color: var(--muted); }
 .ld-txt b { color: var(--text); }
 
+/* pesca / mi fermo: due bottoni pari, verde per rischiare e oro per incassare */
 .table-actions { display: flex; gap: 9px; }
-.table-actions .btn.primary { flex: 1.4; }
 .table-actions .btn { flex: 1; }
+.btn.stop { background: var(--gold); color: #241a03; }
 .table-foot { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
 .table-choose { display: flex; flex-direction: column; gap: 9px; }
 .choose-label { font-weight: 700; font-size: 15px; text-align: center; }

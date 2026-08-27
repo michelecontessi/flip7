@@ -135,6 +135,61 @@ export function nextRound(state) {
   return s;
 }
 
+/**
+ * Un giocatore abbandona il tavolo a partita in corso: le sue carte vanno
+ * negli scarti e il gioco prosegue senza di lui. Se resta una sola persona,
+ * la partita finisce subito.
+ */
+export function leaveSeat(state, sid) {
+  if (!state.order.includes(sid)) return state;
+  const s = structuredClone(state);
+  logIt(s, `${s.seats[sid].name} ha abbandonato il tavolo`);
+
+  const h = s.hands[sid];
+  if (h) {
+    s.discard = [...s.discard, ...h.nums.map((n) => "n" + n), ...h.plus.map((p) => "p" + p)];
+    if (h.x2) s.discard.push("x2");
+    if (h.sc) s.discard.push("sc");
+  }
+  const wasTurn = s.turn === sid;
+  const idx = s.order.indexOf(sid); // dopo la rimozione punta al posto successivo
+  delete s.seats[sid];
+  delete s.hands[sid];
+  s.order = s.order.filter((x) => x !== sid);
+  if (s.lastDraw && s.lastDraw.seat === sid) s.lastDraw = null;
+
+  if (s.order.length < 2 && s.status !== "lobby") {
+    s.status = "over";
+    s.pending = null;
+    s.flip3 = null;
+    return s;
+  }
+
+  if (s.flip3 && s.flip3.target === sid) {
+    s.discard = [...s.discard, ...(s.flip3.deferred || [])];
+    s.flip3 = null;
+  }
+  if (s.pending) {
+    if (s.pending.chooser === sid) s.pending = null;
+    else {
+      s.pending.options = s.pending.options.filter((x) => x !== sid);
+      if (!s.pending.options.length) s.pending = null;
+    }
+  }
+
+  if (s.status === "playing") {
+    const act = activeSeats(s);
+    if (!act.length) return endRound(s);
+    if ((wasTurn && !s.pending && !s.flip3) || !s.order.includes(s.turn)) {
+      for (let i = 0; i < s.order.length; i++) {
+        const cand = s.order[(idx + i) % s.order.length];
+        if (!s.hands[cand].out) { s.turn = cand; break; }
+      }
+    }
+  }
+  return s;
+}
+
 function advanceTurn(s) {
   const act = activeSeats(s);
   if (!act.length) return endRound(s);

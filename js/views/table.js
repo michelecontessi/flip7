@@ -12,10 +12,13 @@ import * as engine from "../game.js";
 
 const OUT_LABEL = { stay: "si è fermato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
 const ACTION_NAME = { frz: "Congela", fl3: "Pesca Tre", sc: "Seconda Chance" };
+const BOT_NAMES = ["Bot Ada", "Bot Bruno", "Bot Carla", "Bot Dina"];
+let botTimer = null;
 
 const game = (ctx) => engine.normalizeGame(ctx.room.game);
 const mySeat = (g, ctx) => g && g.order.find((sid) => g.seats[sid] && g.seats[sid].uid === ctx.status.uid);
-const firstName = (name) => String(name || "").split(" ")[0];
+/** Primo nome per gli umani; i bot tengono il nome intero ("Bot" da solo e' ambiguo). */
+const shortName = (seat) => seat.bot ? seat.name : String(seat.name || "").split(" ")[0];
 
 /** Chi deve agire adesso (turno, bersaglio del Pesca Tre o chi sta scegliendo). */
 const actorOf = (g) => g.pending ? g.pending.chooser : g.flip3 ? g.flip3.target : g.turn;
@@ -23,6 +26,47 @@ const actorOf = (g) => g.pending ? g.pending.chooser : g.flip3 ? g.flip3.target 
 /** true se il posto indicato e' controllato da questo dispositivo
     (in locale tutti i posti sono tuoi: si gioca passandosi il telefono). */
 const controls = (g, ctx, sid) => Boolean(g.seats[sid] && g.seats[sid].uid === ctx.status.uid);
+
+// --- bot di prova ------------------------------------------------------------
+/** Strategia elementare: rischia finche' il bottino del round e' magro. */
+function botMove(g, sid) {
+  if (g.pending && g.pending.chooser === sid) {
+    const others = g.pending.options.filter((x) => x !== sid);
+    const pool = others.length ? others : g.pending.options;
+    // Congela e Pesca Tre vanno al piu' ricco; la Seconda Chance al primo
+    const target = g.pending.type === "sc" ? pool[0]
+      : pool.slice().sort((a, b) =>
+          ((g.seats[b].total || 0) + engine.handPoints(g.hands[b])) -
+          ((g.seats[a].total || 0) + engine.handPoints(g.hands[a])))[0];
+    return engine.chooseTarget(g, sid, target);
+  }
+  if (g.flip3 && g.flip3.target === sid) return engine.hit(g, sid);
+  if (g.turn === sid && !g.hands[sid].out) {
+    const h = g.hands[sid];
+    if (engine.handPoints(h) >= 21 || h.nums.length >= 5) return engine.stay(g, sid);
+    return engine.hit(g, sid);
+  }
+  return g;
+}
+
+/** I bot li muove (con una piccola pausa) il dispositivo che li ha aggiunti. */
+function scheduleBots(ctx) {
+  const g = game(ctx);
+  if (!g || g.status !== "playing" || botTimer) return;
+  const actor = actorOf(g);
+  const seat = actor && g.seats[actor];
+  if (!seat || !seat.bot || seat.uid !== ctx.status.uid) return;
+  botTimer = setTimeout(() => {
+    botTimer = null;
+    const g2 = engine.normalizeGame(store.getRoom().game);
+    if (!g2 || g2.status !== "playing") return;
+    const a2 = actorOf(g2);
+    const s2 = a2 && g2.seats[a2];
+    if (!s2 || !s2.bot || s2.uid !== store.getStatus().uid) return;
+    const next = botMove(g2, a2);
+    if (next !== g2) store.commitGame(next).catch(() => {});
+  }, 900);
+}
 
 function miniCard(c, cls = "mini") {
   if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls });
@@ -58,14 +102,15 @@ function renderLobby(g, ctx) {
       <div class="pgrid">
         ${g.order.map((sid) => {
           const seat = g.seats[sid];
-          return `
-            <span class="pg on">
+          const tile = `
               <span class="pg-ava" style="--pc:${colorOf(seat.name)}">
                 <span class="avatar lg" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
-                <i class="pg-check">${icon("check", "tiny")}</i>
+                <i class="pg-check">${icon(seat.bot ? "close" : "check", "tiny")}</i>
               </span>
-              <span class="pg-name">${esc(seat.name)}</span>
-            </span>`;
+              <span class="pg-name">${esc(seat.name)}${seat.bot ? '<small class="bot-note">tocca per togliere</small>' : ""}</span>`;
+          return seat.bot
+            ? `<button class="pg on" data-action="tbl-unbot" data-id="${sid}">${tile}</button>`
+            : `<span class="pg on">${tile}</span>`;
         }).join("")}
         ${!seated || ctx.status.mode !== "firebase" ? `
           <button class="pg add" data-action="tbl-sit">
@@ -77,6 +122,7 @@ function renderLobby(g, ctx) {
         <button class="btn primary big" data-action="tbl-start" ${g.order.length < 2 ? "disabled" : ""}>
           ${g.order.length < 2 ? "Aspetta almeno un altro giocatore" : "Dai le carte"}
         </button>
+        <button class="btn ghost small" data-action="tbl-bot">${icon("plus", "tiny")} Aggiungi un bot di prova</button>
         <div class="board-links">
           <button class="ghost-btn" data-action="tbl-stand">${icon("close", "tiny")} Mi alzo</button>
           <button class="ghost-btn danger" data-action="tbl-close">Chiudi il tavolo</button>
@@ -90,20 +136,21 @@ function renderLobby(g, ctx) {
 function turnStrip(g, ctx) {
   const actor = actorOf(g);
   const seat = g.seats[actor];
-  const mine = controls(g, ctx, actor);
+  const mine = controls(g, ctx, actor) && !seat.bot;
   let title, sub;
   if (g.pending) {
     const what = ACTION_NAME[g.pending.type];
-    title = mine ? `Scegli tu: ${what}` : `Sceglie ${firstName(seat.name)}`;
+    title = mine ? `Scegli tu: ${what}` : `Sceglie ${shortName(seat)}`;
     sub = mine ? "decidi il bersaglio qui sotto" : `sta scegliendo il bersaglio di ${what}`;
   } else if (g.flip3) {
     const n = g.flip3.left;
-    title = mine ? "Pesca Tre: tocca a te" : `Pesca Tre: ${firstName(seat.name)}`;
+    title = mine ? "Pesca Tre: tocca a te" : `Pesca Tre: ${shortName(seat)}`;
     sub = `${mine ? "devi" : "deve"} pescare ancora ${n} ${n === 1 ? "carta" : "carte"}`;
   } else {
-    title = mine ? "Tocca a te" : `Tocca a ${firstName(seat.name)}`;
+    title = mine ? "Tocca a te" : `Tocca a ${shortName(seat)}`;
     sub = mine ? "pesca una carta oppure fermati e incassa" : "sta decidendo se pescare o fermarsi";
   }
+  if (seat.bot) sub = "il bot gioca da solo, un attimo";
   return `
     <div class="turn-strip ${mine ? "you holo" : ""}">
       ${mine ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
@@ -124,7 +171,7 @@ function bankRow(g) {
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">
         ${last ? miniCard(last.card, "drawn") : `<span class="fcard slot"></span>`}
-        <small>${last ? `${esc(firstName(g.seats[last.seat].name))} ha pescato <b>${engine.cardLabel(last.card)}</b>` : "qui compare l'ultima carta pescata"}</small>
+        <small>${last ? `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>` : "qui compare l'ultima carta pescata"}</small>
       </div>
     </div>`;
 }
@@ -143,7 +190,7 @@ function renderSeatRow(g, sid, ctx) {
   ];
   const state = h.out ? `<i class="seat-state s-${h.out}">${OUT_LABEL[h.out]}</i>`
     : isFlip3 ? `<i class="seat-state s-flip3">pesca ancora ${g.flip3.left}</i>`
-    : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>` : "";
+    : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>` : "";
   return `
     <li class="seat ${isTurn || isFlip3 ? "turn" : ""} ${h.out ? "out-" + h.out : ""}">
       <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
@@ -160,7 +207,7 @@ function renderSeatRow(g, sid, ctx) {
 
 function renderControls(g, ctx, me) {
   const actor = actorOf(g);
-  const iAct = controls(g, ctx, actor);
+  const iAct = controls(g, ctx, actor) && !g.seats[actor].bot;
 
   if (g.pending) {
     const p = g.pending;
@@ -180,7 +227,7 @@ function renderControls(g, ctx, me) {
 
   if (g.flip3) {
     if (iAct && !g.hands[actor].out) {
-      return `<button class="btn primary big" data-action="tbl-hit">Pesca — ancora ${g.flip3.left}</button>`;
+      return `<button class="btn go big" data-action="tbl-hit">Pesca · ancora ${g.flip3.left}</button>`;
     }
     return `<p class="hint">${esc(g.seats[g.flip3.target].name)} deve pescare ancora ${g.flip3.left}…</p>`;
   }
@@ -188,8 +235,8 @@ function renderControls(g, ctx, me) {
   if (iAct && !g.hands[actor].out) {
     return `
       <div class="table-actions">
-        <button class="btn primary big" data-action="tbl-hit">Pesca</button>
-        <button class="btn big" data-action="tbl-stay">Mi fermo · ${engine.handPoints(g.hands[actor])} punti</button>
+        <button class="btn go big" data-action="tbl-hit">Pesca</button>
+        <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${engine.handPoints(g.hands[actor])}</button>
       </div>`;
   }
   if (me && g.hands[me] && g.hands[me].out) return `<p class="hint">Sei ${OUT_LABEL[g.hands[me].out] || "fuori"}: aspetta la fine del round.</p>`;
@@ -218,6 +265,7 @@ function renderPlaying(g, ctx) {
       <section class="card t-controls">
         ${renderControls(g, ctx, me)}
         <div class="board-links center-links">
+          ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
           <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
         </div>
       </section>
@@ -241,9 +289,10 @@ function renderRoundEnd(g, ctx) {
           <li><span class="mini-name"><span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>${esc(seat.name)}
             <small class="${pts ? "done-note" : "muted"}">+${pts}</small></span><b>${seat.total || 0}</b></li>`).join("")}
       </ul>
-      ${lead ? `<p class="hint">${esc(firstName(lead.seat.name))} è in testa: gli mancano ${left} punti al traguardo.</p>` : ""}
+      ${lead ? `<p class="hint">${esc(shortName(lead.seat))} è in testa: gli mancano ${left} punti al traguardo.</p>` : ""}
       ${me ? `<button class="btn primary big" data-action="tbl-nextround">Via al round ${g.round + 1}</button>` : ""}
       <div class="board-links center-links">
+        ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
         <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
       </div>
     </section>`;
@@ -278,6 +327,7 @@ export const tableView = {
   render(ctx) {
     const g = game(ctx);
     if (!g) return renderIntro(ctx);
+    if (g.status === "playing") scheduleBots(ctx);
     if (g.status === "lobby") return renderLobby(g, ctx);
     if (g.status === "roundEnd") return renderRoundEnd(g, ctx);
     if (g.status === "over") return renderOver(g, ctx);
@@ -319,6 +369,46 @@ export const tableView = {
       s2.seats[sid] = { uid: ctx.status.uid, name, playerId, total: 0 };
       if (!s2.order.includes(sid)) s2.order = [...s2.order, sid];
       return store.commitGame(s2);
+    },
+    "tbl-bot"(ctx) {
+      const g = game(ctx);
+      if (!g || g.status !== "lobby") return;
+      const used = new Set(g.order.map((sid) => g.seats[sid].name));
+      const name = BOT_NAMES.find((n) => !used.has(n));
+      if (!name) return toast(`Massimo ${BOT_NAMES.length} bot`, "warn");
+      const sid = "b" + store.newId();
+      const s2 = structuredClone(g);
+      s2.seats[sid] = { uid: ctx.status.uid, name, playerId: null, bot: true, total: 0 };
+      s2.order = [...s2.order, sid];
+      return store.commitGame(s2);
+    },
+    "tbl-unbot"(ctx, el) {
+      const g = game(ctx);
+      const sid = el.dataset.id;
+      if (!g || g.status !== "lobby" || !g.seats[sid] || !g.seats[sid].bot) return;
+      const s2 = structuredClone(g);
+      delete s2.seats[sid];
+      s2.order = s2.order.filter((x) => x !== sid);
+      return store.commitGame(s2);
+    },
+    async "tbl-leave"(ctx) {
+      const g = game(ctx);
+      const me = mySeat(g, ctx);
+      if (!g || !me || g.status === "lobby") return;
+      const ok = await askConfirm("Abbandonare la partita?", {
+        message: g.order.length <= 2
+          ? "Resterebbe una persona sola: la partita finirebbe subito."
+          : "Le tue carte vanno negli scarti e il tavolo continua senza di te.",
+        confirmLabel: "Abbandona", danger: true
+      });
+      if (!ok) return;
+      const next = engine.leaveSeat(g, me);
+      // se restano solo bot il tavolo non ha piu' senso: si chiude
+      if (next.order.every((sid) => next.seats[sid].bot)) {
+        toast("Restavano solo bot: tavolo chiuso");
+        return store.commitGame(null);
+      }
+      return store.commitGame(next);
     },
     "tbl-stand"(ctx) {
       const g = game(ctx);
