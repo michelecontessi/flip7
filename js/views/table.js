@@ -88,7 +88,7 @@ function scheduleAuto(ctx) {
     if (next !== g2) store.commitGame(next).catch(() => {});
     // mossa a vuoto (stato incoerente?): meglio ritentare che restare fermi
     else setTimeout(() => scheduleAuto({ room: store.getRoom(), status: store.getStatus(), me: null }), 2500);
-  }, 900);
+  }, 2600); // il ritmo asseconda l'animazione della pescata (~2,2s)
 }
 
 function miniCard(c, cls = "mini") {
@@ -99,6 +99,65 @@ function miniCard(c, cls = "mini") {
   if (c === "sc") return `<span class="fcard sc on ${cls}"><i class="acard">${icon("heartFill")}</i></span>`;
   if (c === "frz") return `<span class="fcard frz on ${cls}"><i class="acard">${icon("snow")}</i></span>`;
   return `<span class="fcard f3 on ${cls}"><i class="acard">${icon("cardFan")}</i></span>`;
+}
+
+// --- animazione della pescata ------------------------------------------------
+// La carta si gira accanto al mazzo (dorso -> faccia) e poi vola nella mano
+// di chi l'ha presa (~2,2s in tutto). E' un elemento temporaneo sopra la
+// pagina, cosi' sopravvive ai ridisegni del tavolo.
+let lastAnimKey = null;
+
+function scheduleDrawAnim(g) {
+  const key = g.lastDraw ? `${g.lastDraw.seat}:${g.lastDraw.card}:${g.deck.length}` : "nessuna";
+  // il primo render fotografa lo stato e basta: mai rigiocare una pescata vecchia
+  if (lastAnimKey === null) { lastAnimKey = key; return; }
+  if (key === lastAnimKey || !g.lastDraw) return;
+  lastAnimKey = key;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const card = g.lastDraw.card;
+  requestAnimationFrame(() => runDrawAnim(card));
+}
+
+function runDrawAnim(card) {
+  const slot = document.querySelector("[data-flip-slot]");
+  if (!slot) return;
+  const a = slot.getBoundingClientRect();
+  if (!a.width) return;
+  const dest = document.querySelector(".t-seats .fcard.just") || document.querySelector(".t-seats .fcard.dup");
+  const b = dest ? dest.getBoundingClientRect() : null;
+  if (dest) dest.style.visibility = "hidden";
+
+  const fly = document.createElement("div");
+  fly.className = "fly-card";
+  fly.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;perspective:700px;`;
+  fly.innerHTML = `
+    <div class="fly-inner" style="position:relative;width:100%;height:100%;transform-style:preserve-3d;">
+      <div style="position:absolute;inset:0;backface-visibility:hidden;">${miniCard(card, "drawn")}</div>
+      <div style="position:absolute;inset:0;backface-visibility:hidden;transform:rotateY(180deg);">${cardBack()}</div>
+    </div>`;
+  document.body.appendChild(fly);
+
+  const inner = fly.firstElementChild;
+  inner.animate([{ transform: "rotateY(180deg)" }, { transform: "rotateY(0deg)" }],
+    { duration: 900, easing: "ease-out", fill: "forwards" });
+
+  const finish = () => {
+    fly.remove();
+    const d = document.querySelector(".t-seats .fcard.just") || document.querySelector(".t-seats .fcard.dup");
+    if (d) d.style.visibility = "";
+  };
+  if (b) {
+    fly.animate([
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})`, opacity: 1 }
+    ], { duration: 1100, delay: 1050, easing: "cubic-bezier(.35,.7,.3,1)", fill: "forwards" }).onfinish = finish;
+  } else {
+    // nessuna destinazione (es. azione risolta al volo): la carta svanisce li'
+    fly.animate([{ opacity: 1 }, { opacity: 0 }],
+      { duration: 500, delay: 1300, fill: "forwards" }).onfinish = finish;
+  }
+  // rete di sicurezza: mai lasciare in giro carte volanti o mani nascoste
+  setTimeout(finish, 2800);
 }
 
 // --- intro / lobby -----------------------------------------------------------
@@ -201,12 +260,12 @@ function bankRow(g) {
       </div>
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">
-        ${last ? miniCard(last.card, "drawn" + (bustNow ? " bust-draw" : "")) : `<span class="fcard slot"></span>`}
+        <span class="fcard slot" data-flip-slot></span>
         <small class="${bustNow ? "bust-note" : ""}">${last
           ? bustNow
             ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: SBALLATO`
             : `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>`
-          : "qui compare l'ultima carta pescata"}</small>
+          : "qui si gira la carta pescata"}</small>
       </div>
     </div>`;
 }
@@ -313,7 +372,6 @@ function renderPlaying(g, ctx) {
   return `
     <div class="table-wrap">
       <section class="card t-side">
-        ${bankRow(g)}
         ${raceBoard(g, me)}
       </section>
       <section class="card t-seats">
@@ -322,6 +380,7 @@ function renderPlaying(g, ctx) {
           <span class="round-meta ml-auto"><b>${g.order.length} giocatori</b><span>si vince a ${g.target}</span></span>
         </div>
         <div class="seat-controls">${renderControls(g, ctx, me)}</div>
+        ${bankRow(g)}
         <ul class="seats">
           ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
         </ul>
@@ -350,7 +409,6 @@ function renderRoundEnd(g, ctx) {
         <div class="turn-strip end">
           <div class="ts-txt"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
         </div>
-        ${bankRow(g)}
         ${raceBoard(g, me)}
       </section>
       <section class="card t-seats">
@@ -362,6 +420,7 @@ function renderRoundEnd(g, ctx) {
           ${me ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>` : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`}
           <p class="hint">Basta che uno lo prema: il round parte per tutti in diretta.</p>
         </div>
+        ${bankRow(g)}
         <ul class="seats">
           ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
         </ul>
@@ -419,6 +478,7 @@ export const tableView = {
     const g = game(ctx);
     if (!g) return renderIntro(ctx);
     if (g.status === "playing") scheduleAuto(ctx);
+    if (g.status === "playing" || g.status === "roundEnd") scheduleDrawAnim(g);
     const stale = staleNotice(g);
     if (g.status === "lobby") return stale + renderLobby(g, ctx);
     if (g.status === "roundEnd") return stale + renderRoundEnd(g, ctx);

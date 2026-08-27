@@ -1019,6 +1019,8 @@ table.rounds td.tot { font-weight: 800; }
 .bank-arrow { color: var(--dim); display: flex; }
 .fcard.slot { background: transparent; border: 1.5px dashed var(--line-strong); box-shadow: none; }
 .fcard.slot::before, .fcard.slot::after { display: none; }
+/* la carta volante riempie esattamente il suo contenitore */
+.fly-card .fcard { width: 100%; height: 100%; aspect-ratio: auto; }
 
 .center-links { justify-content: center; }
 
