@@ -59,13 +59,20 @@ function renderIdle(room, me) {
     ${whoAmIBanner(room, me)}
     <section class="card">
       <h2 class="section-title">Nuova partita</h2>
-      <p class="muted small">Chi gioca?</p>
-      <div class="chips">
+      <p class="muted small">Tocca chi gioca stasera.</p>
+      <div class="pgrid">
         ${list.map(([id, p]) => `
-          <button class="chip player ${localState.selected.has(id) ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">
-            <span class="avatar xs" style="background:${colorOf(p.name)}">${initials(p.name)}</span>${esc(p.name)}
+          <button class="pg ${localState.selected.has(id) ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">
+            <span class="pg-ava" style="--pc:${colorOf(p.name)}">
+              <span class="avatar lg" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
+              <i class="pg-check">${icon("check", "tiny")}</i>
+            </span>
+            <span class="pg-name">${esc(p.name)}</span>
           </button>`).join("")}
-        <button class="chip add" data-action="quick-add-player">${icon("plus", "tiny")} giocatore</button>
+        <button class="pg add" data-action="quick-add-player">
+          <span class="pg-ava"><span class="avatar lg ghost">${icon("plus")}</span></span>
+          <span class="pg-name muted">aggiungi</span>
+        </button>
       </div>
 
       <label class="field inline">
@@ -127,9 +134,14 @@ function whoAmIBanner(room, me) {
     <section class="card">
       <h2 class="section-title">Chi sei?</h2>
       <p class="muted small">Scegli il tuo nome: vedrai il tuo punteggio in grande.</p>
-      <div class="chips">
-        ${list.map(([id, p]) => `<button class="chip" data-action="set-me" data-id="${id}">
-          <span class="avatar xs" style="background:${colorOf(p.name)}">${initials(p.name)}</span>${esc(p.name)}</button>`).join("")}
+      <div class="pgrid">
+        ${list.map(([id, p]) => `
+          <button class="pg" data-action="set-me" data-id="${id}">
+            <span class="pg-ava" style="--pc:${colorOf(p.name)}">
+              <span class="avatar lg" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
+            </span>
+            <span class="pg-name">${esc(p.name)}</span>
+          </button>`).join("")}
       </div>
     </section>`;
 }

@@ -24,13 +24,17 @@ export const setupView = {
     return `
       <section class="card">
         <div class="card-head">${icon("user")}<span class="card-title">Io sono</span></div>
-        <div class="chips">
+        <div class="pgrid">
           ${players.filter(([, p]) => !p.archived).map(([id, p]) => `
-            <button class="chip ${me === id ? "on" : ""}" data-action="set-me" data-id="${id}">
-              <span class="avatar xs" style="background:${colorOf(p.name)}">${initials(p.name)}</span>${esc(p.name)}
+            <button class="pg ${me === id ? "on" : ""}" data-action="set-me" data-id="${id}">
+              <span class="pg-ava" style="--pc:${colorOf(p.name)}">
+                <span class="avatar lg" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
+                <i class="pg-check">${icon("check", "tiny")}</i>
+              </span>
+              <span class="pg-name">${esc(p.name)}</span>
             </button>`).join("") || `<span class="muted small">Aggiungi prima un giocatore</span>`}
-          ${me ? `<button class="chip" data-action="clear-me">${icon("close", "tiny")} nessuno</button>` : ""}
         </div>
+        ${me ? `<button class="ghost-btn" data-action="clear-me">${icon("close", "tiny")} non sono nessuno di questi</button>` : ""}
       </section>
 
       <section class="card">
@@ -65,8 +69,13 @@ export const setupView = {
 
       <section class="card">
         <div class="card-head">${icon("sliders")}<span class="card-title">Stanza</span></div>
+        <p class="muted small">Questa è la tua stanza fissa: si crea una volta sola e
+          l'app si riapre sempre qui. I colleghi entrano con il tuo link, non devono
+          creare niente.</p>
         <div class="kv"><span>Stato</span>${modeBadge}</div>
-        <div class="kv"><span>Codice stanza</span><b>${esc(store.getRoomId())}</b></div>
+        <div class="kv"><span>Codice stanza</span><b class="mono">${esc(store.getRoomId())}</b></div>
+        <div class="kv"><span>ID di questo dispositivo</span>
+          <button class="link mono small" data-action="copy-uid" title="Copia">${esc(status.uid)}</button></div>
         <div class="field-row">
           <label class="field">
             <span>Nome stanza</span>
@@ -92,6 +101,32 @@ export const setupView = {
         ${status.error ? `<p class="err small">${esc(status.error)}</p>` : ""}
         ${!isFirebaseConfigured ? `<p class="warn-note small">Firebase non è configurato: i dati restano su questo dispositivo. Vedi <b>README.md</b> per attivare la sincronia live.</p>` : ""}
       </section>
+
+      ${status.mode === "firebase" ? `
+      <section class="card">
+        <div class="card-head">${icon("user")}<span class="card-title">Membri</span>
+          <span class="count-pill ml-auto">${Object.keys(room.members || {}).length}</span></div>
+        <p class="muted small">Solo i dispositivi approvati possono vedere la stanza e
+          scrivere. Le richieste di chi apre il tuo link compaiono qui.</p>
+        ${Object.entries(room.requests || {}).length ? `
+          <div class="req-list">
+            ${Object.entries(room.requests).map(([uid, r]) => `
+              <div class="req-row">
+                <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+                <span class="pname">${esc(r.name || "Sconosciuto")}<small class="req-sub">vuole entrare</small></span>
+                <button class="btn small primary" data-action="member-approve" data-id="${uid}">Approva</button>
+                <button class="icon-btn danger" data-action="member-reject" data-id="${uid}" aria-label="Rifiuta">${icon("close")}</button>
+              </div>`).join("")}
+          </div>` : ""}
+        <ul class="plist">
+          ${Object.entries(room.members || {}).map(([uid, m]) => `
+            <li>
+              <span class="avatar sm" style="background:${colorOf(m.name)}">${initials(m.name)}</span>
+              <span class="pname">${esc(m.name || "Membro")}${uid === status.uid ? '<span class="tag">questo dispositivo</span>' : ""}</span>
+              ${uid === status.uid ? "" : `<button class="icon-btn danger" data-action="member-revoke" data-id="${uid}" aria-label="Revoca">${icon("close")}</button>`}
+            </li>`).join("") || `<li class="muted small">Ancora nessun membro registrato.</li>`}
+        </ul>
+      </section>` : ""}
 
       <section class="card">
         <div class="card-head">${icon("download")}<span class="card-title">Backup</span></div>
@@ -135,6 +170,32 @@ export const setupView = {
       toast("Sei il segnapunti");
     },
     "sk-release"() { return store.releaseScorekeeper(); },
+
+    async "copy-uid"(ctx) {
+      try {
+        await navigator.clipboard.writeText(ctx.status.uid);
+        toast("ID copiato: incollalo nelle regole del database");
+      } catch {
+        await askText("ID di questo dispositivo", { value: ctx.status.uid, confirmLabel: "Chiudi" });
+      }
+    },
+    async "member-approve"(ctx, el) {
+      try {
+        await store.approveRequest(el.dataset.id);
+        toast("Approvato: ora vede la stanza");
+      } catch { toast("Solo il proprietario può approvare", "warn"); }
+    },
+    async "member-reject"(ctx, el) {
+      try { await store.rejectRequest(el.dataset.id); }
+      catch { toast("Solo il proprietario può farlo", "warn"); }
+    },
+    async "member-revoke"(ctx, el) {
+      const name = ((ctx.room.members || {})[el.dataset.id] || {}).name || "questo dispositivo";
+      const ok = await askConfirm(`Revocare l'accesso a ${name}?`, { message: "Non vedrà più la stanza finché non lo riapprovi.", confirmLabel: "Revoca", danger: true });
+      if (!ok) return;
+      try { await store.revokeMember(el.dataset.id); toast("Accesso revocato"); }
+      catch { toast("Solo il proprietario può farlo", "warn"); }
+    },
 
     "copy-link"() { return shareRoom(); },
     async "switch-room"() {

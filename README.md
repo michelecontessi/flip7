@@ -39,9 +39,20 @@ quello che consuma questa app.
 3. Menu **Crea** → **Authentication** → **Inizia** → scheda **Metodo di accesso** →
    abilita **Anonimo**. Serve perché i telefoni possano leggere/scrivere senza registrarsi.
 4. Torna in **Realtime Database** → scheda **Regole**, incolla il contenuto del file
-   [`database.rules.json`](database.rules.json) e premi **Pubblica**.
-   Queste regole dicono: chiunque abbia il codice stanza può leggere, ma **solo il
-   segnapunti in carica può scrivere i punti della partita in corso**.
+   [`database.rules.json`](database.rules.json) e premi **Pubblica** — ma prima
+   sostituisci `OWNER_UID` con l'**ID del tuo dispositivo** (lo trovi nell'app,
+   in Setup → Stanza, con un tocco lo copi). Puoi indicarne più di uno, ad esempio
+   PC e telefono:
+
+   ```
+   auth.uid === 'ID_DEL_PC' || auth.uid === 'ID_DEL_TELEFONO'
+   ```
+
+   Con queste regole: **solo i dispositivi approvati** vedono la stanza e scrivono
+   i punti; chi apre il tuo link manda una richiesta di accesso e **solo tu**
+   (il proprietario) puoi approvarla; il tabellone live resta scrivibile dal solo
+   segnapunti in carica.
+
 5. Menu ⚙️ **Impostazioni progetto** → in fondo, **Le tue app** → icona `</>` (Web) →
    registra l'app → copia l'oggetto `firebaseConfig`.
 6. Incolla i valori in [`js/config.js`](js/config.js):
@@ -92,10 +103,16 @@ Per aggiornarla in futuro basta un `git push`: Pages ripubblica da solo.
 
 **Prima volta (chi organizza)**
 
-1. Apri l'app → tab **Setup** → aggiungi i nomi dei giocatori.
-2. Torna su **Partita**: in cima trovi il riquadro *Chi segna i punti?* → premi
-   **Segno io i punti**. Da quel momento sei tu che inserisci i punteggi.
-3. Premi **Condividi stanza** (o l'icona 🔗 in alto) e manda il link nella chat dell'ufficio.
+1. Apri l'app: ti accoglie la schermata **Crea la stanza**. La stanza si crea
+   **una volta sola**: il codice è segreto, generato a caso, e resta salvato sul
+   tuo dispositivo — da lì in poi l'app si apre sempre lì. Non va ricreata a ogni
+   partita.
+2. Tab **Setup** → aggiungi i nomi dei giocatori.
+3. Torna su **Partita**: in cima trovi il riquadro *Chi segna i punti?* → premi
+   **Segno io i punti**.
+4. Premi **Condividi stanza** (o l'icona 🔗 in alto) e manda il link nella chat
+   dell'ufficio. I colleghi non creano niente: aprono il link, chiedono di entrare,
+   tu li approvi da **Setup → Membri** ed è fatta, per sempre.
 
 **Ogni collega**, aperto il link, va in **Setup** → *Io sono* e sceglie il proprio nome:
 da lì in poi vedrà il proprio punteggio in grande sopra al tabellone.
@@ -250,6 +267,13 @@ Setup → *Aspetto* → Chiaro / Scuro / Come il telefono.
 **Come faccio un backup?** Setup → **Esporta**: scarica un JSON con giocatori e storico,
 reimportabile con **Importa**.
 
-**Chi può scrivere i punti?** Solo il dispositivo che ha preso il ruolo di segnapunti —
-è imposto dalle regole del database, non solo dall'interfaccia. Se preferisci che chiunque
-possa correggere qualsiasi cosa, pubblica invece `database.rules.permissive.json`.
+**Chi può vedere e scrivere?** Solo i dispositivi approvati dal proprietario (tu):
+è imposto dalle regole del database, non solo dall'interfaccia. Il codice stanza è
+segreto e non sta nel repository; il tuo ID di proprietario è scolpito nelle regole,
+che si cambiano solo dalla console Firebase con il tuo account Google. Dentro la
+stanza, il tabellone live resta scrivibile dal solo segnapunti in carica.
+
+**E se cambio telefono o cancello i dati del browser?** L'identità del proprietario è
+legata al dispositivo: se la perdi, apri la console Firebase → Regole e sostituisci
+il vecchio ID con quello nuovo (l'app te lo mostra in Setup). Per questo conviene
+registrare **due** dispositivi come proprietari fin dall'inizio.

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "./store.js";
 import { prefs } from "./prefs.js";
-import { esc, initials, colorOf, toast, drawSheet, closeSheet, sheet, captureSheetInputs, shareRoom, drawPage, closePage, page } from "./ui.js";
+import { esc, initials, colorOf, toast, drawSheet, closeSheet, sheet, captureSheetInputs, shareRoom, roomUrl, drawPage, closePage, page, askText } from "./ui.js";
 import { liveView } from "./views/live.js";
 import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
@@ -35,6 +35,9 @@ function ctx() {
 // --- chrome (topbar + tabbar) ------------------------------------------------
 function renderTopbar(c) {
   const { room, status, me } = c;
+  if (status.mode === "none") {
+    return `<div class="brand">${wordmark("brand-mark")}</div>`;
+  }
   const meName = me && room.players[me] ? room.players[me].name : null;
   const dot = status.mode === "firebase" ? (status.online ? "on" : "off") : "local";
   const live = room.live && room.live.status === "playing";
@@ -65,6 +68,57 @@ function renderTabbar(c) {
     </a>`).join("");
 }
 
+// --- schermate di ingresso ---------------------------------------------------
+// Benvenuto: nessuna stanza ancora. La stanza si crea UNA volta sola: il codice
+// resta salvato sul dispositivo e nel link che condividi, per sempre.
+function renderWelcome() {
+  return `
+    <section class="gate">
+      ${wordmark("gate-mark")}
+      <h1 class="gate-title">Segnapunti da ufficio</h1>
+      <p class="gate-sub">La stanza si crea <b>una volta sola</b>: da lì in poi l'app
+        si apre sempre lì, e i colleghi entrano con il tuo link.</p>
+
+      <div class="card gate-card">
+        <h2 class="section-title">Prima volta qui?</h2>
+        <p class="muted small">Crea la stanza del tuo gruppo. Il codice è segreto e
+          generato a caso: gira solo nel link che manderai tu.</p>
+        <button class="btn primary big" data-action="create-room">Crea la stanza</button>
+      </div>
+
+      <div class="card gate-card">
+        <h2 class="section-title">Ti hanno mandato un link?</h2>
+        <p class="muted small">Aprilo e basta: entri direttamente nella stanza giusta.
+          Se hai solo il codice, inseriscilo qui.</p>
+        <button class="btn" data-action="join-room">Ho un codice stanza</button>
+      </div>
+    </section>`;
+}
+
+// Stanza protetta: questo dispositivo non e' (ancora) fra i membri.
+function renderAccessGate(c) {
+  const pendingName = prefs.get("requestName");
+  return `
+    <section class="gate">
+      ${wordmark("gate-mark")}
+      ${c.status.access === "pending" ? `
+        <div class="card gate-card center">
+          <div class="empty-ico">${icon("user")}</div>
+          <h2 class="section-title">Richiesta inviata${pendingName ? ` a nome di ${esc(pendingName)}` : ""}</h2>
+          <p class="muted small">Chi gestisce la stanza deve approvarti (lo fa dal suo
+            telefono, in Setup → Membri). Appena lo fa, questa pagina si sblocca da sola.</p>
+        </div>` : `
+        <div class="card gate-card center">
+          <div class="empty-ico">${icon("user")}</div>
+          <h2 class="section-title">Stanza protetta</h2>
+          <p class="muted small">Questa stanza fa entrare solo le persone approvate.
+            Presentati: chi la gestisce vedrà la tua richiesta.</p>
+          <button class="btn primary big" data-action="request-access">Chiedi di entrare</button>
+        </div>`}
+      <button class="ghost-btn" data-action="gate-switch">Non è la stanza giusta? Cambia stanza</button>
+    </section>`;
+}
+
 // --- render ------------------------------------------------------------------
 let scheduled = false;
 export function render() {
@@ -77,6 +131,19 @@ export function render() {
     const main = document.getElementById("view");
     const tabs = document.getElementById("tabbar");
     if (!top || !main || !tabs) return;
+
+    // schermate di ingresso: niente tab, solo il contenuto
+    const gated = c.status.mode === "none"
+      || (c.status.mode === "firebase" && c.status.ready && c.status.access !== "ok" && c.status.access !== "checking");
+    if (gated) {
+      top.innerHTML = renderTopbar(c);
+      tabs.innerHTML = "";
+      tabs.style.display = "none";
+      main.className = "view-gate";
+      main.innerHTML = c.status.mode === "none" ? renderWelcome() : renderAccessGate(c);
+      return;
+    }
+    tabs.style.display = "";
     top.innerHTML = renderTopbar(c);
     tabs.innerHTML = renderTabbar(c);
     main.className = "view-" + route;
@@ -129,6 +196,24 @@ document.addEventListener("click", (ev) => {
   if (name === "sheet-close") { ev.preventDefault(); closeSheet(); return; }
   if (name === "go-setup") { ev.preventDefault(); location.hash = "#setup"; return; }
   if (name === "share-top") { ev.preventDefault(); shareRoom(); return; }
+  if (name === "create-room") {
+    ev.preventDefault();
+    askText("Come si chiama il gruppo?", { value: "Ufficio", message: "Diventa il nome della stanza. Il codice segreto lo genero io.", confirmLabel: "Crea" })
+      .then((name) => { if (name) store.createRoom(name); });
+    return;
+  }
+  if (name === "join-room" || name === "gate-switch") {
+    ev.preventDefault();
+    askText("Codice stanza", { placeholder: "es. ufficio-k7m2x9qp", message: "Lo trovi nel link che ti hanno mandato, dopo ?room=", confirmLabel: "Entra" })
+      .then((code) => { if (code) store.switchRoom(code); });
+    return;
+  }
+  if (name === "request-access") {
+    ev.preventDefault();
+    askText("Come ti chiami?", { placeholder: "Nome e cognome", message: "Chi gestisce la stanza vedrà questo nome nella richiesta.", confirmLabel: "Invia richiesta" })
+      .then((name) => { if (name) store.requestAccess(name).then(() => render()); });
+    return;
+  }
   if (name === "page-close") { ev.preventDefault(); closePage(); return; }
 
   const fn = lookup("actions", name);

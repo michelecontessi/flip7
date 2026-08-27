@@ -108,9 +108,14 @@ export function wordmark(cls = "") {
   return `<span class="wordmark ${cls}"><b>FLIP</b><i class="w7">7</i></span>`;
 }
 
-/** Faccia di una carta numero (0-12), con gli indici agli angoli come una carta vera. */
+const CARD_WORDS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE"];
+
+/**
+ * Faccia di una carta numero (0-12) come nel gioco vero: fondo chiaro,
+ * numero gigante, la parola in inglese sotto e gli indici agli angoli.
+ */
 export function numberCard(n, { on = false, size = "" } = {}) {
-  return `<span class="fcard n${n} ${on ? "on" : ""} ${size}" data-face="${n}"><b>${n}</b></span>`;
+  return `<span class="fcard n${n} ${on ? "on" : ""} ${size}" data-face="${n}"><b>${n}</b><small>${CARD_WORDS[n] || ""}</small></span>`;
 }
 
 /**

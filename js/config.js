@@ -20,8 +20,11 @@ export const firebaseConfig = {
 export const FIREBASE_SDK_VERSION = "11.6.0";
 
 export const DEFAULTS = {
-  roomId: "ufficio",          // codice stanza di default (condiviso da tutti)
-  roomName: "Ufficio",
+  // Nessuna stanza predefinita: al primo avvio l'app chiede di crearne una
+  // (con codice segreto) o di entrare con un link ricevuto. Il codice NON
+  // sta nel repository: vive solo nel link che condividi.
+  roomId: null,
+  roomName: "Flip 7",
   targetScore: 200            // punteggio che chiude la partita
 };
 

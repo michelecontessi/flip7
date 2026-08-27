@@ -13,7 +13,7 @@ const listeners = new Set();
 
 let roomId = DEFAULTS.roomId;
 let room = emptyRoom();
-let status = { mode: "local", ready: false, online: false, uid: deviceId(), error: null };
+let status = { mode: "local", ready: false, online: false, uid: deviceId(), access: "ok", error: null };
 let fb = null; // { db, ref, update, onValue, roomRef }
 
 export function emptyRoom() {
@@ -22,7 +22,9 @@ export function emptyRoom() {
     control: null,
     players: {},
     live: null,
-    history: {}
+    history: {},
+    members: {},
+    requests: {}
   };
 }
 
@@ -34,7 +36,9 @@ function normalize(v) {
     control: v.control || null,
     players: v.players || {},
     live: v.live || null,
-    history: v.history || {}
+    history: v.history || {},
+    members: v.members || {},
+    requests: v.requests || {}
   };
 }
 
@@ -89,7 +93,14 @@ async function commit(updates) {
 
 // --- init -------------------------------------------------------------------
 export async function init(id) {
-  roomId = (id || prefs.get("roomId") || DEFAULTS.roomId).trim().toLowerCase();
+  const chosen = id || prefs.get("roomId") || DEFAULTS.roomId;
+  if (!chosen) {
+    // primo avvio: nessuna stanza ancora creata ne' ricevuta
+    status = { ...status, mode: "none", ready: true };
+    notify();
+    return;
+  }
+  roomId = String(chosen).trim().toLowerCase();
   prefs.set("roomId", roomId);
 
   if (isFirebaseConfigured) {
@@ -129,34 +140,141 @@ async function initFirebase() {
 
   const roomRef = dbMod.ref(db, `rooms/${roomId}`);
   fb = { db, roomRef, update: dbMod.update, ref: dbMod.ref, onValue: dbMod.onValue };
-  status = { ...status, mode: "firebase", uid, ready: false, error: null };
+  status = { ...status, mode: "firebase", uid, ready: false, access: "checking", error: null };
 
   dbMod.onValue(dbMod.ref(db, ".info/connected"), (snap) => {
     status.online = Boolean(snap.val());
     notify();
   });
 
-  await new Promise((resolve) => {
+  await attachRoom();
+}
+
+/**
+ * Si mette in ascolto sulla stanza. Se le regole rifiutano la lettura vuol dire
+ * che questo dispositivo non e' (ancora) fra i membri: si passa alla richiesta
+ * di accesso e si resta in ascolto dell'approvazione.
+ */
+function attachRoom() {
+  return new Promise((resolve) => {
     let first = true;
-    dbMod.onValue(roomRef, (snap) => {
+    fb.onValue(fb.roomRef, (snap) => {
+      const exists = snap.exists();
       room = normalize(snap.val());
       status.ready = true;
       status.error = null;
-      if (first) {
-        first = false;
-        if (!snap.exists()) {
-          commit({ "meta/name": DEFAULTS.roomName, "meta/targetScore": DEFAULTS.targetScore, "meta/createdAt": Date.now() }).catch(() => {});
-        }
-        resolve();
+      if (room.members[status.uid]) {
+        status.access = "ok";
+      } else if (!Object.keys(room.members).length && !bootstrapTried) {
+        // riesco a leggere ma la stanza non ha membri: o sono il proprietario
+        // (regole consigliate) o le regole non gestiscono i membri. Un tentativo solo.
+        bootstrapTried = true;
+        bootstrapOwner(exists);
+      } else if (status.access !== "ok" && bootstrapTried) {
+        status.access = "ok"; // lettura consentita: le regole non chiedono membership
       }
-      notify();
-    }, (err) => {
-      status.error = "Lettura rifiutata: " + err.message + " (controlla le regole del database)";
-      status.ready = true;
-      notify();
       if (first) { first = false; resolve(); }
+      notify();
+    }, () => {
+      // lettura rifiutata: non siamo membri di questa stanza
+      status.ready = true;
+      status.access = "blocked";
+      watchApproval();
+      if (first) { first = false; resolve(); }
+      notify();
     });
   });
+}
+
+let bootstrapTried = false;
+
+/** Primo accesso del proprietario: si registra fra i membri e battezza la stanza. */
+async function bootstrapOwner(roomExists) {
+  try {
+    await fb.update(fb.roomRef, {
+      [`members/${status.uid}`]: { name: prefs.get("ownerName", "Proprietario"), at: Date.now() }
+    });
+    prefs.set("owner", true);
+  } catch {
+    // le regole attuali non gestiscono i membri (o non sono il proprietario):
+    // se riesco a leggere, posso comunque usare la stanza
+  }
+  status.access = "ok";
+  // battesimo della stanza: indipendente dalla registrazione fra i membri
+  if (!roomExists) {
+    try {
+      await commit({
+        "meta/name": prefs.get("pendingRoomName") || DEFAULTS.roomName,
+        "meta/targetScore": DEFAULTS.targetScore,
+        "meta/createdAt": Date.now()
+      });
+      prefs.set("pendingRoomName", null);
+    } catch { /* verra' ritentato al prossimo salvataggio di un'impostazione */ }
+  }
+  notify();
+}
+
+/** In attesa: ascolta la propria voce membri e la propria richiesta. */
+function watchApproval() {
+  const memberRef = fb.ref(fb.db, `rooms/${roomId}/members/${status.uid}`);
+  fb.onValue(memberRef, (snap) => {
+    if (snap.exists()) {
+      status.access = "ok";
+      attachRoom();
+      notify();
+    }
+  }, () => {});
+  const reqRef = fb.ref(fb.db, `rooms/${roomId}/requests/${status.uid}`);
+  fb.onValue(reqRef, (snap) => {
+    if (snap.exists() && status.access !== "ok") {
+      status.access = "pending";
+      notify();
+    }
+  }, () => {});
+}
+
+// ---------------------------------------------------------------------------
+// Accesso e membri
+// ---------------------------------------------------------------------------
+
+/** Chiede di entrare nella stanza (scrive la propria richiesta). */
+export async function requestAccess(name) {
+  if (!fb) return;
+  const clean = String(name || "").trim().slice(0, 40) || "Sconosciuto";
+  prefs.set("requestName", clean);
+  await fb.update(fb.ref(fb.db, `rooms/${roomId}/requests`), {
+    [status.uid]: { name: clean, at: Date.now() }
+  });
+  status.access = "pending";
+  notify();
+}
+
+/** Approva una richiesta (funziona solo per il proprietario). */
+export function approveRequest(uid) {
+  const req = room.requests[uid] || {};
+  return commit({
+    [`members/${uid}`]: { name: req.name || "Membro", at: Date.now() },
+    [`requests/${uid}`]: null
+  });
+}
+export function rejectRequest(uid) {
+  return commit({ [`requests/${uid}`]: null });
+}
+export function revokeMember(uid) {
+  return commit({ [`members/${uid}`]: null });
+}
+
+/** Crea una stanza nuova con codice segreto e la apre. */
+export function createRoom(name) {
+  const clean = String(name || "").trim();
+  const slug = (clean || "stanza").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "stanza";
+  let rand = "";
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  for (const b of bytes) rand += alphabet[b % alphabet.length];
+  if (clean) prefs.set("pendingRoomName", clean);
+  switchRoom(`${slug}-${rand}`);
 }
 
 /** Cambia stanza a caldo (ricarica la pagina: e' il modo piu' semplice e sicuro). */
