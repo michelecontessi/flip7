@@ -1,6 +1,6 @@
 // Service worker minimale: network-first, cache solo come rete di sicurezza.
 // Cosi' gli aggiornamenti arrivano sempre e l'app si apre anche senza rete.
-const CACHE = "flip7-v12";
+const CACHE = "flip7-v13";
 const SHELL = [
   "./", "./index.html", "./css/styles.css", "./icon.svg", "./manifest.webmanifest",
   "./js/app.js", "./js/store.js", "./js/stats.js", "./js/scoring.js", "./js/ui.js",
@@ -26,7 +26,10 @@ self.addEventListener("fetch", (e) => {
   if (url.origin !== location.origin) return; // Firebase e CDN passano diretti
 
   e.respondWith(
-    fetch(e.request)
+    // "no-cache" = chiedi sempre al server se il file e' cambiato (ETag):
+    // se non lo e' risponde 304 in un attimo, se lo e' arriva subito il nuovo.
+    // Cosi' gli aggiornamenti non restano bloccati nella cache del browser.
+    fetch(new Request(e.request, { cache: "no-cache" }))
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
