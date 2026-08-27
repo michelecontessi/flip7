@@ -1021,6 +1021,8 @@ table.rounds td.tot { font-weight: 800; }
 .fcard.slot::before, .fcard.slot::after { display: none; }
 /* la carta volante riempie esattamente il suo contenitore */
 .fly-card .fcard { width: 100%; height: 100%; aspect-ratio: auto; }
+/* la carta parcheggiata resta nascosta finche' il giro non e' completo */
+.fcard.veil { visibility: hidden; }
 
 .center-links { justify-content: center; }
 

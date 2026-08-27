@@ -10,7 +10,9 @@ import { esc, initials, colorOf, toast, askText, askConfirm, askChoice, relTime 
 import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card } from "../icons.js";
 import * as engine from "../game.js";
 
-const OUT_LABEL = { stay: "si è fermato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
+// "stay" copre anche chi viene chiuso d'ufficio a fine round (flip7 altrui,
+// carte finite): "ha incassato" e' vero in entrambi i casi, "si e' fermato" no
+const OUT_LABEL = { stay: "ha incassato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
 const BOT_NAMES = ["Bot Ada", "Bot Bruno", "Bot Carla", "Bot Dina"];
 let botTimer = null;
 
@@ -106,9 +108,11 @@ function miniCard(c, cls = "mini") {
 // di chi l'ha presa (~2,2s in tutto). E' un elemento temporaneo sopra la
 // pagina, cosi' sopravvive ai ridisegni del tavolo.
 let lastAnimKey = null;
-// finche' e' true, il render disegna la carta appena pescata "collassata"
-// (classe landing): lo spazio nella fila si apre solo quando la carta atterra
-let animPending = false;
+// finche' e' true, OGNI render disegna la carta in volo "collassata" (classe
+// landing): cosi' anche i ridisegni a meta' animazione (echo del database,
+// mosse dei bot) non la fanno comparire in anticipo sul tavolo
+let landingActive = false;
+let landingToken = 0;
 
 function scheduleDrawAnim(g) {
   const key = g.lastDraw ? `${g.lastDraw.seat}:${g.lastDraw.card}:${g.deck.length}` : "nessuna";
@@ -118,14 +122,18 @@ function scheduleDrawAnim(g) {
   lastAnimKey = key;
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const card = g.lastDraw.card;
-  animPending = true;
-  requestAnimationFrame(() => { animPending = false; runDrawAnim(card); });
+  landingActive = true;
+  const token = ++landingToken;
+  requestAnimationFrame(() => runDrawAnim(card, token));
 }
 
-function runDrawAnim(card) {
-  const openLanding = () => document.querySelectorAll(".t-seats .fcard.landing")
-    .forEach((el) => el.classList.remove("landing"));
-  const slot = document.querySelector("[data-flip-slot]");
+function runDrawAnim(card, token) {
+  const openLanding = () => {
+    if (token !== landingToken) return; // e' gia' partita un'altra pescata
+    landingActive = false;
+    document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
+  };
+  const slot = document.querySelector(".bank .bank-slot:last-child .fcard");
   const deckEl = document.querySelector(".deck-stack .fcard");
   if (!slot || !deckEl) return openLanding();
   const a = slot.getBoundingClientRect();
@@ -144,41 +152,135 @@ function runDrawAnim(card) {
     dest.style.transition = "";
   }
 
-  // parte DAL mazzo, di dorso
+  // la didascalia non deve svelare la carta prima che si giri
+  const caption = slot.parentElement ? slot.parentElement.querySelector("small") : null;
+  if (caption) { caption.style.transition = "opacity .3s ease"; caption.style.opacity = "0"; }
+
+  // parte DAL mazzo, di dorso: una carta sola che ruota fino a 90 gradi,
+  // cambia contenuto quando e' di taglio e completa il giro con la faccia
+  // (niente trucchi backface: cosi' il numero non si vede mai specchiato)
   const fly = document.createElement("div");
   fly.className = "fly-card";
   fly.style.cssText = `position:fixed;left:${m.left}px;top:${m.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;perspective:700px;`;
-  fly.innerHTML = `
-    <div class="fly-inner" style="position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateY(180deg);">
-      <div style="position:absolute;inset:0;backface-visibility:hidden;">${miniCard(card, "drawn")}</div>
-      <div style="position:absolute;inset:0;backface-visibility:hidden;transform:rotateY(180deg);">${cardBack()}</div>
-    </div>`;
+  fly.innerHTML = `<div class="fly-inner" style="width:100%;height:100%;">${cardBack()}</div>`;
   document.body.appendChild(fly);
+  const inner = fly.firstElementChild;
 
   const toSlot = `translate(${a.left - m.left}px,${a.top - m.top}px)`;
-  // 1) scivola dritta dal mazzo alla zona di destra, ancora coperta
+  // 1) scivola dal mazzo alla zona di destra, ancora coperta
   fly.animate([{ transform: "translate(0,0)" }, { transform: toSlot }],
-    { duration: 500, easing: "ease-out", fill: "forwards" });
-  // 2) li' si gira sull'altro lato
-  fly.firstElementChild.animate([{ transform: "rotateY(180deg)" }, { transform: "rotateY(0deg)" }],
-    { duration: 800, delay: 500, easing: "ease-out", fill: "forwards" });
+    { duration: 600, easing: "cubic-bezier(.3,.7,.3,1)", fill: "forwards" });
+  // 2) il giro comincia mentre sta ancora planando: prima meta' di dorso...
+  inner.animate([{ transform: "rotateY(0deg)" }, { transform: "rotateY(90deg)" }],
+    { duration: 400, delay: 450, easing: "ease-in", fill: "forwards" });
+  setTimeout(() => {
+    // ...di taglio si scambia il contenuto, poi si finisce il giro di faccia
+    inner.innerHTML = miniCard(card, "drawn");
+    if (caption) caption.style.opacity = "";
+    inner.animate([{ transform: "rotateY(-90deg)" }, { transform: "rotateY(0deg)" }],
+      { duration: 400, easing: "ease-out", fill: "forwards" });
+  }, 850);
 
-  const finish = () => { fly.remove(); openLanding(); };
+  const finish = () => { fly.remove(); openLanding(); if (caption) caption.style.opacity = ""; };
+  const gNow = engine.normalizeGame(store.getRoom().game);
+  const parkHere = gNow && gNow.pending && gNow.pending.type === card;
+  if (parkHere) {
+    // carta azione da assegnare: resta parcheggiata a destra finche'
+    // non si sceglie il bersaglio (la copia di markup prende il suo posto)
+    setTimeout(() => {
+      fly.remove();
+      document.querySelectorAll(".bank .fcard.veil").forEach((el) => el.classList.remove("veil"));
+      if (token === landingToken) landingActive = false;
+      if (caption) caption.style.opacity = "";
+    }, 1300);
+    return;
+  }
   if (b) {
     // 3) e vola nella mano di chi l'ha pescata; lo spazio nella fila si apre
     //    in modo fluido proprio mentre la carta sta planando
     fly.animate([
       { transform: `${toSlot} scale(1)` },
       { transform: `translate(${b.left - m.left}px,${b.top - m.top}px) scale(${b.width / a.width})` }
-    ], { duration: 1000, delay: 1450, easing: "cubic-bezier(.35,.7,.3,1)", fill: "forwards" }).onfinish = finish;
-    setTimeout(openLanding, 2150);
+    ], { duration: 900, delay: 1500, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
+    setTimeout(openLanding, 2100);
   } else {
     // nessuna destinazione (es. azione risolta al volo): la carta svanisce li'
     fly.animate([{ opacity: 1 }, { opacity: 0 }],
-      { duration: 500, delay: 1600, fill: "forwards" }).onfinish = finish;
+      { duration: 500, delay: 1700, fill: "forwards" }).onfinish = finish;
   }
   // rete di sicurezza: mai lasciare in giro carte volanti o file collassate
-  setTimeout(finish, 3200);
+  setTimeout(finish, 3000);
+}
+
+// quando il bersaglio viene scelto, la carta parcheggiata a destra completa
+// il volo verso il tavolo del bersaglio
+let parkedCard = null;
+let resolveTargetSid = null;
+
+function checkPendingFlight(g) {
+  if (g.status !== "playing" && g.status !== "roundEnd") { parkedCard = null; return; }
+  if (g.pending) { parkedCard = g.pending.type; return; }
+  if (!parkedCard) return;
+  const card = parkedCard;
+  parkedCard = null;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const target = g.lastAction && g.lastAction.type === card ? g.lastAction.target : null;
+  landingActive = true;
+  const token = ++landingToken;
+  resolveTargetSid = target; // il render tiene collassata la carta ricevuta
+  requestAnimationFrame(() => { runResolveFly(card, token, target); });
+}
+
+function runResolveFly(card, token, targetSid) {
+  const openLanding = () => {
+    if (token !== landingToken) return;
+    landingActive = false;
+    resolveTargetSid = null;
+    document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
+  };
+  const slot = document.querySelector(".bank .bank-slot:last-child .fcard");
+  if (!slot) return openLanding();
+  const a = slot.getBoundingClientRect();
+  if (!a.width) return openLanding();
+
+  let dest = null, landingDest = false;
+  if (targetSid) {
+    const row = document.querySelector(`.seat[data-sid="${targetSid}"]`);
+    if (row) {
+      dest = row.querySelector(".fcard.landing");
+      landingDest = Boolean(dest);
+      if (!dest) dest = row;
+    }
+  }
+  const fly = document.createElement("div");
+  fly.className = "fly-card";
+  fly.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;`;
+  fly.innerHTML = miniCard(card, "drawn");
+  document.body.appendChild(fly);
+
+  const finish = () => { fly.remove(); openLanding(); };
+  if (dest) {
+    let b;
+    if (landingDest) {
+      dest.style.transition = "none";
+      dest.classList.remove("landing");
+      b = dest.getBoundingClientRect();
+      dest.classList.add("landing");
+      void dest.offsetWidth;
+      dest.style.transition = "";
+    } else {
+      const r = dest.getBoundingClientRect();
+      b = { left: r.left + 10, top: r.top + r.height / 2 - a.height / 2, width: a.width };
+    }
+    fly.animate([
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})`, opacity: landingDest ? 1 : 0 }
+    ], { duration: 700, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
+    setTimeout(openLanding, 500);
+  } else {
+    fly.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, fill: "forwards" }).onfinish = finish;
+  }
+  setTimeout(finish, 1400);
 }
 
 // --- intro / lobby -----------------------------------------------------------
@@ -279,7 +381,9 @@ function bankRow(g) {
       </div>
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">
-        <span class="fcard slot" data-flip-slot></span>
+        ${g.pending
+          ? miniCard(g.pending.type, "drawn parked" + (landingActive ? " veil" : ""))
+          : `<span class="fcard slot"></span>`}
         <small class="${bustNow ? "bust-note" : ""}">${last
           ? bustNow
             ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: SBALLATO`
@@ -300,23 +404,22 @@ function renderSeatRow(g, sid, ctx) {
   // se era il doppione dello sballo, l'evidenza ce l'ha gia' il doppione rosso
   let just = g.lastDraw && g.lastDraw.seat === sid ? g.lastDraw.card : null;
   if (h.out === "bust" && just === "n" + h.bustCard) just = null;
-  const justCls = "mini just" + (animPending ? " landing" : "");
+  const justCls = "mini just" + (landingActive ? " landing" : "");
   const cls = (card) => (card === just ? justCls : "mini");
   // due file: sopra azioni e modificatori, sotto tutti i numeri
+  const resolvedHere = landingActive && resolveTargetSid === sid;
   const specials = [
     ...(h.x2 ? [miniCard("x2", cls("x2"))] : []),
     ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p, cls("p" + p))),
-    ...(h.sc ? [miniCard("sc", cls("sc"))] : [])
+    ...(h.sc ? [miniCard("sc", resolvedHere ? "mini landing" : cls("sc"))] : [])
   ];
   // chi e' stato congelato mostra la carta Congela ricevuta
-  if (h.out === "frozen") specials.push(miniCard("frz"));
-  // la carta azione appena pescata resta in mano finche' non viene assegnata
-  if (g.pending && g.pending.chooser === sid) specials.push(miniCard(g.pending.type, justCls));
+  if (h.out === "frozen") specials.push(miniCard("frz", resolvedHere ? "mini landing" : "mini"));
   const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n)));
   if (h.out === "flip7") nums.push(flip7Card({ size: "mini" }));
   // il doppione che ha sballato resta in vista, marcato in rosso
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
-    nums.push(miniCard("n" + h.bustCard, "mini dup" + (animPending && g.lastDraw && g.lastDraw.seat === sid ? " landing" : "")));
+    nums.push(miniCard("n" + h.bustCard, "mini dup" + (landingActive && g.lastDraw && g.lastDraw.seat === sid ? " landing" : "")));
   }
   const state = h.out ? `<i class="seat-state s-${h.out}">${OUT_LABEL[h.out]}</i>`
     : isChoosing ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "scegli tu" : "sta scegliendo"}</i>`
@@ -324,7 +427,7 @@ function renderSeatRow(g, sid, ctx) {
     : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   return `
-    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${h.out ? "out-" + h.out : ""}">
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${h.out ? "out-" + h.out : ""}" data-sid="${sid}">
       <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="seat-main">
         <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>
@@ -421,6 +524,7 @@ function renderRoundEnd(g, ctx) {
   const f7 = g.order.find((sid) => g.hands[sid].out === "flip7");
   const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust" ? g.lastDraw.seat : null;
   const sub = f7 ? `FLIP 7 di ${shortName(g.seats[f7])}: +15 e round chiuso per tutti`
+    : g.endReason === "deck" ? "le carte sono finite: chi era in gioco incassa d'ufficio"
     : buster ? `lo sballo di ${shortName(g.seats[buster])} chiude il giro: punti incassati`
     : "tutti fermi, congelati o sballati: punti incassati";
   return `
@@ -499,6 +603,7 @@ export const tableView = {
     if (!g) return renderIntro(ctx);
     if (g.status === "playing") scheduleAuto(ctx);
     if (g.status === "playing" || g.status === "roundEnd") scheduleDrawAnim(g);
+    checkPendingFlight(g);
     const stale = staleNotice(g);
     if (g.status === "lobby") return stale + renderLobby(g, ctx);
     if (g.status === "roundEnd") return stale + renderRoundEnd(g, ctx);

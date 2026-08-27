@@ -63,6 +63,7 @@ export function normalizeGame(g) {
   state.log = g.log || [];
   state.lastDraw = g.lastDraw || null;
   state.lastRound = g.lastRound || null;
+  state.lastAction = g.lastAction || null;
   state.trend = g.trend || [];
   return state;
 }
@@ -141,7 +142,7 @@ function endRound(s) {
 
 /** Prepara il round successivo (l'ordine ruota: cambia chi parte). */
 export function nextRound(state) {
-  const s = { ...state, status: "playing", round: state.round + 1, pending: null, flip3: null, lastDraw: null, lastRound: null };
+  const s = { ...state, status: "playing", round: state.round + 1, pending: null, flip3: null, lastDraw: null, lastRound: null, endReason: null };
   s.order = [...state.order.slice(1), state.order[0]];
   s.hands = {};
   for (const sid of s.order) s.hands[sid] = emptyHand();
@@ -281,6 +282,7 @@ function applyCard(s, seatId, card, duringFlip3, rng) {
 }
 
 function resolveAction(s, card, targetId, rng) {
+  s.lastAction = { type: card, target: targetId }; // per l'animazione in vista
   if (card === "frz") {
     s.hands[targetId].out = "frozen";
     s.discard = [...s.discard, "frz"];
@@ -331,7 +333,7 @@ export function hit(state, seatId, rng = Math.random) {
   if (s.flip3) {
     if (s.flip3.target !== seatId || s.hands[seatId].out) return state;
     const card = drawOne(s, rng);
-    if (!card) return endRound(s);
+    if (!card) { s.endReason = "deck"; return endRound(s); }
     s.flip3.left -= 1;
     const res = applyCard(s, seatId, card, true, rng);
     if (res === "flip7") return endRound(s);
@@ -342,7 +344,7 @@ export function hit(state, seatId, rng = Math.random) {
 
   if (s.turn !== seatId || s.hands[seatId].out) return state;
   const card = drawOne(s, rng);
-  if (!card) return endRound(s);
+  if (!card) { s.endReason = "deck"; return endRound(s); }
   const res = applyCard(s, seatId, card, false, rng);
   if (res === "flip7") return endRound(s);
   if (res === "pending") return s;
@@ -359,6 +361,7 @@ export function chooseTarget(state, chooserId, targetId, rng = Math.random) {
   s.pending = null;
   if (pend.type === "sc") {
     s.hands[targetId].sc = true;
+    s.lastAction = { type: "sc", target: targetId };
     logIt(s, `Seconda Chance regalata a ${s.seats[targetId].name}`);
   } else {
     resolveAction(s, pend.type, targetId, rng);
