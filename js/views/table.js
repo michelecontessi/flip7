@@ -174,32 +174,37 @@ function turnStrip(g, ctx) {
       ${mine ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
       <span class="avatar" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="ts-txt"><b>${esc(title)}</b><small>${esc(sub)}</small></div>
-      ${trendSpark(g, mySeat(g, ctx))}
     </div>`;
 }
 
 /**
- * Mini grafico nella striscia del turno: i totali round per round di tutti
- * (piu' il bottino provvisorio del round in corso), la mia linea in evidenza.
+ * La corsa al traguardo: una barra per giocatore, ordinata dal primo
+ * all'ultimo. Barra piena = punti incassati, coda chiara = bottino
+ * provvisorio del round in corso. La propria riga e' evidenziata.
  */
-function trendSpark(g, me) {
-  const playing = g.status === "playing";
-  const liveTotal = (sid) => (g.seats[sid].total || 0)
-    + (g.hands[sid] && g.hands[sid].out !== "bust" ? engine.handPoints(g.hands[sid]) : 0);
-  const steps = [
-    Object.fromEntries(g.order.map((sid) => [sid, 0])),
-    ...(g.trend || []),
-    ...(playing ? [Object.fromEntries(g.order.map((sid) => [sid, liveTotal(sid)]))] : [])
-  ];
-  if (steps.length < 2) return "";
-  const w = 92, h = 40, pad = 4;
-  const max = Math.max(10, ...steps.flatMap((s) => Object.values(s)));
-  const x = (i) => pad + i * ((w - pad * 2) / (steps.length - 1));
-  const y = (v) => h - pad - (v / max) * (h - pad * 2);
-  return `<span class="ts-spark"><svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
-    ${g.order.map((sid) => `<polyline class="${sid === me ? "me" : ""}" stroke="${colorOf(g.seats[sid].name)}"
-      points="${steps.map((s, i) => x(i).toFixed(1) + "," + y(s[sid] ?? 0).toFixed(1)).join(" ")}"/>`).join("")}
-  </svg></span>`;
+function raceBoard(g, me) {
+  const banked = (sid) => g.seats[sid].total || 0;
+  const roundPts = (sid) => (g.status === "playing" && g.hands[sid] && g.hands[sid].out !== "bust")
+    ? engine.handPoints(g.hands[sid]) : 0;
+  const sorted = [...g.order].sort((a, b) => (banked(b) + roundPts(b)) - (banked(a) + roundPts(a)));
+  const max = Math.max(g.target, ...sorted.map((sid) => banked(sid) + roundPts(sid)));
+  return `
+    <div class="race">
+      <div class="race-head"><span>La corsa</span><span>traguardo ${g.target}</span></div>
+      ${sorted.map((sid) => {
+        const seat = g.seats[sid];
+        const b = banked(sid), r = roundPts(sid);
+        return `
+        <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}">
+          <span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
+          <span class="race-track">
+            <i style="width:${((b / max) * 100).toFixed(1)}%; background:${colorOf(seat.name)}"></i>
+            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%; background:${colorOf(seat.name)}"></i>` : ""}
+          </span>
+          <b>${b}${r ? `<small>+${r}</small>` : ""}</b>
+        </div>`;
+      }).join("")}
+    </div>`;
 }
 
 /** Il banco: mazzo con le carte rimaste e ultima carta pescata. */
@@ -210,8 +215,8 @@ function bankRow(g) {
   return `
     <div class="bank">
       <div class="bank-slot">
-        <span class="deck-stack">${cardBack()}</span>
-        <small><b>${g.deck.length}</b> nel mazzo</small>
+        <span class="deck-stack">${cardBack()}<b class="deck-count">${g.deck.length}</b></span>
+        <small>carte nel mazzo</small>
       </div>
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">
@@ -324,6 +329,7 @@ function renderPlaying(g, ctx) {
       <section class="card t-side">
         ${turnStrip(g, ctx)}
         ${bankRow(g)}
+        ${raceBoard(g, me)}
         ${g.log.length ? `<div class="table-log">${g.log.slice(-3).map((l) => `<span>${esc(l)}</span>`).join("")}</div>` : ""}
       </section>
       <section class="card t-seats">
@@ -354,17 +360,14 @@ function renderRoundEnd(g, ctx) {
   const sub = f7 ? `FLIP 7 di ${shortName(g.seats[f7])}: +15 e round chiuso per tutti`
     : buster ? `lo sballo di ${shortName(g.seats[buster])} chiude il giro: punti incassati`
     : "tutti fermi, congelati o sballati: punti incassati";
-  const sorted = [...g.order].sort((a, b) => (g.seats[b].total || 0) - (g.seats[a].total || 0));
-  const lead = g.seats[sorted[0]];
-  const left = Math.max(0, g.target - (lead.total || 0));
   return `
     <div class="table-wrap">
       <section class="card t-side">
         <div class="turn-strip end">
           <div class="ts-txt"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
-          ${trendSpark(g, me)}
         </div>
         ${bankRow(g)}
+        ${raceBoard(g, me)}
         ${g.log.length ? `<div class="table-log">${g.log.slice(-3).map((l) => `<span>${esc(l)}</span>`).join("")}</div>` : ""}
       </section>
       <section class="card t-seats">
@@ -374,7 +377,7 @@ function renderRoundEnd(g, ctx) {
         </div>
         <div class="seat-controls">
           ${me ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>` : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`}
-          <p class="hint">${esc(shortName(lead))} è in testa: ${left > 0 ? `gli mancano ${left} punti` : "ha raggiunto il traguardo"}.</p>
+          <p class="hint">Basta che uno lo prema: il round parte per tutti in diretta.</p>
         </div>
         <ul class="seats">
           ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
