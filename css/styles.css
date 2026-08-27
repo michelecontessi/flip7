@@ -1063,6 +1063,13 @@ table.rounds td.tot { font-weight: 800; }
 /* l'ultima carta pescata spicca nella mano di chi l'ha presa
    (niente animazione: il tavolo si ridisegna a ogni mossa e ripartirebbe) */
 .fcard.just { outline: 2.5px solid var(--primary); outline-offset: 1.5px; }
+/* mentre la pescata vola, il suo posto in fila resta chiuso e si apre
+   in modo fluido solo all'atterraggio */
+.seat-cards .fcard { transition: width .25s ease, opacity .25s ease, margin .25s ease; }
+.seat-cards .fcard.landing {
+  width: 0 !important; opacity: 0; margin: 0 -3px;
+  border-width: 0; box-shadow: none; outline: none;
+}
 .fcard.bust-draw { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2.5px var(--red), 0 1px 3px rgba(20,20,30,.25); }
 /* punteggi del posto: grande il totale partita, piccolo il round in corso */
 .seat-pts { text-align: right; line-height: 1.1; flex: none; }

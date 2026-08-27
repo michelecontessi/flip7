@@ -106,6 +106,9 @@ function miniCard(c, cls = "mini") {
 // di chi l'ha presa (~2,2s in tutto). E' un elemento temporaneo sopra la
 // pagina, cosi' sopravvive ai ridisegni del tavolo.
 let lastAnimKey = null;
+// finche' e' true, il render disegna la carta appena pescata "collassata"
+// (classe landing): lo spazio nella fila si apre solo quando la carta atterra
+let animPending = false;
 
 function scheduleDrawAnim(g) {
   const key = g.lastDraw ? `${g.lastDraw.seat}:${g.lastDraw.card}:${g.deck.length}` : "nessuna";
@@ -115,49 +118,67 @@ function scheduleDrawAnim(g) {
   lastAnimKey = key;
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const card = g.lastDraw.card;
-  requestAnimationFrame(() => runDrawAnim(card));
+  animPending = true;
+  requestAnimationFrame(() => { animPending = false; runDrawAnim(card); });
 }
 
 function runDrawAnim(card) {
+  const openLanding = () => document.querySelectorAll(".t-seats .fcard.landing")
+    .forEach((el) => el.classList.remove("landing"));
   const slot = document.querySelector("[data-flip-slot]");
-  if (!slot) return;
+  const deckEl = document.querySelector(".deck-stack .fcard");
+  if (!slot || !deckEl) return openLanding();
   const a = slot.getBoundingClientRect();
-  if (!a.width) return;
-  const dest = document.querySelector(".t-seats .fcard.just") || document.querySelector(".t-seats .fcard.dup");
-  const b = dest ? dest.getBoundingClientRect() : null;
-  if (dest) dest.style.visibility = "hidden";
+  const m = deckEl.getBoundingClientRect();
+  if (!a.width) return openLanding();
+  // la destinazione e' collassata: la si apre un attimo (senza dipingere)
+  // solo per misurare dove atterrera' la carta
+  const dest = document.querySelector(".t-seats .fcard.landing");
+  let b = null;
+  if (dest) {
+    dest.style.transition = "none";
+    dest.classList.remove("landing");
+    b = dest.getBoundingClientRect();
+    dest.classList.add("landing");
+    void dest.offsetWidth;
+    dest.style.transition = "";
+  }
 
+  // parte DAL mazzo, di dorso
   const fly = document.createElement("div");
   fly.className = "fly-card";
-  fly.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;perspective:700px;`;
+  fly.style.cssText = `position:fixed;left:${m.left}px;top:${m.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;perspective:700px;`;
   fly.innerHTML = `
-    <div class="fly-inner" style="position:relative;width:100%;height:100%;transform-style:preserve-3d;">
+    <div class="fly-inner" style="position:relative;width:100%;height:100%;transform-style:preserve-3d;transform:rotateY(180deg);">
       <div style="position:absolute;inset:0;backface-visibility:hidden;">${miniCard(card, "drawn")}</div>
       <div style="position:absolute;inset:0;backface-visibility:hidden;transform:rotateY(180deg);">${cardBack()}</div>
     </div>`;
   document.body.appendChild(fly);
 
-  const inner = fly.firstElementChild;
-  inner.animate([{ transform: "rotateY(180deg)" }, { transform: "rotateY(0deg)" }],
-    { duration: 900, easing: "ease-out", fill: "forwards" });
+  const toSlot = `translate(${a.left - m.left}px,${a.top - m.top}px)`;
+  // 1) scivola dritta dal mazzo alla zona di destra, ancora coperta
+  fly.animate([{ transform: "translate(0,0)" }, { transform: toSlot }],
+    { duration: 500, easing: "ease-out", fill: "forwards" });
+  // 2) li' si gira sull'altro lato
+  fly.firstElementChild.animate([{ transform: "rotateY(180deg)" }, { transform: "rotateY(0deg)" }],
+    { duration: 800, delay: 500, easing: "ease-out", fill: "forwards" });
 
-  const finish = () => {
-    fly.remove();
-    const d = document.querySelector(".t-seats .fcard.just") || document.querySelector(".t-seats .fcard.dup");
-    if (d) d.style.visibility = "";
-  };
+  const finish = () => { fly.remove(); openLanding(); };
   if (b) {
+    // 3) e vola nella mano di chi l'ha pescata; lo spazio nella fila si apre
+    //    in modo fluido proprio mentre la carta sta planando
     fly.animate([
-      { transform: "translate(0,0) scale(1)", opacity: 1 },
-      { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})`, opacity: 1 }
-    ], { duration: 1100, delay: 1050, easing: "cubic-bezier(.35,.7,.3,1)", fill: "forwards" }).onfinish = finish;
+      { transform: `${toSlot} scale(1)` },
+      { transform: `translate(${b.left - m.left}px,${b.top - m.top}px) scale(${b.width / a.width})` }
+    ], { duration: 1000, delay: 1450, easing: "cubic-bezier(.35,.7,.3,1)", fill: "forwards" }).onfinish = finish;
+    setTimeout(openLanding, 2150);
   } else {
     // nessuna destinazione (es. azione risolta al volo): la carta svanisce li'
     fly.animate([{ opacity: 1 }, { opacity: 0 }],
-      { duration: 500, delay: 1300, fill: "forwards" }).onfinish = finish;
+      { duration: 500, delay: 1600, fill: "forwards" }).onfinish = finish;
   }
-  // rete di sicurezza: mai lasciare in giro carte volanti o mani nascoste
-  setTimeout(finish, 2800);
+  // rete di sicurezza: mai lasciare in giro carte volanti o file collassate
+  setTimeout(finish, 3200);
 }
 
 // --- intro / lobby -----------------------------------------------------------
@@ -254,9 +275,7 @@ function bankRow(g) {
     <div class="bank">
       <div class="bank-slot">
         <span class="deck-stack">${cardBack()}<b class="deck-count">${g.deck.length}</b></span>
-        <small>${g.deck.length <= 3
-          ? `agli sgoccioli: si rimescolano gli scarti (${g.discard.length}) da soli`
-          : `carte nel mazzo${g.discard.length ? ` · ${g.discard.length} scartate` : ""}`}</small>
+        <small>carte nel mazzo${g.discard.length ? ` · ${g.discard.length} scartate` : ""}</small>
       </div>
       <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
       <div class="bank-slot">
@@ -281,7 +300,8 @@ function renderSeatRow(g, sid, ctx) {
   // se era il doppione dello sballo, l'evidenza ce l'ha gia' il doppione rosso
   let just = g.lastDraw && g.lastDraw.seat === sid ? g.lastDraw.card : null;
   if (h.out === "bust" && just === "n" + h.bustCard) just = null;
-  const cls = (card) => (card === just ? "mini just" : "mini");
+  const justCls = "mini just" + (animPending ? " landing" : "");
+  const cls = (card) => (card === just ? justCls : "mini");
   // due file: sopra azioni e modificatori, sotto tutti i numeri
   const specials = [
     ...(h.x2 ? [miniCard("x2", cls("x2"))] : []),
@@ -291,12 +311,12 @@ function renderSeatRow(g, sid, ctx) {
   // chi e' stato congelato mostra la carta Congela ricevuta
   if (h.out === "frozen") specials.push(miniCard("frz"));
   // la carta azione appena pescata resta in mano finche' non viene assegnata
-  if (g.pending && g.pending.chooser === sid) specials.push(miniCard(g.pending.type, "mini just"));
+  if (g.pending && g.pending.chooser === sid) specials.push(miniCard(g.pending.type, justCls));
   const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n)));
   if (h.out === "flip7") nums.push(flip7Card({ size: "mini" }));
   // il doppione che ha sballato resta in vista, marcato in rosso
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
-    nums.push(miniCard("n" + h.bustCard, "mini dup"));
+    nums.push(miniCard("n" + h.bustCard, "mini dup" + (animPending && g.lastDraw && g.lastDraw.seat === sid ? " landing" : "")));
   }
   const state = h.out ? `<i class="seat-state s-${h.out}">${OUT_LABEL[h.out]}</i>`
     : isChoosing ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "scegli tu" : "sta scegliendo"}</i>`
