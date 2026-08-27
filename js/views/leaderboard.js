@@ -6,7 +6,7 @@ import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { icon, crownEmblem } from "../icons.js";
 import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, PERIODS, historyList } from "../stats.js";
 
-const localState = { period: "all", sort: "crowns", dir: -1, trendMetric: "rank" };
+const localState = { period: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
 
 const COLUMNS = [
   { key: "crowns", label: "crown", icon: "crownFill" },
@@ -52,10 +52,14 @@ function renderTrend(room, me) {
   const byRank = localState.trendMetric !== "avg";
   const padL = byRank ? 30 : 40;
   const padR = 42, padT = 14, padB = 12;
-  const stepW = Math.max(steps.length > 40 ? 16 : steps.length > 20 ? 26 : 40,
-    Math.min(64, Math.floor(280 / (steps.length - 1))));
+  // larghezza reale della card (vista max 660px meno i padding): con poche
+  // partite il grafico la riempie tutta, con tante si allarga oltre e scorre
+  const vpw = document.documentElement.clientWidth || 360;
+  const avail = Math.max(280, Math.min(660, vpw) - (vpw >= 700 ? 70 : 58));
+  const minStep = steps.length > 40 ? 14 : steps.length > 20 ? 22 : 34;
+  const stepW = Math.max(minStep, (avail - padL - padR) / (steps.length - 1));
   const plotW = (steps.length - 1) * stepW;
-  const w = padL + plotW + padR;
+  const w = Math.round(padL + plotW + padR);
 
   const n = series.length;
   const plotH = byRank ? Math.max(1, n - 1) * (n > 8 ? 30 : 38) : 150;
@@ -92,8 +96,12 @@ function renderTrend(room, me) {
   for (let i = 1; i < ends.length; i++) {
     if (ends[i].end - ends[i - 1].end < 23) ends[i].end = ends[i - 1].end + 23;
   }
-  const totH = Math.max(h, ends.length ? ends[ends.length - 1].end + 13 : h);
-  const avaX = x(steps.length - 1) + 19;
+  const totH = Math.round(Math.max(h, ends.length ? ends[ends.length - 1].end + 13 : h));
+  const avaX = (x(steps.length - 1) + 19).toFixed(1);
+  const sel = Number.isInteger(localState.trendSel) && localState.trendSel < steps.length ? localState.trendSel : null;
+  // colonne cliccabili: ognuna copre mezza distanza dai vicini
+  const hitX = (i) => (i === 0 ? 0 : (x(i - 1) + x(i)) / 2);
+  const hitR = (i) => (i === steps.length - 1 ? w : (x(i) + x(i + 1)) / 2);
 
   return `
     <section class="card">
@@ -110,6 +118,7 @@ function renderTrend(room, me) {
           ${grid.map((g) => `
             <line class="grid" x1="${padL - 4}" y1="${g.y.toFixed(1)}" x2="${(padL + plotW + 4).toFixed(1)}" y2="${g.y.toFixed(1)}"/>
             <text x="${padL - 8}" y="${g.y.toFixed(1)}">${g.label}</text>`).join("")}
+          ${sel !== null ? `<line class="sel-line" x1="${x(sel).toFixed(1)}" y1="${padT - 8}" x2="${x(sel).toFixed(1)}" y2="${padT + plotH + 8}"/>` : ""}
           ${lines.map((p) => `
             <polyline class="${p.playerId === me ? "me" : ""}" stroke="${p.color}"
               points="${p.pts.map(([px, py]) => px.toFixed(1) + "," + py.toFixed(1)).join(" ")}"/>`).join("")}
@@ -123,10 +132,26 @@ function renderTrend(room, me) {
               <text class="ava" x="${avaX}" y="${p.end.toFixed(1)}">${esc(initials(p.name))}</text>
             </g>`;
           }).join("")}
+          ${sel !== null ? lines.map((p) => {
+            const v = steps[sel].snap[p.playerId];
+            return v ? `<circle class="pt" cx="${x(sel).toFixed(1)}" cy="${y(byRank ? v.rank : v.avg).toFixed(1)}" r="4.5" fill="${p.color}"/>` : "";
+          }).join("") : ""}
+          ${steps.map((s, i) => `<rect class="hit" data-action="trend-point" data-i="${i}"
+            x="${hitX(i).toFixed(1)}" y="0" width="${(hitR(i) - hitX(i)).toFixed(1)}" height="${totH}"/>`).join("")}
         </svg>
       </div></div>
-      <p class="chart-note">${byRank ? "posizione in classifica" : "media punti"} dopo ogni partita · dalla più vecchia alla più recente</p>
+      <p class="chart-note">${sel !== null ? trendCaption(steps[sel], series, byRank) : `${byRank ? "posizione in classifica" : "media punti"} dopo ogni partita · tocca una colonna per i dettagli`}</p>
     </section>`;
+}
+
+/** Didascalia della partita selezionata sul grafico. */
+function trendCaption(step, series, byRank) {
+  const rows = series
+    .map((p) => ({ name: p.name, v: step.snap[p.playerId] }))
+    .filter((r) => r.v)
+    .sort((a, b) => (byRank ? a.v.rank - b.v.rank : b.v.avg - a.v.avg))
+    .map((r) => (byRank ? `${r.v.rank}º ${esc(r.name)}` : `${esc(r.name)} ${fmtNum(r.v.avg, 1)}`));
+  return `<b>${fmtDate(step.playedAt)}</b> · ${rows.join(" · ")}`;
 }
 
 export const leaderboardView = {
@@ -199,7 +224,18 @@ export const leaderboardView = {
       if (localState.sort === k) localState.dir = -localState.dir;
       else { localState.sort = k; localState.dir = -1; }
     },
-    "trend-metric"(ctx, el) { localState.trendMetric = el.dataset.m; },
+    "trend-metric"(ctx, el) { localState.trendMetric = el.dataset.m; localState.trendSel = null; },
+    "trend-point"(ctx, el) {
+      const box = document.querySelector(".chart-scroll.from-end");
+      const left = box ? box.scrollLeft : 0;
+      const i = Number(el.dataset.i);
+      localState.trendSel = localState.trendSel === i ? null : i;
+      // il redraw azzererebbe lo scroll del grafico: lo rimetto dov'era
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const nb = document.querySelector(".chart-scroll.from-end");
+        if (nb) nb.scrollLeft = left;
+      }));
+    },
     "goto-history"() { location.hash = "#storico"; },
     "lb-detail"(ctx, el) {
       const pid = el.dataset.id;
@@ -218,7 +254,7 @@ export const leaderboardView = {
   },
 
   changes: {
-    "lb-period"(ctx, el) { localState.period = el.value; }
+    "lb-period"(ctx, el) { localState.period = el.value; localState.trendSel = null; }
   }
 };
 
