@@ -650,6 +650,11 @@ table.rounds td.tot { font-weight: 800; }
   max-width: 660px; margin: 0 auto;
 }
 @keyframes slideup { from { transform: translateY(24px); } }
+.sheet.full {
+  top: 0; max-height: none; height: 100dvh;
+  border-radius: 0; border-top: 0;
+  padding-top: calc(12px + var(--safe-t));
+}
 .sheet-grab {
   width: 42px; height: 5px; border-radius: 99px; border: 0;
   background: var(--line-strong); align-self: center; margin: 0 0 2px; padding: 0;
@@ -685,11 +690,11 @@ table.rounds td.tot { font-weight: 800; }
   border-radius: 14px; padding: 14px;
   background: var(--surface);
   display: grid; justify-items: center; gap: 6px;
-  min-height: 92px; align-content: center;
+  min-height: 118px; align-content: center;
 }
 .score-display.flip7 { background: var(--holo-soft); }
 .score-display.bust { background: var(--surface-2); }
-.sd-value { font-size: 44px; font-weight: 600; line-height: 1; letter-spacing: -.02em; animation: bump .18s ease-out; }
+.sd-value { font-size: 48px; font-weight: 600; line-height: 1; letter-spacing: -.02em; animation: bump .18s ease-out; }
 @keyframes bump { from { transform: scale(.9); } }
 .flip7-badge {
   position: absolute; top: 9px; right: 9px;
@@ -704,7 +709,9 @@ table.rounds td.tot { font-weight: 800; }
 .score-display.bust .sd-value { color: var(--red); }
 .score-display.flip7 .sd-value { color: var(--gold); }
 .sd-note { font-size: 13px; color: var(--muted); height: 18px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 2px; height: 44px; align-items: center; max-width: 100%; overflow-x: auto; padding: 0 2px; }
+.sd-running { font-size: 13px; color: var(--muted); }
+.sd-running b { font-family: var(--font-display); font-size: 15px; color: var(--green); }
+.sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 4px; height: 52px; align-items: center; max-width: 100%; overflow-x: auto; padding: 0 2px; }
 .hand-void { display: inline-flex; gap: 6px; filter: grayscale(1) opacity(.4); }
 .void-flag {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-5deg);

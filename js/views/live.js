@@ -347,7 +347,7 @@ function openScoreSheet(room, live, startPid) {
   const order = boardOrder(live);
   const r = live.round || 0;
   const pid = startPid || missingIds(live)[0] || order[0];
-  openSheet(buildSheetState(room, live, order, r, pid), renderScoreSheet, patchCalcSheet);
+  openSheet(buildSheetState(room, live, order, r, pid), renderScoreSheet, patchCalcSheet, { full: true });
 }
 
 function buildSheetState(room, live, order, roundIndex, pid) {
@@ -356,6 +356,7 @@ function buildSheetState(room, live, order, roundIndex, pid) {
     ? { ...emptyEntry(), ...existing, numbers: [...(existing.numbers || [])], plus: [...(existing.plus || [])] }
     : emptyEntry();
   if (existing && existing.manual !== null && existing.manual !== undefined) localState.mode = "keypad";
+  const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
   return {
     type: "score",
     order,
@@ -363,7 +364,9 @@ function buildSheetState(room, live, order, roundIndex, pid) {
     pos: order.indexOf(pid),
     playerId: pid,
     playerName: nameOf(room, live, pid),
-    total: (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0,
+    // totale partita PRIMA di questo round: cosi' sommando l'entry in corso
+    // si vede in diretta dove arriverebbe il giocatore
+    baseTotal: fullTotal - (existing ? computeRound(existing).total : 0),
     entry
   };
 }
@@ -405,7 +408,7 @@ export function renderScoreSheet(s) {
         <span class="avatar sm" style="background:${colorOf(s.playerName)}">${initials(s.playerName)}</span>
         <div>
           <div class="nav-name">${esc(s.playerName)}</div>
-          <div class="nav-sub">${s.pos + 1} di ${s.order.length} · totale ${s.total}</div>
+          <div class="nav-sub">giocatore ${s.pos + 1} di ${s.order.length}</div>
         </div>
         ${roundCard(s.roundIndex + 1)}
       </div>
@@ -417,6 +420,7 @@ export function renderScoreSheet(s) {
       <div class="flip7-badge" ${r.flip7 ? "" : 'style="display:none"'}>${wordmark()}<span>+15</span></div>
       <div class="sd-value">${e.busted ? "0" : r.total}</div>
       <div class="sd-note">${esc(noteOf(e, r, isKeypad))}</div>
+      <div class="sd-running">totale partita <b>${s.baseTotal + (e.busted ? 0 : r.total)}</b></div>
       ${!isKeypad ? `<div class="sd-hand">${buildHand(e, r)}</div>` : ""}
     </div>
 
@@ -495,6 +499,8 @@ function patchCalcSheet(s) {
   if (count) count.textContent = `${(e.numbers || []).length}/7`;
   const hand = root.querySelector(".sd-hand");
   if (hand) hand.innerHTML = buildHand(e, r);
+  const running = root.querySelector(".sd-running b");
+  if (running) running.textContent = s.baseTotal + (e.busted ? 0 : r.total);
 
   const q7 = root.querySelector('[data-action="calc-flip7"]');
   if (q7) q7.className = "quick " + (e.flip7 ? "on gold" : "");

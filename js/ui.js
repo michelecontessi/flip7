@@ -99,10 +99,11 @@ export const sheet = { state: null, render: null, patch: null };
  * `patchFn` (facoltativa) aggiorna il pannello sul posto invece di ridisegnarlo:
  * niente sfarfallio quando si tocca una carta o si digita.
  */
-export function openSheet(state, renderFn, patchFn = null) {
+export function openSheet(state, renderFn, patchFn = null, opts = {}) {
   sheet.state = state;
   sheet.render = renderFn;
   sheet.patch = patchFn;
+  sheet.full = Boolean(opts.full);
   drawSheet();
 }
 export function closeSheet() {
@@ -121,7 +122,7 @@ export function drawSheet() {
     return;
   }
   root.innerHTML = `<div class="sheet-backdrop" data-action="sheet-close"></div>
-    <div class="sheet"><button class="sheet-grab" data-action="sheet-close" aria-label="Chiudi"></button>${sheet.render(sheet.state)}</div>`;
+    <div class="sheet ${sheet.full ? "full" : ""}">${sheet.full ? "" : '<button class="sheet-grab" data-action="sheet-close" aria-label="Chiudi"></button>'}${sheet.render(sheet.state)}</div>`;
   root.classList.add("open");
   document.body.classList.add("sheet-open");
 }
