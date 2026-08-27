@@ -1,24 +1,14 @@
 {
-  "_commento": [
-    "Sostituisci OWNER_UID con l'ID del tuo dispositivo (te lo mostra l'app).",
-    "Puoi metterne piu' di uno separandoli con || , es:",
-    "  auth.uid === 'abc' || auth.uid === 'def'",
-    "cosi' sei proprietario sia da telefono che da computer.",
-    "Solo il proprietario puo' approvare o revocare i membri.",
-    "Solo i membri approvati possono leggere la stanza e scrivere i punti."
-  ],
   "rules": {
     "rooms": {
       "$roomId": {
         ".read": "auth != null && (auth.uid === 'OWNER_UID' || root.child('rooms/' + $roomId + '/members/' + auth.uid).exists())",
-
         "members": {
           ".write": "auth != null && auth.uid === 'OWNER_UID'",
           "$uid": {
             ".read": "auth != null && auth.uid === $uid"
           }
         },
-
         "requests": {
           ".write": "auth != null && auth.uid === 'OWNER_UID'",
           "$uid": {
@@ -27,23 +17,27 @@
             ".validate": "!newData.exists() || (newData.hasChildren(['name', 'at']) && newData.child('name').isString() && newData.child('name').val().length <= 40)"
           }
         },
-
-        "meta":    { ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()" },
-        "players": { ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()" },
-        "history": { ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()" },
-        "control": { ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()" },
-
+        "meta": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+        },
+        "players": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+        },
+        "history": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+        },
+        "control": {
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+        },
         "bindings": {
           "$uid": {
             ".write": "auth != null && ((auth.uid === $uid && !data.exists()) || auth.uid === 'OWNER_UID')",
             ".validate": "newData.isString() && newData.val().length < 60"
           }
         },
-
         "game": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
         },
-
         "live": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists() && (!root.child('rooms/' + $roomId + '/control/uid').exists() || root.child('rooms/' + $roomId + '/control/uid').val() === auth.uid)"
         }
