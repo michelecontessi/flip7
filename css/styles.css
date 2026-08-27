@@ -427,7 +427,12 @@ select {
 .round-word { font-family: var(--font-display); font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
 .fcard.round-card { width: 40px; flex: none; }
 .sheet-nav .fcard.round-card { width: 34px; }
-.round-meta { font-size: 12px; color: var(--muted); line-height: 1.3; min-width: 0; }
+.round-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  text-align: right; font-size: 12px; color: var(--muted); line-height: 1.3; min-width: 0;
+}
+.round-meta b { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.round-meta b.done-note { color: var(--green); }
 
 .board-cols, .brow { display: grid; grid-template-columns: 20px 1fr 72px 54px; align-items: center; gap: 8px; }
 .board-cols { font-size: 12px; color: var(--dim); padding: 6px 6px 4px 10px; border-bottom: 1px solid var(--line); }
@@ -1086,6 +1091,28 @@ table.rounds td.tot { font-weight: 800; }
 
 .chart-note { font-size: 11.5px; color: var(--dim); text-align: center; }
 
+/* ---------- andamento classifica ---------- */
+/* il contenitore parte gia' scrollato sulle partite piu' recenti (trucco rtl) */
+.chart-scroll.from-end { direction: rtl; }
+.chart-scroll.from-end > div { direction: ltr; width: max-content; min-width: 100%; }
+.trend-svg { display: block; }
+.trend-svg line.grid { stroke: var(--line-strong); }
+.trend-svg line.lead { stroke-width: 1.5; opacity: .45; stroke-dasharray: 2 3; }
+.trend-svg text {
+  font-family: var(--font-display); font-size: 10px; font-weight: 600;
+  fill: var(--dim); text-anchor: end; dominant-baseline: central;
+  font-variant-numeric: tabular-nums;
+}
+.trend-svg polyline {
+  fill: none; stroke-width: 2.5; opacity: .85;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+.trend-svg polyline.me { stroke-width: 4; opacity: 1; }
+.trend-svg text.ava {
+  font-family: var(--font-body); font-size: 9px; font-weight: 800;
+  fill: rgba(0,0,0,.62); text-anchor: middle;
+}
+
 /* ---------- toast ---------- */
 #toast-root { position: fixed; left: 0; right: 0; bottom: calc(92px + var(--safe-b)); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .toast {
@@ -1104,6 +1131,8 @@ table.rounds td.tot { font-weight: 800; }
   #view { padding: 20px 20px 120px; gap: 14px; }
   .you-score > b { font-size: 64px; }
   .numgrid { grid-template-columns: repeat(13, 1fr); }
+  /* stessa taglia delle carte numero: senza, i modificatori vengono giganti */
+  .modgrid { grid-template-columns: repeat(13, 1fr); }
   .sd-hand .fcard { width: 42px; }
   .fcard b { font-size: 19px; }
   .board-cols, .brow { grid-template-columns: 24px 1fr 86px 68px; }

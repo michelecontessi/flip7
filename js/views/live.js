@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, initials, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, shareRoom, sheet, fmtDate } from "../ui.js";
+import { esc, initials, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card } from "../icons.js";
 import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry } from "../scoring.js";
 import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed } from "../stats.js";
@@ -40,7 +40,6 @@ function renderIdle(room, me) {
     localState.selected = new Set(prefs.get("lastLineup", []).filter((id) => room.players[id] && !room.players[id].archived));
   }
   const target = localState.target ?? (room.meta.targetScore || 200);
-  const last = Object.entries(room.history || {}).sort((a, b) => (b[1].playedAt || 0) - (a[1].playedAt || 0))[0];
 
   if (!isSK) {
     return `
@@ -49,16 +48,14 @@ function renderIdle(room, me) {
         ${fanArt()}
         <h2 class="empty-title">Nessuna partita in corso</h2>
         <p class="muted">Il tabellone comparirà qui appena il segnapunti la avvia.</p>
-      </section>
-      ${last ? renderRecapCard(last[1]) : ""}`;
+      </section>`;
   }
-
-  const lineup = [...localState.selected].map((id) => room.players[id] && room.players[id].name).filter(Boolean);
 
   return `
     ${whoAmIBanner(room, me)}
     <section class="card">
-      <h2 class="section-title">Nuova partita</h2>
+      <div class="card-head">${icon("cards")}<span class="card-title">Nuova partita</span>
+        <span class="count-pill ml-auto">${localState.selected.size}</span></div>
       <div class="pgrid">
         ${list.map(([id, p]) => `
           <button class="pg ${localState.selected.has(id) ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">
@@ -80,28 +77,8 @@ function renderIdle(room, me) {
       </label>
 
       <button class="btn primary big" data-action="start-game" ${localState.selected.size < 2 ? "disabled" : ""}>
-        ${localState.selected.size < 2 ? "Scegli almeno 2 giocatori" : `Inizia partita · ${lineup.length} giocatori`}
+        ${localState.selected.size < 2 ? "Scegli almeno 2 giocatori" : `Inizia partita · ${localState.selected.size} giocatori`}
       </button>
-    </section>
-    ${last ? renderRecapCard(last[1]) : ""}`;
-}
-
-function renderRecapCard(game) {
-  const rows = Object.entries(game.results || {}).sort((a, b) => b[1].total - a[1].total);
-  return `
-    <section class="card">
-      <div class="card-head">
-        <h2 class="section-title">Ultima partita</h2>
-        <span class="muted small ml-auto">${fmtDate(game.playedAt)}</span>
-      </div>
-      <ul class="mini-list">
-        ${rows.map(([id, r]) => `
-          <li>
-            <span class="mini-name">${game.winnerIds && game.winnerIds[id] ? icon("crownFill", "gold tiny") : `<i class="dot-empty"></i>`}${esc(r.name)}</span>
-            <b>${r.total}</b>
-          </li>`).join("")}
-      </ul>
-      <button class="btn" data-action="replay-last" data-id="${game.id || ""}">Rigioca con gli stessi</button>
     </section>`;
 }
 
@@ -215,13 +192,12 @@ function renderBoard(room, live, standings, me, { editable }) {
           <span class="round-word">Round</span>
           ${roundCard(r + 1)}
         </span>
-        <span class="round-meta">${finished
-          ? "partita chiusa"
-          : missing.length
-            ? `${ids.length - missing.length} di ${ids.length} segnati<br>si vince a ${target}`
-            : `<b class="done-note">round completo ✓</b><br>si vince a ${target}`}</span>
         ${!editable && !finished ? `<span class="live-pill"><i></i>LIVE</span>` : ""}
-        <button class="ghost-btn ml-auto" data-action="share-room">${icon("link", "tiny")} Invita</button>
+        <span class="round-meta ml-auto">${finished
+          ? `<b>partita chiusa</b>`
+          : missing.length
+            ? `<b>${ids.length - missing.length} di ${ids.length} segnati</b><span>si vince a ${target}</span>`
+            : `<b class="done-note">round completo</b><span>si vince a ${target}</span>`}</span>
       </div>
 
       <div class="board-cols"><span></span><span>Giocatore</span><span>Round</span><span>Totale</span></div>
@@ -593,18 +569,6 @@ export const liveView = {
       await store.startGame(ids, localState.target ?? ctx.room.meta.targetScore);
       prefs.set("lastLineup", ids);
     },
-    async "replay-last"(ctx, el) {
-      const game = ctx.room.history[el.dataset.id];
-      if (!game) return;
-      const ids = Object.keys(game.results || {}).filter((id) => ctx.room.players[id]);
-      if (ids.length < 2) return toast("Alcuni giocatori non ci sono più", "warn");
-      if (!store.isScorekeeper()) {
-        const mine = ctx.me && ctx.room.players[ctx.me] ? ctx.room.players[ctx.me].name : "Segnapunti";
-        await store.claimScorekeeper(mine);
-      }
-      await store.startGame(ids, ctx.room.meta.targetScore);
-      prefs.set("lastLineup", ids);
-    },
     "toggle-rounds"() { localState.showRounds = !localState.showRounds; },
 
     async "sk-claim"(ctx) {
@@ -745,8 +709,7 @@ export const liveView = {
       const choices = boardOrder(live).map((pid) => ({ id: pid, label: nameOf(ctx.room, live, pid) }));
       const pick = await askChoice("Chi ha vinto?", choices);
       if (pick) await store.setWinner(pick);
-    },
-    "share-room"() { return shareRoom(); }
+    }
   },
 
   changes: {

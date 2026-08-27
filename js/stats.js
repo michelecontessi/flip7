@@ -185,6 +185,48 @@ export function leaderboard(history, players, opts = {}) {
 }
 
 /**
+ * Andamento della classifica nel tempo: dopo ogni partita ricalcola posizione
+ * e media punti di ognuno, con gli stessi spareggi della classifica vera.
+ * Ritorna { steps, series }: steps[i].snap[pid] = { rank, avg } dopo la
+ * partita i; series elenca i giocatori con il nome aggiornato dal roster.
+ */
+export function leaderboardTrend(history, players, opts = {}) {
+  const since = (PERIODS[opts.period] || PERIODS.all).since();
+  const games = Object.entries(history || {})
+    .map(([id, g]) => ({ id, ...g }))
+    .filter((g) => (g.playedAt || 0) >= since)
+    .sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
+
+  const acc = new Map();
+  const steps = [];
+  for (const game of games) {
+    const winners = game.winnerIds || {};
+    for (const [pid, res] of Object.entries(game.results || {})) {
+      let e = acc.get(pid);
+      if (!e) {
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0 };
+        acc.set(pid, e);
+      }
+      e.name = res.name || e.name;
+      e.games += 1;
+      e.points += Number(res.total) || 0;
+      e.best = Math.max(e.best, Number(res.total) || 0);
+      if (winners[pid]) e.crowns += 1;
+    }
+    const rows = [...acc.values()].map((e) => ({ ...e, avg: e.games ? e.points / e.games : 0 }));
+    const snap = {};
+    sortLeaderboard(rows).forEach((r, i) => { snap[r.playerId] = { rank: i + 1, avg: r.avg }; });
+    steps.push({ playedAt: game.playedAt || 0, snap });
+  }
+
+  const series = [...acc.values()].map((e) => ({
+    playerId: e.playerId,
+    name: (players && players[e.playerId] && players[e.playerId].name) || e.name
+  }));
+  return { steps, series };
+}
+
+/**
  * Statistiche "da raccontare" di un giocatore, calcolate sulle sue partite
  * (ordinate dalla piu' recente, come le restituisce historyList).
  */

@@ -5,7 +5,8 @@
       "name": "flip7",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],
-      "port": 4173
+      "port": 4173,
+      "autoPort": true
     }
   ]
 }

@@ -24,21 +24,6 @@ export const setupView = {
 
     return `
       <section class="card">
-        <div class="card-head">${icon("user")}<span class="card-title">Io sono</span></div>
-        <div class="pgrid">
-          ${players.filter(([, p]) => !p.archived).map(([id, p]) => `
-            <button class="pg ${me === id ? "on" : ""}" data-action="set-me" data-id="${id}">
-              <span class="pg-ava" style="--pc:${colorOf(p.name)}">
-                <span class="avatar lg" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
-                <i class="pg-check">${icon("check", "tiny")}</i>
-              </span>
-              <span class="pg-name">${esc(p.name)}</span>
-            </button>`).join("") || `<span class="muted small">Aggiungi prima un giocatore</span>`}
-        </div>
-        ${me ? `<button class="ghost-btn" data-action="clear-me">${icon("close", "tiny")} non sono nessuno di questi</button>` : ""}
-      </section>
-
-      <section class="card">
         <div class="card-head">${icon("cards")}<span class="card-title">Giocatori</span>
           <span class="count-pill ml-auto">${visible.length}</span></div>
         <form class="add-row" data-submit="add-player">
@@ -109,6 +94,7 @@ export const setupView = {
         <div class="card-head">${icon("user")}<span class="card-title">Account</span></div>
         <div class="kv"><span>Accesso come</span><b>${esc(status.user.name)}</b></div>
         ${status.user.email ? `<div class="kv"><span>Email</span><span class="mono">${esc(status.user.email)}</span></div>` : ""}
+        ${me && room.players[me] ? `<div class="kv"><span>Giochi come</span><b>${esc(room.players[me].name)}</b></div>` : ""}
         <button class="btn ghost small" data-action="google-signout">Esci dall'account</button>
       </section>` : ""}
 
@@ -161,8 +147,6 @@ export const setupView = {
   },
 
   actions: {
-    "set-me"(ctx, el) { prefs.set("me", el.dataset.id); toast("Impostato"); },
-    "clear-me"() { prefs.set("me", null); },
     "toggle-archived"() { localState.showArchived = !localState.showArchived; },
 
     async "rename-player"(ctx, el) {

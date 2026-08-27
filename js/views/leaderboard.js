@@ -4,9 +4,9 @@
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { icon, crownEmblem } from "../icons.js";
-import { leaderboard, sortLeaderboard, playerHighlights, PERIODS, historyList } from "../stats.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, PERIODS, historyList } from "../stats.js";
 
-const localState = { period: "all", sort: "crowns", dir: -1 };
+const localState = { period: "all", sort: "crowns", dir: -1, trendMetric: "rank" };
 
 const COLUMNS = [
   { key: "crowns", label: "crown", icon: "crownFill" },
@@ -38,6 +38,94 @@ function crownHero(row, gamesCount) {
         ${esc(row.name)}
       </div>
       <div class="ch-sub">${row.crowns} vittorie su ${gamesCount} partite · media ${fmtNum(row.avg, 1)}</div>
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// Andamento nel tempo: una linea per giocatore (posizione in classifica o
+// media punti dopo ogni partita), con l'avatar sul punto piu' recente.
+// ---------------------------------------------------------------------------
+function renderTrend(room, me) {
+  const { steps, series } = leaderboardTrend(room.history, room.players, { period: localState.period });
+  if (steps.length < 2 || series.length < 2) return "";
+
+  const byRank = localState.trendMetric !== "avg";
+  const padL = byRank ? 30 : 40;
+  const padR = 42, padT = 14, padB = 12;
+  const stepW = Math.max(steps.length > 40 ? 16 : steps.length > 20 ? 26 : 40,
+    Math.min(64, Math.floor(280 / (steps.length - 1))));
+  const plotW = (steps.length - 1) * stepW;
+  const w = padL + plotW + padR;
+
+  const n = series.length;
+  const plotH = byRank ? Math.max(1, n - 1) * (n > 8 ? 30 : 38) : 150;
+  const h = padT + plotH + padB;
+  const x = (i) => padL + i * stepW;
+
+  // scala della media ancorata ai valori reali, non allo zero
+  let hi = 10, lo = 0;
+  if (!byRank) {
+    let max = 0, min = Infinity;
+    for (const s of steps) for (const v of Object.values(s.snap)) { max = Math.max(max, v.avg); min = Math.min(min, v.avg); }
+    hi = Math.max(10, Math.ceil(max / 10) * 10);
+    lo = Math.max(0, Math.min(Math.floor(min / 10) * 10, hi - 10));
+  }
+  const y = (v) => byRank
+    ? padT + (n === 1 ? plotH / 2 : ((v - 1) / (n - 1)) * plotH)
+    : padT + (1 - (v - lo) / (hi - lo)) * plotH;
+
+  const grid = byRank
+    ? Array.from({ length: n }, (_, i) => ({ y: y(i + 1), label: (i + 1) + "º" }))
+    : [hi, (hi + lo) / 2, lo].map((v) => ({ y: y(v), label: String(Math.round(v)) }));
+
+  const lines = series.map((p) => {
+    const pts = [];
+    steps.forEach((s, i) => {
+      const v = s.snap[p.playerId];
+      if (v) pts.push([x(i), y(byRank ? v.rank : v.avg)]);
+    });
+    return { ...p, pts, end: pts.length ? pts[pts.length - 1][1] : null, color: colorOf(p.name) };
+  }).filter((p) => p.pts.length);
+
+  // in modalita' media gli avatar finali possono sovrapporsi: li distanzio
+  const ends = [...lines].sort((a, b) => a.end - b.end);
+  for (let i = 1; i < ends.length; i++) {
+    if (ends[i].end - ends[i - 1].end < 23) ends[i].end = ends[i - 1].end + 23;
+  }
+  const totH = Math.max(h, ends.length ? ends[ends.length - 1].end + 13 : h);
+  const avaX = x(steps.length - 1) + 19;
+
+  return `
+    <section class="card">
+      <div class="card-head">
+        <h2 class="section-title">Andamento</h2>
+        <span class="muted small ml-auto">${steps.length} partite</span>
+      </div>
+      <div class="mode-switch">
+        <button class="${byRank ? "on" : ""}" data-action="trend-metric" data-m="rank">Posizione</button>
+        <button class="${!byRank ? "on" : ""}" data-action="trend-metric" data-m="avg">Media punti</button>
+      </div>
+      <div class="chart-scroll from-end"><div>
+        <svg class="trend-svg" width="${w}" height="${totH}" viewBox="0 0 ${w} ${totH}">
+          ${grid.map((g) => `
+            <line class="grid" x1="${padL - 4}" y1="${g.y.toFixed(1)}" x2="${(padL + plotW + 4).toFixed(1)}" y2="${g.y.toFixed(1)}"/>
+            <text x="${padL - 8}" y="${g.y.toFixed(1)}">${g.label}</text>`).join("")}
+          ${lines.map((p) => `
+            <polyline class="${p.playerId === me ? "me" : ""}" stroke="${p.color}"
+              points="${p.pts.map(([px, py]) => px.toFixed(1) + "," + py.toFixed(1)).join(" ")}"/>`).join("")}
+          ${ends.map((p) => {
+            const [lx, ly] = p.pts[p.pts.length - 1];
+            return `
+            <g>
+              <title>${esc(p.name)}</title>
+              ${Math.abs(p.end - ly) > 1 ? `<line class="lead" x1="${lx.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${(avaX - 11).toFixed(1)}" y2="${p.end.toFixed(1)}" stroke="${p.color}"/>` : ""}
+              <circle cx="${avaX}" cy="${p.end.toFixed(1)}" r="11" fill="${p.color}"/>
+              <text class="ava" x="${avaX}" y="${p.end.toFixed(1)}">${esc(initials(p.name))}</text>
+            </g>`;
+          }).join("")}
+        </svg>
+      </div></div>
+      <p class="chart-note">${byRank ? "posizione in classifica" : "media punti"} dopo ogni partita · dalla più vecchia alla più recente</p>
     </section>`;
 }
 
@@ -100,6 +188,8 @@ export const leaderboardView = {
         </ul>
       </section>
 
+      ${renderTrend(room, me)}
+
       <p class="foot-note">Una vittoria = una Crown. Tocca un giocatore per la sua scheda.</p>`;
   },
 
@@ -109,6 +199,7 @@ export const leaderboardView = {
       if (localState.sort === k) localState.dir = -localState.dir;
       else { localState.sort = k; localState.dir = -1; }
     },
+    "trend-metric"(ctx, el) { localState.trendMetric = el.dataset.m; },
     "goto-history"() { location.hash = "#storico"; },
     "lb-detail"(ctx, el) {
       const pid = el.dataset.id;
