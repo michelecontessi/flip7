@@ -55,10 +55,23 @@ export const setupView = {
       </section>
 
       <section class="card">
+        <div class="card-head">${icon("eye")}<span class="card-title">Aspetto</span></div>
+        <label class="field inline">
+          <span>Tema</span>
+          <select data-change="theme" class="w-auto">
+            <option value="auto" ${prefs.get("theme", "auto") === "auto" ? "selected" : ""}>Come il telefono</option>
+            <option value="light" ${prefs.get("theme") === "light" ? "selected" : ""}>Chiaro</option>
+            <option value="dark" ${prefs.get("theme") === "dark" ? "selected" : ""}>Scuro</option>
+          </select>
+        </label>
+      </section>
+
+      ${isOwner ? `
+      <section class="card">
         <div class="card-head">${icon("sliders")}<span class="card-title">Stanza</span></div>
         <p class="muted small">Questa è la tua stanza fissa: si crea una volta sola e
           l'app si riapre sempre qui. I colleghi entrano con il tuo link, non devono
-          creare niente.</p>
+          creare niente. Questi dettagli li vedi solo tu.</p>
         <div class="kv"><span>Stato</span>${modeBadge}</div>
         <div class="kv"><span>Codice stanza</span><b class="mono">${esc(store.getRoomId())}</b></div>
         <div class="kv"><span>ID di questo dispositivo</span>
@@ -73,21 +86,13 @@ export const setupView = {
             <input type="number" min="10" step="10" inputmode="numeric" value="${room.meta.targetScore || 200}" data-change="room-target">
           </label>
         </div>
-        <label class="field inline">
-          <span>Aspetto</span>
-          <select data-change="theme" class="w-auto">
-            <option value="auto" ${prefs.get("theme", "auto") === "auto" ? "selected" : ""}>Come il telefono</option>
-            <option value="light" ${prefs.get("theme") === "light" ? "selected" : ""}>Chiaro</option>
-            <option value="dark" ${prefs.get("theme") === "dark" ? "selected" : ""}>Scuro</option>
-          </select>
-        </label>
         <div class="btn-row">
           <button class="btn ghost" data-action="copy-link">${icon("link", "tiny")} Condividi stanza</button>
           <button class="btn ghost" data-action="switch-room">${icon("refresh", "tiny")} Cambia stanza</button>
         </div>
         ${status.error ? `<p class="err small">${esc(status.error)}</p>` : ""}
         ${!isFirebaseConfigured ? `<p class="warn-note small">Firebase non è configurato: i dati restano su questo dispositivo. Vedi <b>README.md</b> per attivare la sincronia live.</p>` : ""}
-      </section>
+      </section>` : ""}
 
       ${status.mode === "firebase" && status.user ? `
       <section class="card">
@@ -98,7 +103,7 @@ export const setupView = {
         <button class="btn ghost small" data-action="google-signout">Esci dall'account</button>
       </section>` : ""}
 
-      ${status.mode === "firebase" ? `
+      ${status.mode === "firebase" && isOwner ? `
       <section class="card">
         <div class="card-head">${icon("user")}<span class="card-title">Membri</span>
           <span class="count-pill ml-auto">${Object.keys(room.members || {}).length}</span></div>
@@ -133,6 +138,7 @@ export const setupView = {
           ogni persona resterà per sempre il suo giocatore, su qualsiasi dispositivo.</p>
       </section>` : ""}
 
+      ${isOwner ? `
       <section class="card">
         <div class="card-head">${icon("download")}<span class="card-title">Backup</span></div>
         <p class="muted small">Scarica un file con giocatori e storico, o ricaricalo altrove.</p>
@@ -141,7 +147,7 @@ export const setupView = {
           <label class="btn ghost file">${icon("upload", "tiny")} Importa<input type="file" accept="application/json,.json" data-change="import-json" hidden></label>
         </div>
         <p class="muted small">Ultimo aggiornamento stanza: ${fmtDate(room.meta.createdAt)}</p>
-      </section>
+      </section>` : ""}
 
       <p class="foot-note">Flip 7 Scoreboard · nessun costo, nessun dominio: gira su GitHub Pages + Firebase (piani gratuiti).</p>`;
   },

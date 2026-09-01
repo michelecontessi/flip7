@@ -55,7 +55,7 @@ function renderTopbar(c) {
       </div>
     </div>
     <div class="top-actions">
-      <button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>
+      ${status.mode !== "firebase" || prefs.get("owner") ? `<button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>` : ""}
       <button class="me-btn" data-action="go-setup" aria-label="Chi sono">
       ${meName
         ? `<span class="avatar sm" style="background:${colorOf(meName)}">${initials(meName)}</span>`

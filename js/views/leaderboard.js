@@ -27,23 +27,34 @@ function crownRow(n, max = 5) {
   return `<span class="crown-row">${Array.from({ length: n }, (_, i) => `<i style="--d:${i * 90}ms">${crownEmblem()}</i>`).join("")}</span>`;
 }
 
-function crownHero(row, gamesCount) {
-  if (!row) return "";
+/**
+ * Podio delle Crown: i primi tre sui gradini oro/argento/bronzo, il leader
+ * al centro sotto la corona. Il podio segue sempre le Crown, qualunque
+ * ordinamento sia attivo nella lista sotto.
+ */
+function renderPodium(rows, gamesCount) {
+  const top = sortLeaderboard(rows.filter((r) => r.crowns > 0), "crowns").slice(0, 3);
+  if (!top.length) return "";
+  const leader = top[0];
+  const col = (r, place) => r ? `
+    <div class="pod-col p${place}">
+      ${place === 1 ? `<div class="pod-crown">${crownEmblem("big")}</div>` : ""}
+      <span class="avatar ${place === 1 ? "lg" : ""}" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+      <span class="pod-name">${esc(r.name)}</span>
+      <div class="pod-step">${crownEmblem("mini")}<b>${r.crowns}</b></div>
+    </div>` : "";
   return `
-    <section class="crown-hero holo">
+    <section class="crown-hero holo podium">
       <span class="holo-sweep" aria-hidden="true"></span>
-      ${crownEmblem("big")}
-      <div class="ch-count"><b>${row.crowns}</b><span>Crown</span></div>
-      <div class="ch-name">
-        <span class="avatar" style="background:${colorOf(row.name)}">${initials(row.name)}</span>
-        ${esc(row.name)}
+      <div class="pod-row">
+        ${col(top[1], 2)}${col(top[0], 1)}${col(top[2], 3)}
       </div>
-      <div class="ch-sub">${row.crowns} vittorie su ${gamesCount} partite · media ${fmtNum(row.avg, 1)}</div>
+      <div class="ch-sub">${leader.crowns} vittorie su ${gamesCount} partite · media ${fmtNum(leader.avg, 1)}</div>
     </section>`;
 }
 
 // ---------------------------------------------------------------------------
-// Premi: fino a 4 titoli scherzosi (piu' Flip 7, piu' sballi, ...). Il nome
+// Trofei: fino a 4 titoli scherzosi (piu' Flip 7, piu' sballi, ...). Il nome
 // mostrato e' quello del vincitore; a pari merito compaiono entrambi.
 // ---------------------------------------------------------------------------
 function renderAwards(rows) {
@@ -52,7 +63,7 @@ function renderAwards(rows) {
   return `
     <section class="card">
       <div class="card-head">
-        <h2 class="section-title">Premi</h2>
+        <h2 class="section-title">Trofei</h2>
       </div>
       <div class="award-grid">
         ${list.map((a) => {
@@ -63,17 +74,14 @@ function renderAwards(rows) {
           const solo = a.winners.length === 1 ? a.winners[0] : null;
           return `
           <div class="award tone-${a.tone}">
-            <span class="award-top">
-              ${awardEmblem(a.emblem)}
-              <span class="award-txt">
-                <span class="award-title">${a.title}</span>
-                <span class="award-holder">
-                  ${solo ? `<span class="avatar xs" style="background:${colorOf(solo.name)}">${initials(solo.name)}</span>` : ""}
-                  <b>${esc(label)}</b>
-                </span>
-              </span>
+            ${awardEmblem(a.emblem)}
+            <span class="award-title">${a.title}</span>
+            <small class="award-desc">${a.desc}</small>
+            <span class="award-holder">
+              ${solo ? `<span class="avatar xs" style="background:${colorOf(solo.name)}">${initials(solo.name)}</span>` : ""}
+              <b>${esc(label)}</b>
             </span>
-            <small>${a.unit(a.value)} · ${a.desc}</small>
+            <span class="award-value">${a.unit(a.value)}</span>
           </div>`;
         }).join("")}
       </div>
@@ -209,10 +217,8 @@ export const leaderboardView = {
         </section>`;
     }
 
-    const leader = sortRows(rows.filter((r) => r.crowns > 0))[0];
-
     return `
-      ${crownHero(leader, gamesCount)}
+      ${renderPodium(rows, gamesCount)}
 
       <section class="card tight">
         <div class="card-head">
@@ -245,7 +251,7 @@ export const leaderboardView = {
           ${sorted.map((r, i) => `
             <li class="lbrow ${r.playerId === me ? "me" : ""} ${r.archived ? "arch" : ""} ${i === 0 ? "top" : ""}"
                 data-action="lb-detail" data-id="${r.playerId}">
-              <span class="rank">${i + 1}</span>
+              <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
               <span class="lbname">
                 <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
                 <span class="txt">${esc(r.name)}

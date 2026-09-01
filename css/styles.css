@@ -562,6 +562,36 @@ table.rounds td.tot { font-weight: 800; }
 .ch-name { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 700; margin-top: 10px; }
 .ch-sub { font-size: 12.5px; color: #7d6a4a; }
 
+/* podio dei primi tre */
+.podium { padding: 20px 14px 16px; gap: 12px; }
+.pod-row { display: flex; align-items: flex-end; justify-content: center; gap: 10px; width: 100%; max-width: 380px; }
+.pod-col { display: grid; justify-items: center; gap: 5px; flex: 1 1 0; min-width: 0; }
+.pod-crown { margin-bottom: -3px; }
+.pod-crown .crown-emblem.big { width: 54px; height: 50px; }
+.pod-col .avatar { box-shadow: 0 0 0 2.5px rgba(255,255,255,.75), 0 3px 8px rgba(0,0,0,.14); }
+.pod-name { font-size: 12.5px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pod-col.p1 .pod-name { font-size: 15px; }
+.pod-step {
+  width: 100%; border-radius: 10px 10px 5px 5px; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-family: var(--font-display); font-weight: 600;
+}
+.pod-step b { font-size: 19px; }
+.pod-col.p1 .pod-step { height: 64px; background: linear-gradient(180deg, #ffd97a, #e2a416); color: #674502; box-shadow: 0 6px 14px rgba(190,130,20,.3); }
+.pod-col.p2 .pod-step { height: 44px; background: linear-gradient(180deg, #dde4ec, #a8b4c2); color: #3f4c5c; }
+.pod-col.p3 .pod-step { height: 32px; background: linear-gradient(180deg, #e9bd93, #c0824f); color: #59301a; }
+.pod-col.p2 .pod-step b, .pod-col.p3 .pod-step b { font-size: 16px; }
+
+/* medaglie in lista */
+.rank.medal {
+  width: 23px; height: 23px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12.5px; margin: 0 auto;
+}
+.rank.m1 { background: linear-gradient(180deg, #f6c94f, #d99a11); color: #5d3f04; }
+.rank.m2 { background: linear-gradient(180deg, #d8dfe7, #a9b4c2); color: #3f4c5c; }
+.rank.m3 { background: linear-gradient(180deg, #e2b088, #bd7f4e); color: #593016; }
+
 .period-select { position: relative; display: flex; align-items: center; }
 .period-select select {
   min-height: 34px; padding: 0 30px 0 13px; width: auto; font-size: 13px; font-weight: 600;
@@ -569,7 +599,7 @@ table.rounds td.tot { font-weight: 800; }
 }
 .period-select .ico { position: absolute; right: 10px; pointer-events: none; color: var(--muted); width: 14px; height: 14px; }
 
-.lb-head, .lbrow { display: grid; grid-template-columns: 20px 1fr 50px 50px 34px; align-items: center; gap: 6px; }
+.lb-head, .lbrow { display: grid; grid-template-columns: 24px 1fr 50px 50px 34px; align-items: center; gap: 6px; }
 .lb-head { padding: 6px 8px 5px; border-bottom: 1px solid var(--line); }
 .lb-head > span { font-size: 12px; color: var(--dim); }
 .lb-sort {
@@ -1270,24 +1300,30 @@ table.rounds td.tot { font-weight: 800; }
 .mood { text-align: center; font-size: 14px; color: var(--muted); padding: 2px 6px; }
 .mood b { color: var(--text); font-weight: 700; }
 
-/* ---------- premi individuali ---------- */
-.award-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 10px; }
-.award { border-radius: 14px; padding: 12px 12px 13px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.award-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.award-emblem { width: 42px; height: 39px; display: block; flex: none; }
-.award-txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.award-title { font-family: var(--font-display); font-size: 15.5px; font-weight: 600; line-height: 1.1; }
-.award-holder { display: flex; align-items: center; gap: 5px; font-size: 13px; min-width: 0; }
-.award-holder b { color: var(--text); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.award small { font-size: 11px; color: var(--dim); font-weight: 500; line-height: 1.3; }
+/* ---------- trofei ---------- */
+.award-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.award {
+  border-radius: 16px; padding: 18px 12px 15px;
+  display: grid; justify-items: center; text-align: center; gap: 3px; min-width: 0;
+}
+.award-emblem { width: 66px; height: 61px; display: block; margin-bottom: 5px; }
+.award-title { font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.1; }
+.award-desc { font-size: 11px; color: var(--dim); font-weight: 500; line-height: 1.25; }
+.award-holder { display: flex; align-items: center; gap: 6px; font-size: 14.5px; margin-top: 8px; min-width: 0; max-width: 100%; }
+.award-holder b { color: var(--text); font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.award-value { font-size: 12px; font-weight: 700; padding: 3px 11px; border-radius: 999px; margin-top: 5px; }
 .award.tone-gold  .award-title { color: var(--c-gold); }
 .award.tone-red   .award-title { color: var(--c-red); }
 .award.tone-blue  .award-title { color: var(--c-blue); }
 .award.tone-green .award-title { color: var(--c-green); }
-.award.tone-gold  .award-emblem { filter: drop-shadow(0 3px 6px rgba(190,130,20,.32)); }
-.award.tone-red   .award-emblem { filter: drop-shadow(0 3px 6px rgba(190,50,35,.3)); }
-.award.tone-blue  .award-emblem { filter: drop-shadow(0 3px 6px rgba(30,100,180,.3)); }
-.award.tone-green .award-emblem { filter: drop-shadow(0 3px 6px rgba(20,130,90,.3)); }
+.award.tone-gold  .award-value { background: rgba(210,160,40,.16);  color: var(--c-gold); }
+.award.tone-red   .award-value { background: rgba(210,70,60,.13);   color: var(--c-red); }
+.award.tone-blue  .award-value { background: rgba(60,140,220,.14);  color: var(--c-blue); }
+.award.tone-green .award-value { background: rgba(38,168,118,.14);  color: var(--c-green); }
+.award.tone-gold  .award-emblem { filter: drop-shadow(0 4px 9px rgba(190,130,20,.32)); }
+.award.tone-red   .award-emblem { filter: drop-shadow(0 4px 9px rgba(190,50,35,.3)); }
+.award.tone-blue  .award-emblem { filter: drop-shadow(0 4px 9px rgba(30,100,180,.3)); }
+.award.tone-green .award-emblem { filter: drop-shadow(0 4px 9px rgba(20,130,90,.3)); }
 .ae-spark { animation: twinkle 2.6s ease-in-out infinite; transform-origin: center; }
 
 /* ---------- grafico andamento ---------- */
