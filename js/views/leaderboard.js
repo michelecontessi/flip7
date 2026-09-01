@@ -3,8 +3,8 @@
 // Toccando un giocatore si apre la sua scheda a schermo intero.
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
-import { icon, crownEmblem } from "../icons.js";
-import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
+import { icon, crownEmblem, awardEmblem } from "../icons.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
 
 const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
 const filters = () => ({ period: localState.period, source: localState.source });
@@ -39,6 +39,44 @@ function crownHero(row, gamesCount) {
         ${esc(row.name)}
       </div>
       <div class="ch-sub">${row.crowns} vittorie su ${gamesCount} partite · media ${fmtNum(row.avg, 1)}</div>
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// Premi: fino a 4 titoli scherzosi (piu' Flip 7, piu' sballi, ...). Il nome
+// mostrato e' quello del vincitore; a pari merito compaiono entrambi.
+// ---------------------------------------------------------------------------
+function renderAwards(rows) {
+  const list = awards(rows);
+  if (!list.length) return "";
+  return `
+    <section class="card">
+      <div class="card-head">
+        <h2 class="section-title">Premi</h2>
+      </div>
+      <div class="award-grid">
+        ${list.map((a) => {
+          const names = a.winners.map((w) => w.name);
+          const label = names.length === 1 ? names[0]
+            : names.length === 2 ? `${names[0]} e ${names[1]}`
+            : `${names[0]} +${names.length - 1}`;
+          const solo = a.winners.length === 1 ? a.winners[0] : null;
+          return `
+          <div class="award tone-${a.tone}">
+            <span class="award-top">
+              ${awardEmblem(a.emblem)}
+              <span class="award-txt">
+                <span class="award-title">${a.title}</span>
+                <span class="award-holder">
+                  ${solo ? `<span class="avatar xs" style="background:${colorOf(solo.name)}">${initials(solo.name)}</span>` : ""}
+                  <b>${esc(label)}</b>
+                </span>
+              </span>
+            </span>
+            <small>${a.unit(a.value)} · ${a.desc}</small>
+          </div>`;
+        }).join("")}
+      </div>
     </section>`;
 }
 
@@ -219,6 +257,8 @@ export const leaderboardView = {
             </li>`).join("")}
         </ul>
       </section>
+
+      ${renderAwards(rows)}
 
       ${renderTrend(room, me)}
 

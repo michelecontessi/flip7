@@ -106,6 +106,116 @@ export function crownEmblem(cls = "") {
   </svg>`;
 }
 
+// ---------------------------------------------------------------------------
+// Emblemi dei premi: stessa lega della corona (lamina, contorno inciso, luci),
+// uno per ogni titolo. Disegnati sullo stesso viewBox 56x52.
+// ---------------------------------------------------------------------------
+let emblemSeq = 0;
+
+/** Stella a 12 punte usata come rosetta del Flipper. */
+const STAR12 = (() => {
+  const pts = [];
+  for (let i = 0; i < 24; i++) {
+    const a = (-90 + i * 15) * Math.PI / 180;
+    const r = i % 2 ? 18.5 : 24;
+    pts.push((28 + r * Math.cos(a)).toFixed(1) + "," + (26 + r * Math.sin(a)).toFixed(1));
+  }
+  return pts.join(" ");
+})();
+
+const EMBLEMS = {
+  // Flipper: rosetta dorata col sette inciso al centro
+  flipper: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffe9a8"/><stop offset=".3" stop-color="#ffc247"/>
+        <stop offset=".6" stop-color="#ff9ec4"/><stop offset="1" stop-color="#ffd166"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff3cf"/><stop offset="1" stop-color="#ffc94f"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ffc93f">
+      <path d="M5 8.5 5.9 5.4 6.8 8.5 9.9 9.4 6.8 10.3 5.9 13.4 5 10.3 1.9 9.4Z"/>
+      <path d="M50.4 44.6l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <polygon points="${STAR12}" fill="url(#${id})" stroke="#b97d0c" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="28" cy="26" r="15.4" fill="url(#${id}b)" stroke="#b97d0c" stroke-width="1.8"/>
+    <path d="M21.8 19.2h12.9l-8.2 17.2" fill="none" stroke="#96650a" stroke-width="4.2"
+          stroke-linecap="round" stroke-linejoin="round"/>`,
+
+  // Golosone: la bomba con la miccia accesa
+  golosone: (id) => `
+    <defs>
+      <radialGradient id="${id}" cx=".35" cy=".3" r=".85">
+        <stop offset="0" stop-color="#ff9d84"/><stop offset=".45" stop-color="#d33b2a"/>
+        <stop offset="1" stop-color="#7a1710"/>
+      </radialGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffd08a"/><stop offset="1" stop-color="#c8721c"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ffb03a">
+      <path d="M46.5 4.6 47.6.6l1.1 4 4 1.1-4 1.1-1.1 4-1.1-4-4-1.1Z"/>
+      <path d="M40.6 14.2l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <path d="M33 14.5c5.6-1.4 6.4-5.2 12-8.4" fill="none" stroke="#8a5a2a" stroke-width="2.8" stroke-linecap="round"/>
+    <rect x="22.6" y="10.4" width="10.8" height="8.2" rx="2.4" transform="rotate(-16 28 14.5)"
+          fill="url(#${id}b)" stroke="#5c1a12" stroke-width="1.8"/>
+    <circle cx="27" cy="33" r="15" fill="url(#${id})" stroke="#5c1a12" stroke-width="2"/>
+    <circle cx="21" cy="27.5" r="4.4" fill="#fff" opacity=".4"/>
+    <circle cx="32.6" cy="39.4" r="2" fill="#fff" opacity=".22"/>`,
+
+  // Cannoniere: il bersaglio centrato dal dardo
+  cannoniere: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#8fd8ff"/><stop offset=".55" stop-color="#3a8fd8"/>
+        <stop offset="1" stop-color="#1b4e86"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffd97a"/><stop offset="1" stop-color="#d98f16"/>
+      </linearGradient>
+    </defs>
+    <circle cx="26" cy="28" r="17" fill="url(#${id})" stroke="#123f6b" stroke-width="2"/>
+    <circle cx="26" cy="28" r="12" fill="#f7fbff" stroke="#123f6b" stroke-width="1.5"/>
+    <circle cx="26" cy="28" r="7.2" fill="url(#${id})" stroke="#123f6b" stroke-width="1.5"/>
+    <circle cx="26" cy="28" r="2.6" fill="#123f6b"/>
+    <path d="M26 28 46.5 7.5" stroke="#7a4a22" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M40.6 7.9l6-1.4-1.4 6" fill="none" stroke="url(#${id}b)" stroke-width="3"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="20.4" cy="21.8" r="2.6" fill="#fff" opacity=".45"/>`,
+
+  // Stakanovista: il ventaglio sempre in mano
+  stakanovista: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#a8f0cd"/><stop offset=".55" stop-color="#35b985"/>
+        <stop offset="1" stop-color="#12694a"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#eafff5"/><stop offset="1" stop-color="#8fe6c0"/>
+      </linearGradient>
+    </defs>
+    <rect x="20" y="11" width="16" height="26" rx="3.4" transform="rotate(-28 28 40)"
+          fill="url(#${id})" stroke="#0e5238" stroke-width="2"/>
+    <rect x="20" y="11" width="16" height="26" rx="3.4" transform="rotate(28 28 40)"
+          fill="url(#${id})" stroke="#0e5238" stroke-width="2"/>
+    <rect x="20" y="11" width="16" height="26" rx="3.4"
+          fill="url(#${id}b)" stroke="#0e5238" stroke-width="2"/>
+    <circle cx="28" cy="24" r="3.6" fill="#12694a"/>
+    <circle cx="28" cy="16" r="1.6" fill="#12694a" opacity=".55"/>
+    <circle cx="28" cy="32" r="1.6" fill="#12694a" opacity=".55"/>`
+};
+
+/** Emblema di un premio. `kind` e' la chiave di EMBLEMS. */
+export function awardEmblem(kind, cls = "") {
+  const draw = EMBLEMS[kind] || EMBLEMS.flipper;
+  return `<svg class="award-emblem ${cls}" viewBox="0 0 56 52" aria-hidden="true" focusable="false">
+    ${draw("ae" + (++emblemSeq))}
+  </svg>`;
+}
+
 /** Marchio "FLIP 7": la parola piu' la cartina col sette. */
 export function wordmark(cls = "") {
   return `<span class="wordmark ${cls}"><b>FLIP</b><i class="w7">7</i></span>`;

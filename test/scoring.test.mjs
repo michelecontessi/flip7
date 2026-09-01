@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { computeRound, formulaOf, isBlankEntry } from "../js/scoring.js";
-import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey } from "../js/stats.js";
+import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey, awards } from "../js/stats.js";
 
 test("somma semplice delle carte numero", () => {
   assert.equal(computeRound({ numbers: [3, 7, 10] }).total, 20);
@@ -142,4 +142,47 @@ test("highlights: striscia aperta se ha vinto le ultime", () => {
   const h = playerHighlights([G(1, false), G(2, true), G(3, true)], "me");
   assert.equal(h.currentStreak, 2);
   assert.equal(h.sinceLastWin, 0);
+});
+
+test("premi: la classifica somma anche gli sballi e i premi vanno al massimo", () => {
+  const hist = {
+    g1: {
+      playedAt: 1000,
+      results: {
+        a: { name: "Ale", total: 210, flip7s: 2, busts: 1 },
+        b: { name: "Bea", total: 150, flip7s: 0, busts: 3 }
+      },
+      winnerIds: { a: true }
+    },
+    g2: {
+      playedAt: 2000,
+      results: {
+        a: { name: "Ale", total: 120, flip7s: 1, busts: 0 },
+        b: { name: "Bea", total: 205, flip7s: 0, busts: 2 }
+      },
+      winnerIds: { b: true }
+    }
+  };
+  const { rows } = leaderboard(hist, {});
+  assert.equal(rows.find((r) => r.playerId === "b").busts, 5);
+
+  const list = awards(rows);
+  const byKey = Object.fromEntries(list.map((a) => [a.key, a]));
+  assert.equal(byKey.flip7s.winners[0].playerId, "a");   // Flipper: 3 Flip 7
+  assert.equal(byKey.flip7s.value, 3);
+  assert.equal(byKey.busts.winners[0].playerId, "b");    // Golosone: 5 sballi
+  assert.equal(byKey.best.winners[0].playerId, "a");     // Cannoniere: record 210
+  assert.equal(byKey.games.winners.length, 2);           // Stakanovista: pari merito
+});
+
+test("premi: senza dati sopra lo zero il premio non viene assegnato", () => {
+  const hist = {
+    g1: { playedAt: 1000, results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 } }, winnerIds: { a: true } }
+  };
+  const list = awards(leaderboard(hist, {}).rows);
+  const keys = list.map((a) => a.key);
+  assert.ok(!keys.includes("flip7s"));
+  assert.ok(!keys.includes("busts"));
+  assert.ok(keys.includes("best"));
+  assert.ok(keys.includes("games"));
 });

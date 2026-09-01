@@ -159,7 +159,7 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0 };
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0 };
         acc.set(pid, e);
       }
       e.name = res.name || e.name;
@@ -168,6 +168,7 @@ export function leaderboard(history, players, opts = {}) {
       e.best = Math.max(e.best, Number(res.total) || 0);
       e.worst = Math.min(e.worst, Number(res.total) || 0);
       e.flip7s += Number(res.flip7s) || 0;
+      e.busts += Number(res.busts) || 0;
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
     }
@@ -194,6 +195,34 @@ export function leaderboard(history, players, opts = {}) {
   });
 
   return { rows, gamesCount: games.length };
+}
+
+// ---------------------------------------------------------------------------
+// Premi individuali: titoli scherzosi assegnati sulle righe della classifica.
+// ---------------------------------------------------------------------------
+
+/** I quattro premi: se li porta a casa chi ha il valore piu' alto. */
+export const AWARDS = [
+  { key: "flip7s", title: "Flipper", desc: "Flip 7 messi a segno", emblem: "flipper", tone: "gold",
+    unit: (v) => v === 1 ? "1 Flip 7" : `${v} Flip 7` },
+  { key: "busts", title: "Golosone", desc: "sballi per una carta di troppo", emblem: "golosone", tone: "red",
+    unit: (v) => v === 1 ? "1 sballo" : `${v} sballi` },
+  { key: "best", title: "Cannoniere", desc: "il punteggio record in una partita", emblem: "cannoniere", tone: "blue",
+    unit: (v) => `${v} punti` },
+  { key: "games", title: "Maratoneta", desc: "non manca mai al tavolo", emblem: "stakanovista", tone: "green",
+    unit: (v) => v === 1 ? "1 partita" : `${v} partite` }
+];
+
+/**
+ * Assegna i premi: vince il massimo, a pari merito il titolo e' condiviso.
+ * Un premio senza nessun valore sopra lo zero non viene assegnato (es. sballi
+ * e Flip 7 mancano nelle partite recuperate a mano, dove c'e' solo il totale).
+ */
+export function awards(rows) {
+  return AWARDS.map((a) => {
+    const top = rows.reduce((m, r) => Math.max(m, Number(r[a.key]) || 0), 0);
+    return { ...a, value: top, winners: top ? rows.filter((r) => (Number(r[a.key]) || 0) === top) : [] };
+  }).filter((a) => a.winners.length);
 }
 
 /**
