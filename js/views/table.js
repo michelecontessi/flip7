@@ -186,18 +186,21 @@ function revealSpoilers() {
 }
 
 function runDrawAnim(card, token) {
+  // apre lo spazio in fila (transizione CSS) SENZA ridisegnare: rifare
+  // l'HTML mentre la carta e' in volo farebbe scattare le righe
   const openLanding = () => {
     if (token !== landingToken) return; // e' gia' partita un'altra pescata
     landingActive = false;
     document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
-    store.refresh(); // la carta e' atterrata: ora chip e comandi passano al prossimo
   };
+  // ...il ridisegno vero (chip e comandi al prossimo) arriva a volo concluso
+  const settle = () => { openLanding(); store.refresh(); };
   const slot = document.querySelector(".bank .bank-slot:last-child .fcard");
   const deckEl = document.querySelector(".deck-stack .fcard");
-  if (!slot || !deckEl) return openLanding();
+  if (!slot || !deckEl) return settle();
   const a = slot.getBoundingClientRect();
   const m = deckEl.getBoundingClientRect();
-  if (!a.width) return openLanding();
+  if (!a.width) return settle();
   // la destinazione e' collassata: la si apre un attimo (senza dipingere)
   // solo per misurare dove atterrera' la carta
   const dest = document.querySelector(".t-seats .fcard.landing");
@@ -242,7 +245,7 @@ function runDrawAnim(card, token) {
       { duration: 250, easing: "ease-out", fill: "forwards" });
   }, 450);
 
-  const finish = () => { fly.remove(); openLanding(); revealSpoilers(); if (caption) caption.style.opacity = ""; };
+  const finish = () => { fly.remove(); settle(); revealSpoilers(); if (caption) caption.style.opacity = ""; };
   const gNow = engine.normalizeGame(store.getRoom().game);
   const parkHere = gNow && gNow.pending && gNow.pending.type === card;
   if (parkHere) {
@@ -294,17 +297,19 @@ function checkPendingFlight(g) {
 }
 
 function runResolveFly(card, token, targetSid) {
+  // come nella pescata: prima si apre lo spazio senza ridisegnare...
   const openLanding = () => {
     if (token !== landingToken) return;
     landingActive = false;
     resolveTargetSid = null;
     document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
-    store.refresh(); // azione consegnata: chip e comandi tornano a dire il vero
   };
+  // ...e il ridisegno (chip e comandi tornano a dire il vero) a volo finito
+  const settle = () => { openLanding(); store.refresh(); };
   const slot = document.querySelector(".bank .bank-slot:last-child .fcard");
-  if (!slot) return openLanding();
+  if (!slot) return settle();
   const a = slot.getBoundingClientRect();
-  if (!a.width) return openLanding();
+  if (!a.width) return settle();
 
   let dest = null, landingDest = false;
   if (targetSid) {
@@ -321,7 +326,7 @@ function runResolveFly(card, token, targetSid) {
   fly.innerHTML = miniCard(card, "drawn");
   document.body.appendChild(fly);
 
-  const finish = () => { fly.remove(); openLanding(); };
+  const finish = () => { fly.remove(); settle(); };
   if (dest) {
     let b;
     if (landingDest) {
@@ -339,7 +344,9 @@ function runResolveFly(card, token, targetSid) {
       { transform: "translate(0,0) scale(1)", opacity: 1 },
       { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})`, opacity: landingDest ? 1 : 0 }
     ], { duration: 450, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
-    setTimeout(openLanding, 320);
+    // lo spazio si apre mentre la carta plana e finisce di aprirsi
+    // esattamente all'atterraggio: niente scatti al ridisegno
+    setTimeout(openLanding, 200);
   } else {
     fly.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" }).onfinish = finish;
   }
@@ -419,7 +426,7 @@ function raceBoard(g, me) {
         const seat = g.seats[sid];
         const b = banked(sid), r = roundPts(sid);
         return `
-        <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}">
+        <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}" data-flip="race:${sid}">
           <span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
           <span class="race-track">
             <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>
@@ -437,7 +444,7 @@ function bankRow(g) {
   // il doppione appena pescato ha fatto sballare: va urlato
   const bustNow = last && g.hands[last.seat] && g.hands[last.seat].out === "bust" && engine.CARD.isNum(last.card);
   return `
-    <div class="bank">
+    <div class="bank" data-flip="bank">
       <div class="bank-slot">
         <span class="deck-stack">${cardBack()}<b class="deck-count">${g.deck.length}</b></span>
         <small>carte nel mazzo${g.discard.length ? ` · ${g.discard.length} scartate` : ""}</small>
@@ -513,7 +520,7 @@ function renderSeatRow(g, sid, ctx) {
     : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   return `
-    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}">
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}" data-flip="seat:${sid}">
       <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
       <div class="seat-main">
         <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>

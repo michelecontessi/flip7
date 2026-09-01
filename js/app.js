@@ -159,6 +159,33 @@ function renderAccessGate(c) {
     </section>`;
 }
 
+// --- FLIP sul ridisegno -------------------------------------------------------
+// Ogni mossa sostituisce l'HTML intero della vista: senza questo, righe e
+// riquadri (posti, corsa, banco) salterebbero di scatto alla nuova posizione.
+// Prima del ridisegno si fotografa dove sta ogni blocco con data-flip, dopo
+// lo si fa scivolare da li' alla posizione nuova.
+const reducedMotion = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function snapFlip(root) {
+  if (reducedMotion()) return null;
+  const map = new Map();
+  for (const el of root.querySelectorAll("[data-flip]")) map.set(el.dataset.flip, el.getBoundingClientRect());
+  return map.size ? map : null;
+}
+function playFlip(root, before) {
+  if (!before) return;
+  for (const el of root.querySelectorAll("[data-flip]")) {
+    const a = before.get(el.dataset.flip);
+    if (!a) continue;
+    const b = el.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (!dx && !dy) continue;
+    // spostamento enorme = altra schermata, non un riordino: niente scivolata
+    if (Math.abs(dx) + Math.abs(dy) > 360) continue;
+    el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }],
+      { duration: 240, easing: "cubic-bezier(.3,.7,.3,1)" });
+  }
+}
+
 // --- render ------------------------------------------------------------------
 let scheduled = false;
 export function render() {
@@ -188,8 +215,11 @@ export function render() {
     tabs.style.display = "";
     top.innerHTML = renderTopbar(c);
     tabs.innerHTML = renderTabbar(c);
+    // la scivolata FLIP ha senso solo restando sulla stessa vista
+    const before = main.className === "view-" + route ? snapFlip(main) : null;
     main.className = "view-" + route;
     main.innerHTML = VIEWS[route].view.render(c);
+    playFlip(main, before);
   };
   // requestAnimationFrame non scatta se la pagina e' nascosta: fallback su timeout
   if (document.hidden) setTimeout(draw, 0);
