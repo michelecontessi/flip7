@@ -470,7 +470,7 @@ select {
   background: var(--surface-2); border-radius: 10px;
 }
 .opens-strip .ico { width: 15px; height: 15px; flex: none; }
-.opens-strip span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.opens-strip > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .opens-strip b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .round-cell {
