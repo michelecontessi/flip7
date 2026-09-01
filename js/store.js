@@ -49,6 +49,9 @@ function normalize(v) {
 // --- pub/sub ----------------------------------------------------------------
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function notify() { for (const fn of [...listeners]) fn(); }
+/** Ridisegno su richiesta, per chi non passa da un cambio di stato
+    (es. fine delle animazioni del tavolo). */
+export const refresh = notify;
 
 export const getRoom = () => room;
 export const getStatus = () => status;

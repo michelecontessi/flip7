@@ -1078,6 +1078,36 @@ table.rounds td.tot { font-weight: 800; }
   border-width: 0; box-shadow: none; outline: none;
 }
 .fcard.bust-draw { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2.5px var(--red), 0 1px 3px rgba(20,20,30,.25); }
+/* la Seconda Chance spesa resta in mano ma spenta: si vede che c'era
+   e che ormai e' consumata (si spegne nell'istante del verdetto) */
+.fcard.burned { opacity: .42; filter: grayscale(1); }
+.dup-note.saved { color: var(--green); }
+.saved-note { color: var(--green) !important; font-weight: 650; }
+
+/* verdetto in grande a centro schermo: sballo o Seconda Chance bruciata
+   si capiscono all'istante, senza cercare la scritta piccola nella riga */
+.flash-banner {
+  position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%);
+  z-index: 70; display: flex; align-items: center; gap: 14px;
+  max-width: min(430px, calc(100vw - 44px));
+  padding: 15px 21px; border-radius: 18px; color: #fff;
+  box-shadow: 0 12px 34px rgba(20,20,30,.35);
+  pointer-events: none;
+  animation: fb-pop .2s cubic-bezier(.2,1.3,.4,1);
+  transition: opacity .35s ease, transform .35s ease;
+}
+.flash-banner.gone { opacity: 0; transform: translate(-50%, -62%); }
+.flash-banner.fb-bust { background: var(--red); }
+.flash-banner.fb-saved { background: var(--green); }
+.fb-ico {
+  width: 46px; height: 46px; flex: none; border-radius: 13px;
+  display: grid; place-items: center; background: rgba(255,255,255,.2);
+}
+.fb-ico .ico { width: 26px; height: 26px; }
+.fb-txt { min-width: 0; }
+.fb-txt b { display: block; font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.15; }
+.fb-txt small { display: block; font-size: 13px; opacity: .92; line-height: 1.3; margin-top: 2px; }
+@keyframes fb-pop { from { transform: translate(-50%, -50%) scale(.7); opacity: 0; } }
 /* punteggi del posto: grande il totale partita, piccolo il round in corso */
 .seat-pts { text-align: right; line-height: 1.1; flex: none; }
 .seat-pts b { font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -1127,7 +1157,35 @@ table.rounds td.tot { font-weight: 800; }
   font-variant-numeric: tabular-nums;
 }
 .table-foot { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
-.table-choose { display: flex; flex-direction: column; gap: 9px; }
+
+/* riquadro delle carte azione: colore della carta, icona e istruzione bene
+   in vista, cosi' nessuno resta a chiedersi cosa stia succedendo */
+.action-box {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 13px; border-radius: 14px;
+  background: var(--ab-bg, var(--surface-2));
+  box-shadow: inset 0 0 0 2px var(--ab, var(--line-strong));
+}
+.action-box.act-frz { --ab: #56b5e5; --ab-bg: rgba(86,181,229,.15); --ab-soft: rgba(86,181,229,.45); }
+.action-box.act-fl3 { --ab: #cdbe1d; --ab-bg: rgba(240,226,62,.16); --ab-soft: rgba(205,190,29,.45); }
+.action-box.act-sc  { --ab: #e25549; --ab-bg: rgba(226,85,73,.13); --ab-soft: rgba(226,85,73,.45); }
+/* quando la scelta spetta a te il riquadro pulsa piano: guarda qui */
+.action-box.mine { animation: ab-pulse 1.8s ease-in-out infinite; }
+@keyframes ab-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px var(--ab), 0 0 0 0 var(--ab-soft); }
+  55%      { box-shadow: inset 0 0 0 2px var(--ab), 0 0 0 9px transparent; }
+}
+.ab-head { display: flex; align-items: center; gap: 11px; }
+.ab-ico {
+  width: 40px; height: 40px; flex: none; border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--ab); color: #fff;
+}
+.action-box.act-fl3 .ab-ico { color: #303356; } /* sul giallo l'icona scura */
+.ab-ico .ico { width: 22px; height: 22px; }
+.ab-txt { min-width: 0; }
+.ab-txt b { display: block; font-family: var(--font-display); font-size: 16.5px; font-weight: 600; line-height: 1.2; }
+.ab-txt small { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.3; }
 .choose-label { font-weight: 700; font-size: 15px; text-align: center; }
 .table-log { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; border-top: 1px solid var(--line); }
 .table-log span { font-size: 12px; color: var(--dim); }
@@ -1279,21 +1337,41 @@ table.rounds td.tot { font-weight: 800; }
   /* stessa taglia delle carte numero: senza, i modificatori vengono giganti */
   .modgrid { grid-template-columns: repeat(13, 1fr); }
 
-  /* tavolo online su desktop: vista larga a due colonne, con banco e comandi
-     fissi a sinistra e i posti a destra (su mobile resta tutto in colonna) */
-  #view.view-tavolo { max-width: 1020px; }
+  /* tavolo online su desktop: vista larga a due colonne, con comandi, banco
+     e corsa fissi a sinistra e i posti a destra (su mobile resta in colonna) */
+  #view.view-tavolo { max-width: 1020px; padding-bottom: 90px; }
   .table-wrap {
     display: grid; grid-template-columns: 360px minmax(0, 1fr);
     grid-template-areas: "side seats";
     gap: 14px; align-items: start;
   }
-  .t-side { grid-area: side; position: sticky; top: 74px; }
+  .t-side {
+    grid-area: side; position: sticky; top: 74px;
+    max-height: calc(100dvh - 170px); overflow-y: auto;
+  }
   .t-seats { grid-area: seats; }
-  /* da pc le carte del tavolo si vedono grandi, mano e banco alla pari */
-  .bank .fcard { width: 84px; }
-  .fcard.mini { width: 84px; }
+  /* il banco si adatta agli schermi bassi: mai piu' alto di un decimo scarso */
+  .bank .fcard { width: clamp(56px, 9.3dvh, 84px); }
+  /* nel riquadro azione a sinistra i bersagli stanno comodi su una riga */
+  .t-side .pgrid { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+  .t-side .pg .avatar.lg { width: 44px; height: 44px; font-size: 15px; }
+  /* colonna sinistra compatta: deve starci anche su schermi bassi */
+  .t-side { gap: 11px; }
+  .t-side .race-row { padding: 3px 6px; }
+  /* tutto il tabellone sta nel 100% dell'altezza senza scrollare: la taglia
+     delle carte si calcola dai giocatori (--seats, messo dal render)
+     nell'ipotesi peggiore di due file di carte a testa. I 300px sono
+     barre, padding e testate; i 38px sono l'ingombro fisso di ogni posto. */
+  .t-seats {
+    --cardH: clamp(39px, calc((100dvh - 300px - var(--seats, 4) * 38px) / (2 * var(--seats, 4))), 118px);
+  }
+  .t-seats .fcard.mini { width: calc(var(--cardH) * 5 / 7); }
+  /* la riga del posto si distende: nome e stato a sinistra, carte accanto */
   .seat { padding: 14px 6px; gap: 12px; }
   .seat .avatar.sm { width: 36px; height: 36px; }
+  .seat-main { flex-direction: row; align-items: center; gap: 14px; }
+  .seat-head { flex-direction: column; align-items: flex-start; gap: 5px; width: 118px; flex: none; }
+  .seat-head b { overflow-wrap: anywhere; }
   .sd-hand .fcard { width: 42px; }
   .fcard b { font-size: 19px; }
   .board-cols, .brow { grid-template-columns: 24px 1fr 86px 68px; }

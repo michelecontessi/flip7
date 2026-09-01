@@ -56,7 +56,7 @@ export function normalizeGame(g) {
   state.hands = {};
   for (const sid of state.order) {
     const h = (g.hands || {})[sid] || {};
-    state.hands[sid] = { nums: h.nums || [], plus: h.plus || [], x2: Boolean(h.x2), sc: Boolean(h.sc), out: h.out || null, bustCard: h.bustCard ?? null };
+    state.hands[sid] = { nums: h.nums || [], plus: h.plus || [], x2: Boolean(h.x2), sc: Boolean(h.sc), scUsed: Boolean(h.scUsed), out: h.out || null, bustCard: h.bustCard ?? null };
   }
   state.pending = g.pending || null;
   state.flip3 = g.flip3 ? { ...g.flip3, deferred: g.flip3.deferred || [] } : null;
@@ -241,6 +241,8 @@ function applyCard(s, seatId, card, duringFlip3, rng) {
     if (h.nums.includes(n)) {
       if (h.sc) {
         h.sc = false;
+        h.scUsed = true; // il cuore resta in mano, spento: vita consumata
+        s.lastDraw.saved = true; // la vita spesa deve vedersi al volo
         s.discard = [...s.discard, card, "sc"];
         logIt(s, `${s.seats[seatId].name} pesca un doppio ${n}: salvato dalla Seconda Chance`);
         return "sc-used";
