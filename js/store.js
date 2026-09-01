@@ -438,17 +438,20 @@ export function startGame(playerIds, targetScore) {
     players[pid] = { order: i };
     names[pid] = (room.players[pid] && room.players[pid].name) || "?";
   });
+  // sorteggio di chi apre la prima mano: dal secondo round in poi si ruota
+  const firstIdx = Math.floor(Math.random() * playerIds.length);
   const live = {
     gameId: newId(),
     startedAt: Date.now(),
     targetScore: Number(targetScore) || room.meta.targetScore || DEFAULTS.targetScore,
     status: "playing",
     round: 0,
+    firstIdx,
     players,
     names,
     scores: {}
   };
-  return commit({ live });
+  return commit({ live }).then(() => playerIds[firstIdx]);
 }
 
 export function setRoundEntry(playerId, roundIndex, entry) {

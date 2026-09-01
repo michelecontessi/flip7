@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { icon, crownEmblem, awardEmblem } from "../icons.js";
-import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
 
 const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
 const filters = () => ({ period: localState.period, source: localState.source });
@@ -73,7 +73,7 @@ function renderAwards(rows) {
             : `${names[0]} +${names.length - 1}`;
           const solo = a.winners.length === 1 ? a.winners[0] : null;
           return `
-          <div class="award tone-${a.tone}">
+          <div class="award tone-${a.tone}" data-action="award-detail" data-id="${a.id}">
             ${awardEmblem(a.emblem)}
             <span class="award-title">${a.title}</span>
             <small class="award-desc">${a.desc}</small>
@@ -268,7 +268,7 @@ export const leaderboardView = {
 
       ${renderTrend(room, me)}
 
-      <p class="foot-note">Una vittoria = una Crown. Tocca un giocatore per la sua scheda.</p>`;
+      <p class="foot-note">Una vittoria = una Crown. Tocca un giocatore per la sua scheda, un trofeo per la classifica di quella statistica.</p>`;
   },
 
   actions: {
@@ -290,6 +290,13 @@ export const leaderboardView = {
       }));
     },
     "goto-history"() { location.hash = "#storico"; },
+    "award-detail"(ctx, el) {
+      const { rows } = leaderboard(ctx.room.history, ctx.room.players, filters());
+      const detail = awardRanking(rows, el.dataset.id);
+      if (!detail || !detail.rows.length) return;
+      openPage(detail, renderAwardPage);
+      return "page";
+    },
     "lb-detail"(ctx, el) {
       const pid = el.dataset.id;
       const { rows } = leaderboard(ctx.room.history, ctx.room.players, filters());
@@ -312,6 +319,47 @@ export const leaderboardView = {
     "lb-source"(ctx, el) { localState.source = el.value; localState.trendSel = null; }
   }
 };
+
+// ---------------------------------------------------------------------------
+// Pagina di un trofeo: la stessa statistica per tutti i giocatori in gara.
+// ---------------------------------------------------------------------------
+function awardRowSub(a, r) {
+  if (a.key === "bustRate") {
+    const s = r.busts === 1 ? "1 sballo" : `${r.busts} sballi`;
+    return `${s} in ${r.tracked === 1 ? "1 partita" : r.tracked + " partite"}`;
+  }
+  if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
+  return `media ${fmtNum(r.avg, 1)}`;
+}
+
+function renderAwardPage(a) {
+  return `
+    <div class="page-top">
+      <button class="nav-btn" data-action="page-close" aria-label="Indietro">${icon("arrowLeft")}</button>
+      <span class="page-title">${a.title}</span>
+    </div>
+
+    <div class="page-body">
+      <section class="award-hero tone-${a.tone}">
+        ${awardEmblem(a.emblem)}
+        <span class="award-title">${a.title}</span>
+        <small class="award-desc">${a.desc}</small>
+      </section>
+
+      <section class="card tight">
+        <ul class="aw-list">
+          ${a.rows.map((r) => `
+            <li class="${r.rank === 1 ? "aw-top tone-" + a.tone : ""}">
+              <span class="rank">${r.rank}</span>
+              <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+              <span class="nm">${esc(r.name)}<small>${awardRowSub(a, r)}</small></span>
+              <b>${a.unit(r.value)}</b>
+            </li>`).join("")}
+        </ul>
+      </section>
+      <p class="foot-note">${a.pick === "min" ? "Vince chi ha il valore più basso." : "Vince chi ha il valore più alto."}${a.key === "best" ? "" : " Contano solo le partite segnate round per round."}</p>
+    </div>`;
+}
 
 // ---------------------------------------------------------------------------
 // Scheda giocatore a schermo intero

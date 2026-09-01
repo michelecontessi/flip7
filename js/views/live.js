@@ -9,7 +9,7 @@ import { prefs } from "../prefs.js";
 import { esc, initials, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card } from "../icons.js";
 import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry } from "../scoring.js";
-import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed } from "../stats.js";
+import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter } from "../stats.js";
 
 const localState = { selected: null, target: null, showRounds: false, mode: "cards" };
 
@@ -184,6 +184,7 @@ function renderBoard(room, live, standings, me, { editable }) {
   const ids = boardOrder(live);
   const missing = missingIds(live);
   const finished = live.status === "finished";
+  const starter = finished ? null : roundStarter(live);
 
   return `
     <section class="card board">
@@ -200,6 +201,14 @@ function renderBoard(room, live, standings, me, { editable }) {
             : `<b class="done-note">round completo</b><span>si vince a ${target}</span>`}</span>
       </div>
 
+      ${starter ? `
+      <div class="opens-strip">
+        ${icon("cardFan", "tiny")}
+        <span>Apre la mano
+          <span class="avatar xs" style="background:${colorOf(nameOf(room, live, starter))}">${initials(nameOf(room, live, starter))}</span>
+          <b>${esc(nameOf(room, live, starter))}</b></span>
+      </div>` : ""}
+
       <div class="board-cols"><span></span><span>Giocatore</span><span>Round</span><span>Totale</span></div>
 
       <ol class="board-rows">
@@ -212,6 +221,7 @@ function renderBoard(room, live, standings, me, { editable }) {
             ? `<button class="round-cell ${entry ? "filled" : "todo"}" data-action="calc-open" data-id="${row.playerId}">${inner}</button>`
             : `<span class="round-cell static ${entry ? "filled" : ""}">${inner}</span>`;
           const notes = [];
+          if (row.playerId === starter) notes.push('<i class="opens">apre</i>');
           if (row.playerId === me) notes.push('<i class="you">tu</i>');
           if (row.flip7s) notes.push(row.flip7s + "× flip 7");
           if (row.busts) notes.push(row.busts + "× sballo");
@@ -566,8 +576,10 @@ export const liveView = {
     async "start-game"(ctx) {
       const ids = [...localState.selected].filter((id) => ctx.room.players[id]);
       if (ids.length < 2) return toast("Servono almeno 2 giocatori", "warn");
-      await store.startGame(ids, localState.target ?? ctx.room.meta.targetScore);
+      const first = await store.startGame(ids, localState.target ?? ctx.room.meta.targetScore);
       prefs.set("lastLineup", ids);
+      const name = first && ctx.room.players[first] ? ctx.room.players[first].name : null;
+      if (name) toast(`Sorteggio: apre ${name}`);
     },
     "toggle-rounds"() { localState.showRounds = !localState.showRounds; },
 
@@ -699,9 +711,10 @@ export const liveView = {
       const target = live ? live.targetScore : ctx.room.meta.targetScore;
       await store.saveGameToHistory();
       if (ids.length >= 2) {
-        await store.startGame(ids, target);
+        const first = await store.startGame(ids, target);
         prefs.set("lastLineup", ids);
-        toast("Nuova partita iniziata");
+        const name = first && ctx.room.players[first] ? ctx.room.players[first].name : null;
+        toast(name ? `Si rigioca: apre ${name}` : "Nuova partita iniziata");
       }
     },
     async "pick-winner"(ctx) {

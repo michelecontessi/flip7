@@ -59,6 +59,18 @@ export function orderedPlayerIds(live) {
   return Object.keys(p).sort((a, b) => (p[a].order ?? 0) - (p[b].order ?? 0));
 }
 
+/**
+ * Chi apre la mano corrente: il sorteggiato (`firstIdx`) nel primo round,
+ * poi si ruota di un posto a ogni round. Null sulle partite vecchie
+ * cominciate senza sorteggio.
+ */
+export function roundStarter(live) {
+  if (!live || live.firstIdx === undefined || live.firstIdx === null) return null;
+  const ids = orderedPlayerIds(live);
+  if (!ids.length) return null;
+  return ids[((Number(live.firstIdx) || 0) + (live.round || 0)) % ids.length];
+}
+
 function lastRoundOf(live, pid) {
   const rows = (live.scores && live.scores[pid]) || {};
   const keys = Object.keys(rows).map((k) => Number(String(k).slice(1))).filter(Number.isFinite).sort((a, b) => a - b);
@@ -181,6 +193,7 @@ export function leaderboard(history, players, opts = {}) {
     archived: Boolean(players && players[e.playerId] && players[e.playerId].archived),
     avg: e.games ? e.points / e.games : 0,
     winRate: e.games ? e.crowns / e.games : 0,
+    bustRate: e.tracked ? e.busts / e.tracked : 0,
     worst: e.worst === Infinity ? 0 : e.worst
   }));
 
@@ -203,34 +216,61 @@ export function leaderboard(history, players, opts = {}) {
 // ---------------------------------------------------------------------------
 
 /** I quattro trofei: massimo o minimo di una statistica, vedi `pick`. */
-const nSballi = (v) => v === 1 ? "1 sballo" : `${v} sballi`;
+const perPartita = (v) => {
+  const n = Math.round(v * 10) / 10;
+  return n === 1 ? "1 sballo a partita" : `${n.toLocaleString("it-IT")} sballi a partita`;
+};
 export const AWARDS = [
   { id: "gambler", key: "flip7s", title: "Gambler", desc: "rischia tutto e piazza i Flip 7", emblem: "gambler", tone: "gold",
     unit: (v) => v === 1 ? "1 Flip 7" : `${v} Flip 7` },
-  { id: "golosone", key: "busts", title: "Golosone", desc: "sballi per una carta di troppo", emblem: "golosone", tone: "red",
-    unit: nSballi },
-  { id: "tanaia", key: "busts", pick: "min", title: "Tanaia", desc: "braccine corte, sballa meno di tutti", emblem: "tanaia", tone: "green",
-    unit: nSballi },
+  { id: "golosone", key: "bustRate", title: "Golosone", desc: "sballi per una carta di troppo", emblem: "golosone", tone: "red",
+    unit: perPartita },
+  { id: "tanaia", key: "bustRate", pick: "min", title: "Tanaia", desc: "braccine corte, sballa meno di tutti", emblem: "tanaia", tone: "green",
+    unit: perPartita },
   { id: "cannoniere", key: "best", title: "Cannoniere", desc: "il punteggio record in una partita", emblem: "cannoniere", tone: "blue",
     unit: (v) => `${v} punti` }
 ];
 
+// Flip 7 e sballi esistono solo nelle partite segnate round per round
+// (`tracked`): chi ha solo totali recuperati a mano non concorre.
+const awardPool = (a, rows) => a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0) : rows;
+// arrotondo per confrontare le medie senza sorprese da virgola mobile
+const awardVal = (a, r) => Math.round((Number(r[a.key]) || 0) * 1000) / 1000;
+
 /**
  * Assegna i trofei: vince il massimo (o il minimo, per il Tanaia), a pari
- * merito il titolo e' condiviso. Flip 7 e sballi esistono solo nelle partite
- * segnate round per round (`tracked`): chi ha solo totali recuperati a mano
- * non concorre, e un trofeo senza nessun candidato non viene assegnato.
+ * merito il titolo e' condiviso. Un trofeo senza candidati (o, per i massimi,
+ * con tutti a zero) non viene assegnato.
  */
 export function awards(rows) {
   return AWARDS.map((a) => {
     const min = a.pick === "min";
-    const pool = a.key === "flip7s" || a.key === "busts" ? rows.filter((r) => r.tracked > 0) : rows;
+    const pool = awardPool(a, rows);
     if (!pool.length) return { ...a, winners: [] };
-    const val = (r) => Number(r[a.key]) || 0;
-    const top = pool.reduce((m, r) => (min ? Math.min(m, val(r)) : Math.max(m, val(r))), min ? Infinity : 0);
+    const top = pool.reduce((m, r) => (min ? Math.min(m, awardVal(a, r)) : Math.max(m, awardVal(a, r))), min ? Infinity : 0);
     if (!min && !top) return { ...a, winners: [] };
-    return { ...a, value: top, winners: pool.filter((r) => val(r) === top) };
+    return { ...a, value: top, winners: pool.filter((r) => awardVal(a, r) === top) };
   }).filter((a) => a.winners.length);
+}
+
+/**
+ * Classifica completa di un trofeo: tutti i candidati dal vincitore in giu',
+ * con `value` gia' calcolato e `rank` che gestisce i pari merito.
+ */
+export function awardRanking(rows, id) {
+  const a = AWARDS.find((x) => x.id === id);
+  if (!a) return null;
+  const min = a.pick === "min";
+  const ranked = awardPool(a, rows)
+    .map((r) => ({ ...r, value: awardVal(a, r) }))
+    .sort((x, y) => (min ? x.value - y.value : y.value - x.value) || x.name.localeCompare(y.name, "it"));
+  let rank = 0, prev = null;
+  ranked.forEach((r, i) => {
+    if (prev === null || r.value !== prev) rank = i + 1;
+    prev = r.value;
+    r.rank = rank;
+  });
+  return { ...a, rows: ranked };
 }
 
 /**

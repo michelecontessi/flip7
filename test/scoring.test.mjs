@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { computeRound, formulaOf, isBlankEntry } from "../js/scoring.js";
-import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey, awards } from "../js/stats.js";
+import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey, awards, awardRanking, roundStarter } from "../js/stats.js";
 
 test("somma semplice delle carte numero", () => {
   assert.equal(computeRound({ numbers: [3, 7, 10] }).total, 20);
@@ -170,11 +170,16 @@ test("trofei: la classifica somma anche gli sballi e i trofei vanno al massimo",
   const byId = Object.fromEntries(list.map((a) => [a.id, a]));
   assert.equal(byId.gambler.winners[0].playerId, "a");     // Gambler: 3 Flip 7
   assert.equal(byId.gambler.value, 3);
-  assert.equal(byId.golosone.winners[0].playerId, "b");    // Golosone: 5 sballi
-  assert.equal(byId.tanaia.winners[0].playerId, "a");      // Tanaia: solo 1 sballo
-  assert.equal(byId.tanaia.value, 1);
+  assert.equal(byId.golosone.winners[0].playerId, "b");    // Golosone: 5 sballi in 2 partite
+  assert.equal(byId.golosone.value, 2.5);                  // conta la media, non la somma
+  assert.equal(byId.tanaia.winners[0].playerId, "a");      // Tanaia: 1 sballo in 2 partite
+  assert.equal(byId.tanaia.value, 0.5);
   assert.equal(byId.cannoniere.winners[0].playerId, "a");  // Cannoniere: record 210
   assert.ok(!byId.maratoneta);
+
+  const rk = awardRanking(rows, "tanaia");
+  assert.deepEqual(rk.rows.map((r) => r.playerId), ["a", "b"]);  // dal piu' basso
+  assert.deepEqual(rk.rows.map((r) => r.rank), [1, 2]);
 });
 
 test("trofei: senza partite tracciate restano solo quelli sui totali", () => {
@@ -201,4 +206,16 @@ test("trofei: il Tanaia ignora chi non ha partite tracciate", () => {
   assert.equal(tanaia.winners.length, 1);
   assert.equal(tanaia.winners[0].playerId, "a");     // Bea non concorre con i suoi 0 finti
   assert.equal(tanaia.value, 2);
+});
+
+test("apre la mano: sorteggiato al via, poi ruota a ogni round", () => {
+  const live = {
+    firstIdx: 1,
+    players: { a: { order: 0 }, b: { order: 1 }, c: { order: 2 } }
+  };
+  assert.equal(roundStarter({ ...live, round: 0 }), "b");   // il sorteggiato
+  assert.equal(roundStarter({ ...live, round: 1 }), "c");   // poi il successivo
+  assert.equal(roundStarter({ ...live, round: 2 }), "a");
+  assert.equal(roundStarter({ ...live, round: 3 }), "b");   // giro completo
+  assert.equal(roundStarter({ players: live.players, round: 2 }), null); // partite vecchie senza sorteggio
 });
