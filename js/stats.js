@@ -159,7 +159,7 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0 };
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, tracked: 0 };
         acc.set(pid, e);
       }
       e.name = res.name || e.name;
@@ -169,6 +169,7 @@ export function leaderboard(history, players, opts = {}) {
       e.worst = Math.min(e.worst, Number(res.total) || 0);
       e.flip7s += Number(res.flip7s) || 0;
       e.busts += Number(res.busts) || 0;
+      if (res.busts !== undefined || res.flip7s !== undefined) e.tracked += 1; // segnata round per round
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
     }
@@ -201,27 +202,34 @@ export function leaderboard(history, players, opts = {}) {
 // Premi individuali: titoli scherzosi assegnati sulle righe della classifica.
 // ---------------------------------------------------------------------------
 
-/** I quattro premi: se li porta a casa chi ha il valore piu' alto. */
+/** I quattro trofei: massimo o minimo di una statistica, vedi `pick`. */
+const nSballi = (v) => v === 1 ? "1 sballo" : `${v} sballi`;
 export const AWARDS = [
-  { key: "flip7s", title: "Flipper", desc: "Flip 7 messi a segno", emblem: "flipper", tone: "gold",
+  { id: "gambler", key: "flip7s", title: "Gambler", desc: "rischia tutto e piazza i Flip 7", emblem: "gambler", tone: "gold",
     unit: (v) => v === 1 ? "1 Flip 7" : `${v} Flip 7` },
-  { key: "busts", title: "Golosone", desc: "sballi per una carta di troppo", emblem: "golosone", tone: "red",
-    unit: (v) => v === 1 ? "1 sballo" : `${v} sballi` },
-  { key: "best", title: "Cannoniere", desc: "il punteggio record in una partita", emblem: "cannoniere", tone: "blue",
-    unit: (v) => `${v} punti` },
-  { key: "games", title: "Maratoneta", desc: "non manca mai al tavolo", emblem: "stakanovista", tone: "green",
-    unit: (v) => v === 1 ? "1 partita" : `${v} partite` }
+  { id: "golosone", key: "busts", title: "Golosone", desc: "sballi per una carta di troppo", emblem: "golosone", tone: "red",
+    unit: nSballi },
+  { id: "tanaia", key: "busts", pick: "min", title: "Tanaia", desc: "braccine corte, sballa meno di tutti", emblem: "tanaia", tone: "green",
+    unit: nSballi },
+  { id: "cannoniere", key: "best", title: "Cannoniere", desc: "il punteggio record in una partita", emblem: "cannoniere", tone: "blue",
+    unit: (v) => `${v} punti` }
 ];
 
 /**
- * Assegna i premi: vince il massimo, a pari merito il titolo e' condiviso.
- * Un premio senza nessun valore sopra lo zero non viene assegnato (es. sballi
- * e Flip 7 mancano nelle partite recuperate a mano, dove c'e' solo il totale).
+ * Assegna i trofei: vince il massimo (o il minimo, per il Tanaia), a pari
+ * merito il titolo e' condiviso. Flip 7 e sballi esistono solo nelle partite
+ * segnate round per round (`tracked`): chi ha solo totali recuperati a mano
+ * non concorre, e un trofeo senza nessun candidato non viene assegnato.
  */
 export function awards(rows) {
   return AWARDS.map((a) => {
-    const top = rows.reduce((m, r) => Math.max(m, Number(r[a.key]) || 0), 0);
-    return { ...a, value: top, winners: top ? rows.filter((r) => (Number(r[a.key]) || 0) === top) : [] };
+    const min = a.pick === "min";
+    const pool = a.key === "flip7s" || a.key === "busts" ? rows.filter((r) => r.tracked > 0) : rows;
+    if (!pool.length) return { ...a, winners: [] };
+    const val = (r) => Number(r[a.key]) || 0;
+    const top = pool.reduce((m, r) => (min ? Math.min(m, val(r)) : Math.max(m, val(r))), min ? Infinity : 0);
+    if (!min && !top) return { ...a, winners: [] };
+    return { ...a, value: top, winners: pool.filter((r) => val(r) === top) };
   }).filter((a) => a.winners.length);
 }
 

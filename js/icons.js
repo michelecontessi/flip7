@@ -112,37 +112,35 @@ export function crownEmblem(cls = "") {
 // ---------------------------------------------------------------------------
 let emblemSeq = 0;
 
-/** Stella a 12 punte usata come rosetta del Flipper. */
-const STAR12 = (() => {
-  const pts = [];
-  for (let i = 0; i < 24; i++) {
-    const a = (-90 + i * 15) * Math.PI / 180;
-    const r = i % 2 ? 18.5 : 24;
-    pts.push((28 + r * Math.cos(a)).toFixed(1) + "," + (26 + r * Math.sin(a)).toFixed(1));
-  }
-  return pts.join(" ");
-})();
-
 const EMBLEMS = {
-  // Flipper: rosetta dorata col sette inciso al centro
-  flipper: (id) => `
+  // Gambler: coppia di dadi lanciati, uno d'avorio e uno rosso
+  gambler: (id) => `
     <defs>
-      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#ffe9a8"/><stop offset=".3" stop-color="#ffc247"/>
-        <stop offset=".6" stop-color="#ff9ec4"/><stop offset="1" stop-color="#ffd166"/>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fffbe9"/><stop offset="1" stop-color="#ffe1a1"/>
       </linearGradient>
-      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#fff3cf"/><stop offset="1" stop-color="#ffc94f"/>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff8f83"/><stop offset="1" stop-color="#b3271c"/>
       </linearGradient>
     </defs>
     <g class="ae-spark" fill="#ffc93f">
-      <path d="M5 8.5 5.9 5.4 6.8 8.5 9.9 9.4 6.8 10.3 5.9 13.4 5 10.3 1.9 9.4Z"/>
-      <path d="M50.4 44.6l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M8 5.5 8.9 2.4 9.8 5.5 12.9 6.4 9.8 7.3 8.9 10.4 8 7.3 4.9 6.4Z"/>
+      <path d="M50 34l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
     </g>
-    <polygon points="${STAR12}" fill="url(#${id})" stroke="#b97d0c" stroke-width="2" stroke-linejoin="round"/>
-    <circle cx="28" cy="26" r="15.4" fill="url(#${id}b)" stroke="#b97d0c" stroke-width="1.8"/>
-    <path d="M21.8 19.2h12.9l-8.2 17.2" fill="none" stroke="#96650a" stroke-width="4.2"
-          stroke-linecap="round" stroke-linejoin="round"/>`,
+    <g transform="rotate(14 38 20)">
+      <rect x="27" y="8" width="21" height="21" rx="5" fill="url(#${id}b)" stroke="#6e150d" stroke-width="2"/>
+      <circle cx="33" cy="14" r="2" fill="#fff"/>
+      <circle cx="37.5" cy="18.5" r="2" fill="#fff"/>
+      <circle cx="42" cy="23" r="2" fill="#fff"/>
+    </g>
+    <g transform="rotate(-12 20 33)">
+      <rect x="8" y="21" width="24" height="24" rx="5.5" fill="url(#${id})" stroke="#8a5a10" stroke-width="2"/>
+      <circle cx="14.5" cy="27.5" r="2.2" fill="#7a4a08"/>
+      <circle cx="25.5" cy="27.5" r="2.2" fill="#7a4a08"/>
+      <circle cx="20" cy="33" r="2.2" fill="#7a4a08"/>
+      <circle cx="14.5" cy="38.5" r="2.2" fill="#7a4a08"/>
+      <circle cx="25.5" cy="38.5" r="2.2" fill="#7a4a08"/>
+    </g>`,
 
   // Golosone: la bomba con la miccia accesa
   golosone: (id) => `
@@ -186,31 +184,40 @@ const EMBLEMS = {
           stroke-linecap="round" stroke-linejoin="round"/>
     <circle cx="20.4" cy="21.8" r="2.6" fill="#fff" opacity=".45"/>`,
 
-  // Stakanovista: il ventaglio sempre in mano
-  stakanovista: (id) => `
+  // Tanaia: il T-rex con le braccine corte, non arriva alla carta di troppo
+  tanaia: (id) => `
     <defs>
       <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#a8f0cd"/><stop offset=".55" stop-color="#35b985"/>
-        <stop offset="1" stop-color="#12694a"/>
-      </linearGradient>
-      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#eafff5"/><stop offset="1" stop-color="#8fe6c0"/>
+        <stop offset="0" stop-color="#9fe8bf"/><stop offset=".55" stop-color="#3cb47e"/>
+        <stop offset="1" stop-color="#15774f"/>
       </linearGradient>
     </defs>
-    <rect x="20" y="11" width="16" height="26" rx="3.4" transform="rotate(-28 28 40)"
-          fill="url(#${id})" stroke="#0e5238" stroke-width="2"/>
-    <rect x="20" y="11" width="16" height="26" rx="3.4" transform="rotate(28 28 40)"
-          fill="url(#${id})" stroke="#0e5238" stroke-width="2"/>
-    <rect x="20" y="11" width="16" height="26" rx="3.4"
-          fill="url(#${id}b)" stroke="#0e5238" stroke-width="2"/>
-    <circle cx="28" cy="24" r="3.6" fill="#12694a"/>
-    <circle cx="28" cy="16" r="1.6" fill="#12694a" opacity=".55"/>
-    <circle cx="28" cy="32" r="1.6" fill="#12694a" opacity=".55"/>`
+    <path d="M9 12
+             C5.5 13.5 4.6 17 7.2 19.4 L15 21.6
+             C13.6 24.6 14.6 27.8 17.2 30
+             C15.4 33.6 15.8 38.6 18.6 42.4 L18.2 46.6 L25 46.6 L24.6 42.8
+             C27.4 43.6 30.6 43.4 33.2 42 L33.6 46.6 L40 46.6 L39 40
+             C43.4 36.6 45.8 31.4 46 25.4 C49 23.4 51 20.4 51.6 16.6
+             C48.4 19 45.2 20.2 41.8 20.2
+             C40.6 13.2 34.6 8.2 27.2 8.2 C20.4 8.2 15.8 9.6 9 12 Z"
+          fill="url(#${id})" stroke="#0e5238" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M8.4 18.6 15 20.4" fill="none" stroke="#0e5238" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M10.6 19.2l2 2.6 1-2.9 2.2 2.4.8-2.6" fill="#fff" stroke="none"/>
+    <circle cx="17" cy="13.6" r="2.5" fill="#fff"/>
+    <circle cx="17.6" cy="13.9" r="1.2" fill="#123f2b"/>
+    <g fill="none" stroke-linecap="round">
+      <path d="M17.4 27.6 c-3.8 .3 -5.6 2 -5.8 4.8" stroke="#0e5238" stroke-width="4.8"/>
+      <path d="M17.4 27.6 c-3.8 .3 -5.6 2 -5.8 4.8" stroke="#5ecb96" stroke-width="2"/>
+      <path d="M18.2 33.4 c-3 .4 -4.4 1.8 -4.6 4" stroke="#0e5238" stroke-width="4.4"/>
+      <path d="M18.2 33.4 c-3 .4 -4.4 1.8 -4.6 4" stroke="#5ecb96" stroke-width="1.8"/>
+      <path d="M11.6 32.8 l-2 1.4 M11.6 32.8 l-.2 2.4" stroke="#0e5238" stroke-width="1.7"/>
+      <path d="M13.6 37.8 l-1.9 1.2 M13.6 37.8 l-.2 2.2" stroke="#0e5238" stroke-width="1.6"/>
+    </g>`
 };
 
 /** Emblema di un premio. `kind` e' la chiave di EMBLEMS. */
 export function awardEmblem(kind, cls = "") {
-  const draw = EMBLEMS[kind] || EMBLEMS.flipper;
+  const draw = EMBLEMS[kind] || EMBLEMS.gambler;
   return `<svg class="award-emblem ${cls}" viewBox="0 0 56 52" aria-hidden="true" focusable="false">
     ${draw("ae" + (++emblemSeq))}
   </svg>`;

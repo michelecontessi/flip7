@@ -144,7 +144,7 @@ test("highlights: striscia aperta se ha vinto le ultime", () => {
   assert.equal(h.sinceLastWin, 0);
 });
 
-test("premi: la classifica somma anche gli sballi e i premi vanno al massimo", () => {
+test("trofei: la classifica somma anche gli sballi e i trofei vanno al massimo", () => {
   const hist = {
     g1: {
       playedAt: 1000,
@@ -167,22 +167,38 @@ test("premi: la classifica somma anche gli sballi e i premi vanno al massimo", (
   assert.equal(rows.find((r) => r.playerId === "b").busts, 5);
 
   const list = awards(rows);
-  const byKey = Object.fromEntries(list.map((a) => [a.key, a]));
-  assert.equal(byKey.flip7s.winners[0].playerId, "a");   // Flipper: 3 Flip 7
-  assert.equal(byKey.flip7s.value, 3);
-  assert.equal(byKey.busts.winners[0].playerId, "b");    // Golosone: 5 sballi
-  assert.equal(byKey.best.winners[0].playerId, "a");     // Cannoniere: record 210
-  assert.equal(byKey.games.winners.length, 2);           // Stakanovista: pari merito
+  const byId = Object.fromEntries(list.map((a) => [a.id, a]));
+  assert.equal(byId.gambler.winners[0].playerId, "a");     // Gambler: 3 Flip 7
+  assert.equal(byId.gambler.value, 3);
+  assert.equal(byId.golosone.winners[0].playerId, "b");    // Golosone: 5 sballi
+  assert.equal(byId.tanaia.winners[0].playerId, "a");      // Tanaia: solo 1 sballo
+  assert.equal(byId.tanaia.value, 1);
+  assert.equal(byId.cannoniere.winners[0].playerId, "a");  // Cannoniere: record 210
+  assert.ok(!byId.maratoneta);
 });
 
-test("premi: senza dati sopra lo zero il premio non viene assegnato", () => {
+test("trofei: senza partite tracciate restano solo quelli sui totali", () => {
   const hist = {
     g1: { playedAt: 1000, results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 } }, winnerIds: { a: true } }
   };
   const list = awards(leaderboard(hist, {}).rows);
-  const keys = list.map((a) => a.key);
-  assert.ok(!keys.includes("flip7s"));
-  assert.ok(!keys.includes("busts"));
-  assert.ok(keys.includes("best"));
-  assert.ok(keys.includes("games"));
+  assert.deepEqual(list.map((a) => a.id), ["cannoniere"]);
+});
+
+test("trofei: il Tanaia ignora chi non ha partite tracciate", () => {
+  const hist = {
+    g1: {
+      playedAt: 1000,
+      results: {
+        a: { name: "Ale", total: 150, flip7s: 0, busts: 2 },
+        b: { name: "Bea", total: 120 }               // recupero a mano: niente sballi noti
+      },
+      winnerIds: { a: true }
+    }
+  };
+  const list = awards(leaderboard(hist, {}).rows);
+  const tanaia = list.find((a) => a.id === "tanaia");
+  assert.equal(tanaia.winners.length, 1);
+  assert.equal(tanaia.winners[0].playerId, "a");     // Bea non concorre con i suoi 0 finti
+  assert.equal(tanaia.value, 2);
 });
