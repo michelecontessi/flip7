@@ -263,7 +263,35 @@ const EMBLEMS = {
       <text x="11.2" y="38.6">3</text><text x="21.7" y="32.6">5</text><text x="32.2" y="25.6">8</text><text x="42.7" y="17.6">12</text>
     </g>
     <path d="M9 26.5 41 5.5" fill="none" stroke="url(#${id}b)" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="1 4"/>
-    <path d="M36 5.5h5.5V11" fill="none" stroke="#7a4fd0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
+    <path d="M36 5.5h5.5V11" fill="none" stroke="#7a4fd0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`,
+
+  // Colpo Grosso: il ventaglio di carte con dietro l'esplosione dei punti
+  colpogrosso: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffd166"/><stop offset=".5" stop-color="#ff8a3d"/><stop offset="1" stop-color="#d9441f"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fffdf5"/><stop offset="1" stop-color="#f0dfb8"/>
+      </linearGradient>
+    </defs>
+    <path d="M28 3l3 8.6 8.2-4-4 8.2L44 19l-8.6 3 4 8.2-8.2-4L28 35l-3-8.6-8.2 4 4-8.2L12 19l8.6-3-4-8.2 8.2 4Z"
+          fill="url(#${id})" stroke="#9a2f0f" stroke-width="1.8" stroke-linejoin="round"/>
+    <circle cx="28" cy="19" r="5.2" fill="#fff4b0" opacity=".85"/>
+    <g class="ae-spark" fill="#ffc93f">
+      <path d="M6 12l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L2.9 12.9Z"/>
+      <path d="M49 30l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <g stroke="#4a3a2a" stroke-width="1.8" stroke-linejoin="round">
+      <rect x="9" y="24" width="15" height="21" rx="2.6" transform="rotate(-18 16.5 34.5)" fill="url(#${id}b)"/>
+      <rect x="20.5" y="22" width="15" height="21" rx="2.6" transform="rotate(-4 28 32.5)" fill="url(#${id}b)"/>
+      <rect x="32" y="24" width="15" height="21" rx="2.6" transform="rotate(12 39.5 34.5)" fill="url(#${id}b)"/>
+    </g>
+    <g font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="8.5" text-anchor="middle">
+      <text x="15.5" y="37.5" fill="#d9441f" transform="rotate(-18 16.5 34.5)">12</text>
+      <text x="28" y="36" fill="#7a4fd0" transform="rotate(-4 28 32.5)">11</text>
+      <text x="39.5" y="37.5" fill="#2270b8" transform="rotate(12 39.5 34.5)">10</text>
+    </g>`
 };
 
 /** Emblema di un record. `kind` e' la chiave di EMBLEMS. */

@@ -56,7 +56,8 @@ quello che consuma questa app.
    Con queste regole: **solo i dispositivi approvati** vedono la stanza e scrivono
    i punti; chi apre il tuo link manda una richiesta di accesso e **solo tu**
    (il proprietario) puoi approvarla; il tabellone live resta scrivibile dal solo
-   segnapunti in carica; le partite già chiuse nello storico le può **correggere o
+   segnapunti in carica, più i **propri punti** della mano in corso per chi è legato a
+   un giocatore; le partite già chiuse nello storico le può **correggere o
    eliminare solo il proprietario**, e ognuno può cambiare **solo il proprio avatar**.
 
    > Hai già pubblicato le regole in passato? Ogni volta che il file cambia va
@@ -130,6 +131,13 @@ momento il suo account resta **collegato per sempre a quel giocatore**, su qualu
 dispositivo — e il collegamento può cambiarlo solo il proprietario, da
 **Setup → Membri** (matita accanto al nome).
 
+> **Ognuno può segnare i propri punti.** Chi non è segnapunti vede nel suo riquadro il
+> pulsante **Segna i miei punti** (e la casella del round sulla sua riga del tabellone):
+> apre lo stesso pannello carte, ma solo per sé e solo per la mano in corso. Così a fine
+> mano ognuno segna il suo dal telefono e il segnapunti chiude il round senza dover fare
+> il giro del tavolo. Le regole del database accettano la scrittura soltanto dal giocatore
+> legato a quell'account, a partita in corso.
+>
 > **Il ruolo di segnapunti è di un dispositivo alla volta**, ed è chi lo prende a decidere:
 > non si assegna a distanza. Chi non ce l'ha vede in cima la striscia
 > *"Segna i punti Anna Ricci"* con il pulsante **Passa a me**: basta premerlo per subentrare
@@ -253,6 +261,7 @@ statistica (a pari merito si condividono; toccandone uno si apre la classifica c
   spostare se il conteggio deve cominciare da un altro giorno
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
   le mani sballate né quelle inserite col tastierino)
+- **Colpo Grosso**: la mano più ricca, cioè il massimo di punti incassati in un solo round
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;

@@ -31,6 +31,16 @@ function missingIds(live) {
   return boardOrder(live).filter((pid) => !entryOf(live, pid, r));
 }
 
+/**
+ * Chi non e' segnapunti puo' comunque segnare i PROPRI punti del round in
+ * corso, per fare prima. Su Firebase le regole accettano solo il giocatore
+ * legato all'account, quindi qui si chiede la stessa cosa.
+ */
+function canSelfScore(room, live, me) {
+  if (!live || live.status !== "playing" || !me || !live.players || !live.players[me]) return false;
+  return store.getStatus().mode !== "firebase" || store.myPlayerId() === me;
+}
+
 // ---------------------------------------------------------------------------
 // Schermata senza partita
 // ---------------------------------------------------------------------------
@@ -136,9 +146,10 @@ function whoAmIBanner(room, me) {
 // ---------------------------------------------------------------------------
 // Riquadro "il tuo punteggio" (per chi guarda)
 // ---------------------------------------------------------------------------
-function renderYouCard(live, standings, me) {
+function renderYouCard(live, standings, me, selfId) {
   const mine = standings.find((r) => r.playerId === me);
   if (!mine) return "";
+  const cur = selfId ? entryOf(live, me, live.round || 0) : null;
   const target = live.targetScore || 200;
   const leader = standings[0];
   const gap = leader && leader.playerId !== mine.playerId ? leader.total - mine.total : 0;
@@ -169,6 +180,9 @@ function renderYouCard(live, standings, me) {
         </span>
         <span>${gap > 0 ? `${gap} dal primo` : "sei in testa"}</span>
       </div>
+      ${selfId ? `
+      <button class="btn primary big" data-action="calc-self">${icon("pen", "tiny")} ${cur ? "Correggi i miei punti" : `Segna i miei punti · round ${(live.round || 0) + 1}`}</button>
+      <p class="hint">Solo i tuoi, per fare prima: il resto lo segna il segnapunti.</p>` : ""}
     </section>`;
 }
 
@@ -185,7 +199,7 @@ function roundCellContent(entry, editable) {
   return `<span class="rc-val">+${r.total}</span>`;
 }
 
-function renderBoard(room, live, standings, me, { editable }) {
+function renderBoard(room, live, standings, me, { editable, selfId = null }) {
   const r = live.round || 0;
   const target = live.targetScore || 200;
   const ids = boardOrder(live);
@@ -225,10 +239,13 @@ function renderBoard(room, live, standings, me, { editable }) {
           const entry = entryOf(live, row.playerId, r);
           const left = Math.max(0, target - row.total);
           const pct = Math.max(1, Math.min(100, (row.total / target) * 100));
-          const inner = roundCellContent(entry, editable && !finished);
+          const self = !editable && !finished && row.playerId === selfId;
+          const inner = roundCellContent(entry, (editable || self) && !finished);
           const cell = editable && !finished
             ? `<button class="round-cell ${entry ? "filled" : "todo"}" data-action="calc-open" data-id="${row.playerId}">${inner}</button>`
-            : `<span class="round-cell static ${entry ? "filled" : ""}">${inner}</span>`;
+            : self
+              ? `<button class="round-cell self ${entry ? "filled" : "todo"}" data-action="calc-self" aria-label="Segna i tuoi punti">${inner}</button>`
+              : `<span class="round-cell static ${entry ? "filled" : ""}">${inner}</span>`;
           const notes = [];
           if (row.playerId === starter) notes.push('<i class="opens">apre</i>');
           if (row.playerId === me) notes.push('<i class="you">tu</i>');
@@ -413,7 +430,7 @@ export function renderScoreSheet(s) {
         ${avatar(s.playerId, s.playerName, "sm")}
         <div>
           <div class="nav-name">${esc(s.playerName)}</div>
-          <div class="nav-sub">giocatore ${s.pos + 1} di ${s.order.length}</div>
+          <div class="nav-sub">${s.navSub || `giocatore ${s.pos + 1} di ${s.order.length}`}</div>
         </div>
         ${roundCard(s.roundIndex + 1)}
       </div>
@@ -544,6 +561,25 @@ async function persistEntry(s) {
   await store.setRoundEntry(s.playerId, s.roundIndex, normalizeEntry(s.entry));
 }
 
+/** Pannello punti per il solo giocatore dell'account: niente frecce, salva e chiude. */
+function openSelfScoreSheet(room, live, pid) {
+  const r = live.round || 0;
+  const existing = entryOf(live, pid, r);
+  const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
+  const s = makeCalcState({ order: [pid], roundIndex: r, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal });
+  s.navSub = "i tuoi punti di questa mano";
+  s.saveLabel = "Salva i miei punti";
+  s.onSave = async (cs) => {
+    const scored = computeRound(cs.entry);
+    try { await persistEntry(cs); }
+    catch { return toast("Il database non ha accettato: puoi segnare solo il tuo giocatore, a partita in corso", "warn"); }
+    closeSheet();
+    if (scored.flip7) toast("FLIP 7! +15 per te", "party");
+    else toast(cs.entry.busted ? "Sballo segnato" : `Segnati ${scored.total} punti`);
+  };
+  openSheet(s, renderScoreSheet, patchCalcSheet, { full: true });
+}
+
 function gotoPlayer(pid) {
   const room = store.getRoom();
   const live = room.live;
@@ -563,10 +599,11 @@ export const liveView = {
     const standings = liveStandings(live, room.players);
     if (live.status === "finished") return scorekeeperCard(room) + renderFinished(room, live, standings, me) + skFooter(room);
 
+    const selfId = !isSK && canSelfScore(room, live, me) ? me : null;
     return scorekeeperCard(room)
       + whoAmIBanner(room, me)
-      + (!isSK ? renderYouCard(live, standings, me) : "")
-      + renderBoard(room, live, standings, me, { editable: isSK })
+      + (!isSK ? renderYouCard(live, standings, me, selfId) : "")
+      + renderBoard(room, live, standings, me, { editable: isSK, selfId })
       + renderRoundsTable(room, live)
       + skFooter(room);
   },
@@ -626,6 +663,11 @@ export const liveView = {
     "sk-release"() { return store.releaseScorekeeper(); },
 
     "score-next"(ctx) { openScoreSheet(ctx.room, ctx.room.live, null); },
+    "calc-self"(ctx) {
+      const { room, me } = ctx;
+      if (!canSelfScore(room, room.live, me)) return toast("Puoi segnare solo i tuoi punti, a partita in corso", "warn");
+      openSelfScoreSheet(room, room.live, me);
+    },
     "calc-open"(ctx, el) { openScoreSheet(ctx.room, ctx.room.live, el.dataset.id); },
 
     async "calc-prev"() {

@@ -329,8 +329,12 @@ test("congelato: i punti restano quelli delle carte, ma la mano non e' vuota", (
 
 test("handStats: conta solo le mani costruite con le carte e non sballate", () => {
   const rows = { r0: { numbers: [1, 2, 3] }, r1: { numbers: [5, 5], busted: true }, r2: { manual: 40 }, r3: { numbers: [7, 8, 9, 10, 11] } };
-  assert.deepEqual(handStats(rows), { hands: 2, cards: 8 });
-  assert.deepEqual(handStats(null), { hands: 0, cards: 0 });
+  const hs = handStats(rows);
+  assert.equal(hs.hands, 2);
+  assert.equal(hs.cards, 8);
+  assert.equal(hs.rounds, 4, "tutte le mani, anche sballate o col tastierino");
+  assert.equal(hs.bestHand, 45, "la mano piu' ricca: 7+8+9+10+11");
+  assert.deepEqual(handStats(null), { hands: 0, cards: 0, bestHand: 0, rounds: 0 });
 });
 
 test("record: Surgelato a chi viene congelato piu' spesso, Architetto alle mani piu' lunghe", () => {
@@ -413,4 +417,25 @@ test("congelate: una partita giocata prima dell'avvio non conta, anche se ha il 
   const h = playerHighlights([prima, dopo].map((g, i) => ({ id: "g" + i, ...g })), "a");
   assert.equal(h.freezeGames, 1);
   assert.equal(h.freezes, 2);
+});
+
+test("Colpo Grosso: la mano piu' ricca in un solo round, contando anche gli sballi come zero", () => {
+  const hist = {
+    g1: {
+      playedAt: 1, results: { a: { name: "Ale", total: 100, busts: 1 }, b: { name: "Bea", total: 80, busts: 0 } }, winnerIds: { a: true },
+      rounds: { a: { r0: { numbers: [12, 11, 10], doubled: true, plus: [10] }, r1: { numbers: [5], busted: true } }, b: { r0: { manual: 70 }, r1: { numbers: [4, 6] } } }
+    },
+    g2: { playedAt: 2, results: { c: { name: "Cri", total: 300 }, a: { name: "Ale", total: 10 } }, winnerIds: { c: true }, rounds: null }
+  };
+  const { rows } = leaderboard(hist, {});
+  assert.equal(rows.find((r) => r.playerId === "a").bestHand, 76);
+  assert.equal(rows.find((r) => r.playerId === "a").rounds, 2);
+  assert.equal(rows.find((r) => r.playerId === "b").bestHand, 70, "vale anche una mano inserita col tastierino");
+  const cg = awards(rows).find((x) => x.id === "colpogrosso");
+  assert.deepEqual(cg.winners.map((w) => w.playerId), ["a"]);
+  assert.equal(cg.unit(76), "76 punti in una mano");
+  assert.deepEqual(awardRanking(rows, "colpogrosso").rows.map((r) => r.playerId), ["a", "b"], "Cri ha solo totali, non mani");
+  const h = playerHighlights([{ id: "g1", ...hist.g1 }, { id: "g2", ...hist.g2 }], "a");
+  assert.equal(h.bestHand, 76);
+  assert.equal(h.rounds, 2);
 });

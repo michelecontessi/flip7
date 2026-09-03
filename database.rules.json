@@ -49,7 +49,12 @@
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
         },
         "live": {
-          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists() && (!root.child('rooms/' + $roomId + '/control/uid').exists() || root.child('rooms/' + $roomId + '/control/uid').val() === auth.uid)"
+          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists() && (!root.child('rooms/' + $roomId + '/control/uid').exists() || root.child('rooms/' + $roomId + '/control/uid').val() === auth.uid)",
+          "scores": {
+            "$pid": {
+              ".write": "auth != null && root.child('rooms/' + $roomId + '/bindings/' + auth.uid).val() === $pid && root.child('rooms/' + $roomId + '/live/status').val() === 'playing'"
+            }
+          }
         }
       }
     }
