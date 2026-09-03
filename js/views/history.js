@@ -23,6 +23,29 @@ function chip(id, r, won) {
   return `<i class="hp ${won ? "w" : ""}" style="background:${colorOf(r.name)}" title="${esc(r.name)}">${initials(r.name)[0]}</i>`;
 }
 
+/** Tinta della barra: quella dell'avatar se e' un personaggio, altrimenti dal nome. */
+function barColor(id, name) {
+  const a = playerAvatar(id);
+  return a && a.bg ? a.bg : colorOf(name);
+}
+
+/**
+ * Mini classifica della partita: una colonna per giocatore, alta quanto i suoi
+ * punti rispetto al primo, con l'avatar sotto. Si legge a colpo d'occhio se e'
+ * stata una passeggiata o un testa a testa.
+ */
+function scoreColumn(id, r, won, top) {
+  const total = Number(r.total) || 0;
+  const h = Math.max(7, Math.round((total / (top || 1)) * 100));
+  // la barra di chi ha vinto e' dorata: la tinta del giocatore la darebbe il CSS
+  const style = `height:${h}%` + (won ? "" : `;--bar:${barColor(id, r.name)}`);
+  return `<span class="hg-col ${won ? "win" : ""}" title="${esc(r.name)}: ${total}">
+    <b>${total}</b>
+    <span class="hg-track"><i style="${style}"></i></span>
+    ${chip(id, r, won)}
+  </span>`;
+}
+
 function groupByMonth(games) {
   const groups = [];
   let current = null;
@@ -56,15 +79,28 @@ export const historyView = {
       const rows = sortedResults(g);
       const winners = rows.filter(([id]) => g.winnerIds && g.winnerIds[id]);
       const d = new Date(g.playedAt || 0);
+      const top = rows.length ? Number(rows[0][1].total) || 0 : 0;
+      const nRounds = roundCount(g.rounds);
+      // il distacco dal secondo racconta la partita meglio di qualsiasi etichetta
+      const gap = winners.length === 1 && rows.length > 1 ? top - (Number(rows[1][1].total) || 0) : null;
+      const meta = [
+        rows.length === 1 ? "1 giocatore" : `${rows.length} giocatori`,
+        nRounds ? (nRounds === 1 ? "1 mano" : `${nRounds} mani`) : null,
+        winners.length > 1 ? "a pari punti" : gap === null ? null : gap === 0 ? "vinta ai punti" : `+${gap} sul secondo`
+      ].filter(Boolean).join(" · ");
       return `
-        <li class="hrow" data-action="hist-detail" data-id="${g.id}">
-          <span class="hdate"><b>${d.getDate()}</b><span>${MONTHS.format(d).replace(".", "")}</span></span>
-          <span class="hmain">
-            <span class="hwin">${crownEmblem("mini")}${esc(winners.map(([, r]) => r.name).join(" e ") || "—")}</span>
-            <span class="hplayers">${rows.map(([id, r]) => chip(id, r, Boolean(g.winnerIds && g.winnerIds[id]))).join("")}
-              <span class="muted small">${rows.length} giocatori</span>${sourceTag(g)}</span>
+        <li class="hgame" data-action="hist-detail" data-id="${g.id}">
+          <span class="hg-head">
+            <span class="hdate"><b>${d.getDate()}</b><span>${MONTHS.format(d).replace(".", "")}</span></span>
+            <span class="hg-id">
+              <span class="hg-win">${crownEmblem("mini")}<b>${esc(winners.map(([, r]) => r.name).join(" e ") || "—")}</b></span>
+              <span class="hg-meta">${meta}${sourceTag(g)}</span>
+            </span>
+            <span class="hg-top"><b>${top}</b><span>pt</span></span>
           </span>
-          <span class="htop"><b>${rows[0] ? rows[0][1].total : ""}</b><span>pt</span></span>
+          <span class="hg-chart">
+            ${rows.map(([id, r]) => scoreColumn(id, r, Boolean(g.winnerIds && g.winnerIds[id]), top)).join("")}
+          </span>
         </li>`;
     };
 
@@ -286,7 +322,7 @@ function renderGameSheet(s) {
                   const mark = hl.pid === id && hl.round === i ? " hl" : "";
                   if (!e) return `<td class="dim${mark}">·</td>`;
                   const c = computeRound(e);
-                  return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${mark}">${c.total}</td>`;
+                  return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${mark}${c.doubled ? " x2" : ""}">${c.doubled ? `<span class="x2-val">${c.total}<i class="x2-flag">×2</i></span>` : c.total}</td>`;
                 }).join("")}</tr>`).join("")}
             </tbody>
           </table>

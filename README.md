@@ -167,6 +167,10 @@ dispositivo — e il collegamento può cambiarlo solo il proprietario, da
    **Salva e inizia nuova partita** per rigiocare subito con gli stessi,
    oppure **Salva e basta**. Il vincitore incassa la sua Crown.
 
+Il pannello dei punti si **chiude appena salvi**: capita spesso di segnare al volo la
+mano di uno solo, e ritrovarsi dentro il giocatore dopo faceva perdere il filo. Per
+passare da un giocatore all'altro senza uscire ci sono le frecce in cima al pannello.
+
 Serve correggere un errore? Tocchi la casella del round di quel giocatore e la rifai;
 *← Round precedente* riapre il round appena chiuso.
 Il segnapunti può cambiare in qualsiasi momento: chiunque può premere *prendi tu*.
@@ -188,6 +192,14 @@ la stessa cosa in grande nel proprio riquadro: **ti mancano 69 punti**.
 
 **Invitare qualcuno a partita in corso**: il pulsante **Invita** in cima al tabellone
 (o l'icona 🔗 nella barra in alto) apre la condivisione del link della stanza.
+
+**Lo Storico** raggruppa le partite per mese e di ognuna racconta com'è andata senza
+doverla aprire: il vincitore con la coroncina, quanti erano e quante mani sono servite,
+di **quanto ha vinto sul secondo** e una **mini classifica a colonnine** — una per
+giocatore, alta quanto i suoi punti rispetto al primo, con l'avatar sotto e in oro
+quella di chi ha vinto. A colpo d'occhio si vede se è stata una passeggiata o un testa
+a testa. Toccando la partita si apre il dettaglio, con la tabella dei round: le mani
+in cui è arrivata la carta **×2** hanno la loro targhetta arancione.
 
 **Partite vecchie**: tab **Storico** → **Aggiungi partita passata** → data, giocatori e
 punteggi finali. Il vincitore è automatico (punteggio più alto) o lo scegli tu.
@@ -221,9 +233,10 @@ le partite dal vivo. Possono giocare solo i membri approvati.
 Una **vittoria = una Crown**, punto. Nessuna formula strana: in classifica le Crown
 sono la colonna con la coroncina, e in cima c'è chi ne ha di più.
 
-L'ordine è **Crown, poi media punti**: a parità di vittorie passa avanti chi ha la media
-più alta, e se anche quella è uguale chi ha giocato più partite. Vale anche quando
-riordini per un'altra colonna: le Crown restano il primo spareggio.
+L'ordine è **Crown → percentuale di vittorie → media punti**: a parità di Crown passa
+avanti chi le ha fatte in meno partite, e se anche quella è uguale chi ha la media più
+alta (poi le partite giocate). Vale anche quando riordini per un'altra colonna: le Crown
+restano il primo spareggio.
 
 Accanto alle Crown c'è l'**anello delle vittorie**: la fetta dorata è la quota di
 partite vinte e il numero al centro la stessa cosa in percentuale, così si vede al volo
@@ -249,9 +262,9 @@ uno dall'altro invece di una griglia tutta uguale:
 
 Sotto il podio ci sono i **Record**, titoli scherzosi assegnati a chi primeggia in una
 statistica (a pari merito si condividono; toccandone uno si apre la classifica completa).
-Quelli nati da una partita sola, cioè Cannoniere, Colpo Grosso e Fenice, hanno il link
-**rivedi** che apre il dettaglio di quella partita con la mano incriminata cerchiata in
-oro; lo stesso vale per i riquadri corrispondenti nella scheda giocatore:
+Quelli nati da una partita sola, cioè Cannoniere, Colpo Grosso e Sculone, hanno il
+pulsante **Vedi ›** che apre il dettaglio di quella partita con la mano incriminata
+cerchiata in oro; lo stesso vale per i riquadri corrispondenti nella scheda giocatore:
 
 - **Gambler**: più Flip 7 piazzati
 - **Golosone**: più sballi a partita · **Tanaia**: meno sballi a partita (braccine corte)
@@ -265,9 +278,12 @@ oro; lo stesso vale per i riquadri corrispondenti nella scheda giocatore:
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
   le mani sballate né quelle inserite col tastierino)
 - **Colpo Grosso**: la mano più ricca, cioè il massimo di punti incassati in un solo round
-- **Fenice**: la rimonta più grande. Nelle partite segnate mano per mano, per chi ha vinto
+- **Sculone**: la rimonta più grande. Nelle partite segnate mano per mano, per chi ha vinto
   si guarda dopo ogni round di quanto era sotto al primo in classifica: vale il distacco
   più grande che ha poi ribaltato. Chi non è mai stato sotto non concorre
+- **Doppiogiochista**: chi si è visto arrivare più volte la carta **×2**. Conta solo le
+  mani segnate carta per carta (col tastierino non si sa se il ×2 è arrivato), sballi
+  compresi: la carta l'aveva in mano comunque
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;
@@ -277,9 +293,11 @@ I giocatori sono identificati da un id interno, quindi:
 **Avatar**: di base ognuno è un cerchio con le iniziali sul colore del nome. Da
 **Setup → Il tuo avatar → Cambia** si apre il configuratore: scegli un **personaggio**
 fra i ventuno disegnati apposta per l'app (volpe, gufo, robot, dado, la carta col 7…,
-nello stesso stile di corona e trofei) e un **colore** di sfondo, oppure **carichi una foto** (viene
-ritagliata al centro e ridotta a un francobollo, così pesa pochi KB e sta nel
-database insieme al resto). Ognuno cambia solo il proprio; il proprietario può
+nello stesso stile di corona e trofei) e un **colore** di sfondo, oppure **carichi una foto**.
+La foto la **ritagli tu**: si apre un riquadro dove la trascini e la ingrandisci finché
+la faccia sta nel cerchio, e finché il pannello resta aperto puoi tornarci sopra con
+**Ricentra** quante volte vuoi. Quello che salvi è un francobollo, così pesa pochi KB e
+sta nel database insieme al resto. Ognuno cambia solo il proprio; il proprietario può
 sistemare quello di tutti (matita sull'avatar in Setup → Giocatori), utile per chi
 non ha un account.
 

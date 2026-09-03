@@ -99,14 +99,21 @@ function countFreezes(live, pid) {
  * (una mano sballata non e' stata "costruita", e' saltata per aria).
  */
 export function handStats(rows) {
-  let hands = 0, cards = 0, bestHand = 0, bestHandRound = -1, rounds = 0;
+  let hands = 0, cards = 0, bestHand = 0, bestHandRound = -1, rounds = 0, doubles = 0, cardRounds = 0;
   for (const [key, e] of Object.entries(rows || {})) {
     const c = computeRound(e);
     rounds += 1;
     if (c.total > bestHand) { bestHand = c.total; bestHandRound = Number(String(key).slice(1)); }
     if (!c.busted && c.cards > 0) { hands += 1; cards += c.cards; }
+    // il x2 si sa solo dove le carte sono state segnate una per una: le mani
+    // digitate col tastierino non dicono se la carta e' arrivata o no
+    const typed = e && e.manual !== null && e.manual !== undefined && e.manual !== "";
+    if (!typed) {
+      cardRounds += 1;
+      if (c.doubled) doubles += 1;
+    }
   }
-  return { hands, cards, bestHand, bestHandRound, rounds };
+  return { hands, cards, bestHand, bestHandRound, rounds, doubles, cardRounds };
 }
 
 /** Chi ha raggiunto o superato il target. */
@@ -156,9 +163,10 @@ export const PERIODS = {
 
 /**
  * Ordina la classifica: prima il criterio scelto, poi a scalare gli altri.
- * A parita' di Crown decide la media punti, poi le partite, poi i punti totali.
+ * A parita' di Crown decide la quota di vittorie, poi la media punti, poi le
+ * partite giocate e i punti totali.
  */
-export const TIEBREAK = ["crowns", "avg", "games", "points", "best"];
+export const TIEBREAK = ["crowns", "winRate", "avg", "games", "points", "best"];
 
 export function sortLeaderboard(rows, sort = "crowns", dir = -1) {
   const chain = [sort, ...TIEBREAK.filter((k) => k !== sort)];
@@ -173,12 +181,12 @@ export function sortLeaderboard(rows, sort = "crowns", dir = -1) {
 }
 
 export const SORTS = {
-  crowns: { label: "Crown 👑", cmp: (a, b) => b.crowns - a.crowns || b.avg - a.avg || b.games - a.games },
+  crowns: { label: "Crown", cmp: (a, b) => b.crowns - a.crowns || b.winRate - a.winRate || b.avg - a.avg },
   avg: { label: "Media punti", cmp: (a, b) => b.avg - a.avg || b.crowns - a.crowns },
   games: { label: "Partite", cmp: (a, b) => b.games - a.games || b.crowns - a.crowns },
   points: { label: "Punti totali", cmp: (a, b) => b.points - a.points || b.crowns - a.crowns },
   best: { label: "Record", cmp: (a, b) => b.best - a.best || b.crowns - a.crowns },
-  winRate: { label: "Vinte %", cmp: (a, b) => b.winRate - a.winRate || b.crowns - a.crowns }
+  winRate: { label: "Vinte %", cmp: (a, b) => b.winRate - a.winRate || b.crowns - a.crowns || b.avg - a.avg }
 };
 
 /**
@@ -202,7 +210,7 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, bestComeback: 0, comebackWins: 0,
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, doubles: 0, cardRounds: 0, bestComeback: 0, comebackWins: 0,
           bestGame: null, bestHandGame: null, bestHandRound: -1, bestComebackGame: null, bestComebackRound: -1 };
         acc.set(pid, e);
       }
@@ -222,6 +230,8 @@ export function leaderboard(history, players, opts = {}) {
       e.hands += hs.hands;
       e.cards += hs.cards;
       e.rounds += hs.rounds;
+      e.doubles += hs.doubles;
+      e.cardRounds += hs.cardRounds;
       if (hs.bestHand > e.bestHand) { e.bestHand = hs.bestHand; e.bestHandGame = game.id; e.bestHandRound = hs.bestHandRound; }
       const cb = comebackDetail(game, pid);
       if (cb.deficit > 0) e.comebackWins += 1;
@@ -281,8 +291,10 @@ export const AWARDS = [
     unit: (v) => `${dec(v)} carte a mano` },
   { id: "colpogrosso", key: "bestHand", title: "Colpo Grosso", desc: "la mano più ricca in un solo round", emblem: "colpogrosso", tone: "fire",
     unit: (v) => `${v} punti in una mano` },
-  { id: "fenice", key: "bestComeback", title: "Fenice", desc: "la rimonta più grande, da sotto fino alla vittoria", emblem: "fenice", tone: "rose",
-    unit: (v) => `rimonta da −${v}` }
+  { id: "sculone", key: "bestComeback", title: "Sculone", desc: "la rimonta più grande, da sotto fino alla vittoria", emblem: "fenice", tone: "rose",
+    unit: (v) => `rimonta da −${v}` },
+  { id: "doppiogiochista", key: "doubles", title: "Doppiogiochista", desc: "il ×2 gli finisce in mano più che a tutti", emblem: "doppiogiochista", tone: "violet",
+    unit: (v) => v === 1 ? "1 ×2 pescato" : `${v} ×2 pescati` }
 ];
 
 // Flip 7, sballi e congelate esistono solo nelle partite segnate round per
@@ -293,6 +305,7 @@ const awardPool = (a, rows) =>
     : a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0)
     : a.key === "avgCards" ? rows.filter((r) => r.hands > 0)
     : a.key === "bestHand" ? rows.filter((r) => r.rounds > 0)
+    : a.key === "doubles" ? rows.filter((r) => r.cardRounds > 0)
     : a.key === "bestComeback" ? rows.filter((r) => r.bestComeback > 0)
     : rows;
 // arrotondo per confrontare le medie senza sorprese da virgola mobile
@@ -384,7 +397,7 @@ export function playerHighlights(games, playerId) {
   const chrono = [...games].sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
   const won = (g) => Boolean(g.winnerIds && g.winnerIds[playerId]);
 
-  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, rounds = 0;
+  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, rounds = 0, doubles = 0, cardRounds = 0;
   let best = { total: -1, playedAt: 0, gameId: null };
   let bestHand = { total: 0, gameId: null, round: -1 };
   let bestComeback = { deficit: 0, gameId: null, round: -1 };
@@ -404,6 +417,8 @@ export function playerHighlights(games, playerId) {
     hands += hs.hands;
     cards += hs.cards;
     rounds += hs.rounds;
+    doubles += hs.doubles;
+    cardRounds += hs.cardRounds;
     if (hs.bestHand > bestHand.total) bestHand = { total: hs.bestHand, gameId: g.id, round: hs.bestHandRound };
     const cb = comebackDetail(g, playerId);
     if (cb.deficit > bestComeback.deficit) bestComeback = { deficit: cb.deficit, gameId: g.id, round: cb.round };
@@ -421,7 +436,7 @@ export function playerHighlights(games, playerId) {
     bestStreak, currentStreak, sinceLastWin,
     flip7s, busts, freezes, freezeGames, overTarget,
     hands, avgCards: hands ? cards / hands : 0,
-    rounds,
+    rounds, doubles, cardRounds,
     bestHand: bestHand.total, bestHandGame: bestHand.gameId, bestHandRound: bestHand.round,
     bestComeback: bestComeback.deficit, bestComebackGame: bestComeback.gameId, bestComebackRound: bestComeback.round,
     best: best.total < 0 ? { total: 0, playedAt: 0, gameId: null } : best,

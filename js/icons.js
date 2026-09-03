@@ -19,6 +19,7 @@ const PATHS = {
 
   // azioni
   plus: `<path d="M12 5.2v13.6M5.2 12h13.6"/>`,
+  minus: `<path d="M5.2 12h13.6"/>`,
   close: `<path d="m6.4 6.4 11.2 11.2M17.6 6.4 6.4 17.6"/>`,
   check: `<path d="m5 12.6 4.6 4.6L19 6.8"/>`,
   pencil: `<path d="M4 20.2h4.2L20 8.4l-4.2-4.2L4 16Z"/><path d="m14.4 5.8 4.2 4.2"/>`,
@@ -310,7 +311,31 @@ const EMBLEMS = {
     <circle cx="27.5" cy="27" r="1.5" fill="#3a0f1e"/>
     <path d="M30.5 26.5l4 1-3.4 1.7Z" fill="#ffd166" stroke="#7a1a3a" stroke-width="1"/>
     <path d="M18 45c8 3 16 3 24 0" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="1 4"/>
-    <path d="M42 42l2.5 3.2-4 .6" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`
+    <path d="M42 42l2.5 3.2-4 .6" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
+
+  // Doppiogiochista: due carte x2 sbucate insieme, con le scintille della fortuna
+  doppiogiochista: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffcf7a"/><stop offset=".5" stop-color="#ef9a2a"/><stop offset="1" stop-color="#c2660c"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ffc93f">
+      <path d="M7 11l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L2.9 11.9Z"/>
+      <path d="M50 15l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M45 42l.6-2 .6 2 2 .6-2 .6-.6 2-.6-2-2-.6Z"/>
+    </g>
+    <g transform="rotate(-16 19 31)">
+      <rect x="8.5" y="15" width="21" height="29" rx="4.6" fill="url(#${id})" stroke="#7d4104" stroke-width="2"/>
+      <text x="19" y="34.4" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif"
+            font-weight="700" font-size="13" fill="#fff8e6" stroke="#7d4104" stroke-width=".8">×2</text>
+    </g>
+    <g transform="rotate(15 38 28)">
+      <rect x="27.5" y="11" width="21" height="29" rx="4.6" fill="url(#${id})" stroke="#7d4104" stroke-width="2"/>
+      <text x="38" y="30.4" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif"
+            font-weight="700" font-size="13" fill="#fff8e6" stroke="#7d4104" stroke-width=".8">×2</text>
+      <path d="M31.5 15.5h7" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+    </g>`
 };
 
 /** Emblema di un record. `kind` e' la chiave di EMBLEMS. */

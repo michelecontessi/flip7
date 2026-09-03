@@ -334,7 +334,20 @@ test("handStats: conta solo le mani costruite con le carte e non sballate", () =
   assert.equal(hs.cards, 8);
   assert.equal(hs.rounds, 4, "tutte le mani, anche sballate o col tastierino");
   assert.equal(hs.bestHand, 45, "la mano piu' ricca: 7+8+9+10+11");
-  assert.deepEqual(handStats(null), { hands: 0, cards: 0, bestHand: 0, bestHandRound: -1, rounds: 0 });
+  assert.equal(hs.cardRounds, 3, "il tastierino non dice se il x2 e' arrivato: fuori dal conto");
+  assert.equal(hs.doubles, 0);
+  assert.deepEqual(handStats(null), { hands: 0, cards: 0, bestHand: 0, bestHandRound: -1, rounds: 0, doubles: 0, cardRounds: 0 });
+});
+
+test("handStats: i x2 si contano solo sulle mani segnate con le carte", () => {
+  const hs = handStats({
+    r0: { numbers: [1, 2], doubled: true },
+    r1: { numbers: [5, 5], busted: true, doubled: true },
+    r2: { manual: 40, doubled: true },
+    r3: { numbers: [3] }
+  });
+  assert.equal(hs.doubles, 2, "anche il round sballato aveva il x2 in mano");
+  assert.equal(hs.cardRounds, 3, "le tre mani con le carte, non quella digitata");
 });
 
 test("record: Surgelato a chi viene congelato piu' spesso, Architetto alle mani piu' lunghe", () => {
@@ -400,6 +413,41 @@ test("la classifica si ordina anche per percentuale di vittorie", () => {
   assert.deepEqual(sortLeaderboard(rows, "winRate", 1).map((r) => r.playerId), ["a", "b"]);
 });
 
+test("a pari Crown decide la percentuale di vittorie, poi la media punti", () => {
+  const rows = [
+    { playerId: "a", name: "Ale", crowns: 3, games: 12, winRate: 0.25, avg: 220, points: 2640, best: 300 },
+    { playerId: "b", name: "Bea", crowns: 3, games: 6, winRate: 0.5, avg: 180, points: 1080, best: 260 },
+    { playerId: "c", name: "Cri", crowns: 3, games: 6, winRate: 0.5, avg: 190, points: 1140, best: 250 }
+  ];
+  assert.deepEqual(sortLeaderboard(rows, "crowns", -1).map((r) => r.playerId), ["c", "b", "a"],
+    "meta' partite vinte batte la media piu' alta; fra i due pari merito decide la media");
+});
+
+test("Doppiogiochista: il x2 pescato piu' spesso, solo dove le carte sono segnate", () => {
+  const hist = {
+    g1: {
+      playedAt: 1, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 60, flip7s: 0, busts: 0 }, b: { name: "Bea", total: 50, flip7s: 0, busts: 0 } },
+      rounds: {
+        a: { r0: { numbers: [10], doubled: true }, r1: { numbers: [8, 4], doubled: true } },
+        b: { r0: { numbers: [12, 11] }, r1: { manual: 30, doubled: true } }
+      }
+    },
+    g2: { playedAt: 2, winnerIds: { c: true }, results: { a: { name: "Ale", total: 10 }, c: { name: "Cri", total: 90 } }, rounds: null }
+  };
+  const rows = leaderboard(hist, {}).rows;
+  const ale = rows.find((r) => r.playerId === "a");
+  assert.equal(ale.doubles, 2);
+  assert.equal(ale.cardRounds, 2);
+  assert.equal(rows.find((r) => r.playerId === "b").doubles, 0, "il x2 digitato col tastierino non conta");
+  const d = awards(rows).find((x) => x.id === "doppiogiochista");
+  assert.deepEqual(d.winners.map((w) => w.playerId), ["a"]);
+  assert.equal(d.unit(2), "2 ×2 pescati");
+  assert.equal(d.unit(1), "1 ×2 pescato");
+  assert.deepEqual(awardRanking(rows, "doppiogiochista").rows.map((r) => r.playerId), ["a", "b"],
+    "chi non ha mani segnate con le carte resta fuori");
+});
+
 test("congelate: una partita giocata prima dell'avvio non conta, anche se ha il dato", () => {
   const prima = { playedAt: FREEZE_STATS_SINCE - 1, results: { a: { name: "Ale", total: 50, busts: 0, freezes: 0 }, b: { name: "Bea", total: 60, busts: 0, freezes: 0 } }, winnerIds: { b: true } };
   const dopo = { playedAt: FREEZE_STATS_SINCE, results: { a: { name: "Ale", total: 40, busts: 0, freezes: 2 }, b: { name: "Bea", total: 70, busts: 0, freezes: 0 } }, winnerIds: { b: true } };
@@ -462,7 +510,7 @@ test("comebackOf: il distacco massimo dal primo, ribaltato entro l'ultimo round"
   assert.equal(comebackOf({ ...game, rounds: { a: { r0: { numbers: [1] } }, b: { r0: { numbers: [9] } } } }, "a"), 0, "un round solo non fa rimonta");
 });
 
-test("Fenice va alla rimonta piu' grande e chi non e' mai stato sotto non concorre", () => {
+test("Sculone va alla rimonta piu' grande e chi non e' mai stato sotto non concorre", () => {
   const hist = {
     g1: { playedAt: 1, winnerIds: { a: true }, results: { a: { name: "Ale", total: 60 }, b: { name: "Bea", total: 50 } },
       rounds: { a: { r0: { numbers: [10] }, r1: { numbers: [12, 11, 10, 9, 8] } }, b: { r0: { numbers: [12, 11, 10, 9] }, r1: { numbers: [8] } } } },
@@ -474,10 +522,10 @@ test("Fenice va alla rimonta piu' grande e chi non e' mai stato sotto non concor
   assert.equal(ale.bestComeback, 32);
   assert.equal(ale.comebackWins, 1);
   assert.equal(rows.find((r) => r.playerId === "b").bestComeback, 0);
-  const f = awards(rows).find((x) => x.id === "fenice");
+  const f = awards(rows).find((x) => x.id === "sculone");
   assert.deepEqual(f.winners.map((w) => w.playerId), ["a"]);
   assert.equal(f.unit(32), "rimonta da −32");
-  assert.deepEqual(awardRanking(rows, "fenice").rows.map((r) => r.playerId), ["a"]);
+  assert.deepEqual(awardRanking(rows, "sculone").rows.map((r) => r.playerId), ["a"]);
   assert.equal(playerHighlights([{ id: "g1", ...hist.g1 }, { id: "g2", ...hist.g2 }], "a").bestComeback, 32);
 });
 

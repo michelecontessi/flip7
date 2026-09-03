@@ -7,7 +7,7 @@ import { esc, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, roomUrl
 import { isFirebaseConfigured } from "../config.js";
 import { icon } from "../icons.js";
 import { applyTheme } from "../theme.js";
-import { avatar, avatarHtml, playerAvatar, fileToAvatarImage, symbolSvg, AVATAR_SYMBOLS, AVATAR_COLORS } from "../avatar.js";
+import { avatar, avatarHtml, playerAvatar, loadPhoto, centerCrop, cropToAvatarImage, openAvatarCropper, symbolSvg, AVATAR_SYMBOLS, AVATAR_COLORS } from "../avatar.js";
 
 const localState = { showArchived: false };
 
@@ -175,7 +175,7 @@ export const setupView = {
       const p = (ctx.room.players || {})[id];
       if (!p) return;
       if (!(store.isOwner() || ctx.me === id)) return toast("Puoi cambiare solo il tuo avatar", "warn");
-      openSheet({ type: "avatar", playerId: id, name: p.name, draft: playerAvatar(id) }, renderAvatarSheet);
+      openSheet({ type: "avatar", playerId: id, name: p.name, draft: playerAvatar(id), photo: null }, renderAvatarSheet);
     },
     "ava-sym"(ctx, el) {
       const s = sheet.state;
@@ -187,7 +187,18 @@ export const setupView = {
       s.draft = { sym: (s.draft && s.draft.sym) || Object.keys(AVATAR_SYMBOLS)[0], bg: el.dataset.c };
       return "sheet";
     },
-    "ava-reset"() { sheet.state.draft = null; return "sheet"; },
+    "ava-reset"() { sheet.state.draft = null; sheet.state.photo = null; return "sheet"; },
+    // ricentrare la foto gia' caricata: si riparte dall'originale, non dal francobollo
+    async "ava-recenter"() {
+      const s = sheet.state;
+      if (!s.photo) return toast("Ricarica la foto per ricentrarla", "warn");
+      const crop = await openAvatarCropper(s.photo.src, s.photo.crop);
+      if (!crop || sheet.state !== s) return "sheet";
+      s.photo.crop = crop;
+      try { s.draft = { image: cropToAvatarImage(s.photo.src, crop) }; }
+      catch (e) { toast(e.message || "Foto non leggibile", "warn"); }
+      return "sheet";
+    },
     async "ava-save"() {
       const s = sheet.state;
       try { await store.setPlayerAvatar(s.playerId, s.draft); }
@@ -288,10 +299,16 @@ export const setupView = {
     "theme"(ctx, el) { prefs.set("theme", el.value); applyTheme(); },
     async "ava-file"(ctx, el) {
       const file = el.files && el.files[0];
-      if (!file || !sheet.state) return;
-      try { sheet.state.draft = { image: await fileToAvatarImage(file) }; }
-      catch (e) { toast(e.message || "Foto non leggibile", "warn"); }
       el.value = "";
+      const s = sheet.state;
+      if (!file || !s) return;
+      try {
+        const src = await loadPhoto(file);
+        const crop = await openAvatarCropper(src, centerCrop());
+        if (!crop || sheet.state !== s) return "sheet";
+        s.photo = { src, crop };
+        s.draft = { image: cropToAvatarImage(src, crop) };
+      } catch (e) { toast(e.message || "Foto non leggibile", "warn"); }
       return "sheet";
     },
     "room-name"(ctx, el) { return store.setRoomName(el.value); },
@@ -346,8 +363,13 @@ function renderAvatarSheet(s) {
 
     <div class="calc-section">
       <div class="calc-label"><span>Oppure una foto</span></div>
-      <label class="btn ghost file">${icon("upload", "tiny")} ${a && a.image ? "Cambia foto" : "Carica una foto"}<input type="file" accept="image/*" data-change="ava-file" hidden></label>
-      <p class="muted small">Ritagliata al centro e ridotta a un francobollo: la vedono solo i membri della stanza.</p>
+      <div class="ava-photo-row">
+        <label class="btn ghost file">${icon("upload", "tiny")} ${a && a.image ? "Cambia foto" : "Carica una foto"}<input type="file" accept="image/*" data-change="ava-file" hidden></label>
+        ${s.photo ? `<button class="btn ghost" data-action="ava-recenter">${icon("target", "tiny")} Ricentra</button>` : ""}
+      </div>
+      <p class="muted small">${s.photo
+        ? "Puoi ricentrarla quante volte vuoi finché questo pannello resta aperto."
+        : "La ritagli tu prima di salvarla, poi resta un francobollo: la vedono solo i membri della stanza."}</p>
     </div>
 
     <div class="sheet-actions">

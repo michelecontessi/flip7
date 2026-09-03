@@ -164,7 +164,7 @@ h1, h2, h3 { margin: 0; font-weight: 700; }
 
 /* tutto cio' che e' "punteggio" usa il carattere del gioco, cifre allineate */
 .total-cell b, .rc-val, .sd-value, .you-score > b, .key, .cbar-val, .crown-chip,
-.hdate b, .htop b, .stat b, .ch-count b, .wb-name, .wb-score, .profile-name,
+.hdate b, .hg-top b, .stat b, .ch-count b, .wb-name, .wb-score, .profile-name,
 .round-pill, .rank, .col, .fcard b, .empty-title, .dlg-title, .sheet-title,
 .nav-name, .page-title, table.rounds td, .total-cell small {
   font-family: var(--font-display);
@@ -569,6 +569,15 @@ table.rounds td.flip7 { color: var(--gold); font-weight: 800; }
 table.rounds td.dim { color: var(--dim); opacity: .5; }
 table.rounds td.frozen { color: var(--c-blue); font-weight: 700; }
 table.rounds td.tot { font-weight: 800; }
+/* il x2: la carta che raddoppia si vede a colpo d'occhio nel recap delle mani */
+table.rounds td.x2 { font-weight: 750; }
+table.rounds .x2-val { position: relative; display: inline-block; padding-right: 12px; }
+table.rounds .x2-flag {
+  position: absolute; top: -5px; right: -3px;
+  font-family: var(--font-display); font-style: normal; font-weight: 700;
+  font-size: 9px; line-height: 1; padding: 2px 3px; border-radius: 5px;
+  background: #ec9633; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.18);
+}
 /* tabella delle mani in modifica: ogni casella e' un pulsante */
 table.rounds.edit td { padding: 4px 3px; }
 table.rounds.edit td.tot { padding: 4px 9px; }
@@ -646,11 +655,19 @@ table.rounds.edit td.tot { padding: 4px 9px; }
   display: flex; align-items: center; justify-content: center; gap: 5px;
   font-family: var(--font-display); font-weight: 600;
 }
-.pod-step b { font-size: 19px; }
+/* la corona di ogni gradino sta sulla stessa targhetta chiara: cosi' oro,
+   argento e bronzo mostrano la stessa identica corona, non tre corone diverse */
+.pod-tally {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 7px; border-radius: 99px;
+  background: rgba(255,255,255,.9); box-shadow: 0 1px 3px rgba(0,0,0,.14);
+}
+.pod-tally b { font-size: 17px; color: #3d2c07; font-variant-numeric: tabular-nums; }
 .pod-col.p1 .pod-step { height: 64px; background: linear-gradient(180deg, #ffd97a, #e2a416); color: #674502; box-shadow: 0 6px 14px rgba(190,130,20,.3); }
 .pod-col.p2 .pod-step { height: 44px; background: linear-gradient(180deg, #dde4ec, #a8b4c2); color: #3f4c5c; }
 .pod-col.p3 .pod-step { height: 32px; background: linear-gradient(180deg, #e9bd93, #c0824f); color: #59301a; }
-.pod-col.p2 .pod-step b, .pod-col.p3 .pod-step b { font-size: 16px; }
+.pod-col.p2 .pod-tally, .pod-col.p3 .pod-tally { padding: 2px 8px 2px 6px; }
+.pod-col.p2 .pod-tally b, .pod-col.p3 .pod-tally b { font-size: 15px; }
 
 /* medaglie in lista */
 .rank.medal {
@@ -712,25 +729,46 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .lbrow.top .wr-arc { filter: drop-shadow(0 1px 3px rgba(200,140,20,.45)); }
 
 /* ---------- storico ---------- */
-.hlist { display: flex; flex-direction: column; }
-.hrow {
-  display: grid; grid-template-columns: 38px 1fr auto; gap: 12px; align-items: center;
-  padding: 11px 6px; width: 100%; text-align: left;
-  background: none; border: 0; border-bottom: 1px solid var(--line);
+.hlist { display: flex; flex-direction: column; gap: 9px; }
+.hgame {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 11px 10px 9px; border-radius: 15px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  cursor: pointer; text-align: left; transition: transform .12s ease;
 }
-.hlist .hrow:last-child { border-bottom: 0; }
+.hgame:active { transform: scale(.99); }
+.hg-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.hg-id { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hg-win { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hg-win b { font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-meta { display: flex; align-items: center; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; }
+.hg-meta .tag { background: var(--surface-3); }
+.hg-top { text-align: right; line-height: 1.05; }
+.hg-top b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hg-top span { display: block; font-size: 10.5px; color: var(--dim); }
+
+/* mini classifica della partita: una colonnina di punti per giocatore */
+.hg-chart { display: flex; align-items: flex-end; justify-content: center; gap: 9px; padding-top: 2px; }
+.hg-col { flex: 1 1 0; min-width: 0; max-width: 58px; display: grid; justify-items: center; gap: 5px; }
+.hg-col > b { font-size: 10.5px; font-weight: 700; color: var(--dim); font-variant-numeric: tabular-nums; }
+.hg-track {
+  width: 100%; max-width: 24px; height: 54px; display: flex; align-items: flex-end;
+  background: var(--line); border-radius: 8px; overflow: hidden;
+}
+.hg-track i {
+  display: block; width: 100%; border-radius: 8px;
+  background: var(--bar, var(--surface-3)); opacity: .7;
+}
+.hg-col.win > b { color: var(--c-gold); font-weight: 800; }
+.hg-col.win .hg-track i {
+  opacity: 1; background: linear-gradient(180deg, #ffe1a0, #e2a416);
+  box-shadow: 0 2px 6px rgba(190,130,20,.3);
+}
 .hdate { text-align: center; line-height: 1.05; }
 .hdate b { display: block; font-size: 19px; font-weight: 800; }
 .hdate span { font-size: 11px; color: var(--dim); text-transform: uppercase; }
-.hmain { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.hwin { display: flex; align-items: center; gap: 6px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hplayers { display: flex; align-items: center; gap: 4px; }
 .hp { width: 19px; height: 19px; border-radius: 50%; display: grid; place-items: center; font-size: 9px; font-weight: 800; font-style: normal; color: rgba(0,0,0,.6); }
 .hp.w { box-shadow: 0 0 0 2px var(--gold); }
-.hplayers .small { margin-left: 4px; }
-.htop { text-align: right; line-height: 1.05; }
-.htop b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.htop span { display: block; font-size: 11px; color: var(--dim); }
 
 /* ---------- liste ---------- */
 .mini-list { display: flex; flex-direction: column; }
@@ -1327,6 +1365,26 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .dlg-msg { font-size: 14px; color: var(--muted); }
 .dlg-input { font-size: 16px; }
 .dlg-choices { display: flex; flex-direction: column; gap: 6px; max-height: 44vh; overflow-y: auto; }
+
+/* ---------- ritaglio della foto avatar ---------- */
+.crop-dlg { width: min(100%, 320px); }
+.crop-stage {
+  position: relative; align-self: center; width: 260px; height: 260px;
+  border-radius: 18px; overflow: hidden; background: #14161a;
+  touch-action: none; cursor: grab; user-select: none;
+}
+.crop-stage:active { cursor: grabbing; }
+.crop-canvas { display: block; }
+.crop-ring {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  border: 2px solid rgba(255,255,255,.9);
+  box-shadow: 0 0 0 9999px rgba(10,12,16,.5);
+}
+.crop-zoom { display: flex; align-items: center; gap: 10px; }
+.crop-zoom .icon-btn { width: 36px; height: 36px; border-radius: 10px; color: var(--text); }
+.crop-zoom input[type="range"] { flex: 1; min-width: 0; accent-color: var(--gold); }
+.ava-photo-row { display: flex; gap: 8px; }
+.ava-photo-row .btn { flex: 1; }
 .dlg-choice { min-height: 48px; border-radius: 12px; border: 0; background: var(--surface-2); color: var(--text); text-align: left; padding: 0 14px; font-weight: 620; }
 .dlg-actions { display: flex; gap: 9px; margin-top: 2px; }
 .dlg-actions .btn { flex: 1; }
@@ -1384,6 +1442,7 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .tone-ice    { background: rgba(70,170,235,.12); } .tone-ice b    { color: var(--c-blue); }
 .tone-fire   { background: rgba(235,110,50,.12); } .tone-fire b   { color: var(--c-orange); }
 .tone-rose   { background: rgba(220,70,130,.11); }  .tone-rose b   { color: var(--c-rose); }
+.tone-orange { background: rgba(235,150,50,.13); }  .tone-orange b { color: var(--c-orange); }
 .mood { text-align: center; font-size: 14px; color: var(--muted); padding: 2px 6px; }
 .mood b { color: var(--text); font-weight: 700; }
 
@@ -1451,13 +1510,15 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .aw-list .nm { font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-list .nm small { display: block; font-size: 11px; color: var(--dim); font-weight: 500; }
 .aw-list b { font-variant-numeric: tabular-nums; font-size: 13.5px; white-space: nowrap; }
-/* "rivedi": rimando alla partita da cui nasce il record */
+/* "Vedi": rimando alla partita da cui nasce il record */
 .rewatch {
-  display: inline-flex; align-items: center; gap: 4px; margin-top: 3px;
-  background: none; border: 0; padding: 0; font-size: 11.5px; font-weight: 700; color: var(--c-blue);
+  display: inline-flex; align-items: center; gap: 2px; margin-top: 5px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 99px;
+  padding: 4px 8px 4px 11px; font-size: 13px; font-weight: 750; color: var(--c-blue);
 }
-.rewatch .ico { width: 12px; height: 12px; }
-.rewatch.card-link { margin-top: 7px; }
+.rewatch .ico { width: 15px; height: 15px; stroke-width: 2.2; transform: rotate(-90deg); }
+.rewatch:active { transform: scale(.96); }
+.rewatch.card-link { margin-top: 8px; }
 .hl.tap { cursor: pointer; }
 .hl.tap:active { transform: scale(.98); }
 table.rounds td.hl { box-shadow: inset 0 0 0 2px var(--gold); border-radius: 8px; font-weight: 800; }

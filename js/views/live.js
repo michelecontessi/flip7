@@ -308,7 +308,7 @@ function renderRoundsTable(room, live) {
                 if (!e) return `<td class="dim">·</td>`;
                 const c = computeRound(e);
                 sum += c.total;
-                return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}">${c.total}</td>`;
+                return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${c.doubled ? " x2" : ""}">${c.doubled ? `<span class="x2-val">${c.total}<i class="x2-flag">×2</i></span>` : c.total}</td>`;
               }).join("");
               return `<tr><th>${esc(nameOf(room, live, pid))}</th>${cells}<td class="tot">${sum}</td></tr>`;
             }).join("")}
@@ -533,11 +533,7 @@ export function patchCalcSheet(s) {
 }
 
 function nextLabel(s) {
-  if (s.saveLabel) return s.saveLabel;
-  const live = store.getRoom().live;
-  if (!live) return "Salva";
-  const others = missingIds(live).filter((id) => id !== s.playerId);
-  return others.length ? "Salva ›" : "Salva ✓";
+  return s.saveLabel || "Salva e chiudi";
 }
 
 /** Entry pronta per il database: solo i campi previsti, mai undefined. */
@@ -684,17 +680,20 @@ export const liveView = {
       gotoPlayer(s.order[Math.min(s.order.length - 1, s.pos + 1)]);
       return "sheet-full";
     },
+    // Salvare chiude sempre il pannello: capita di segnare una mano "al volo"
+    // e ritrovarsi dentro il giocatore dopo faceva perdere il filo.
     async "calc-save"() {
       const s = sheet.state;
       if (s.onSave) return s.onSave(s);
       const scored = computeRound(s.entry);
       await persistEntry(s);
-      if (scored.flip7) toast(`FLIP 7! +15 a ${s.playerName}`, "party");
-      const live = store.getRoom().live;
-      const next = live ? missingIds(live).filter((id) => id !== s.playerId)[0] : null;
-      if (next) { gotoPlayer(next); return "sheet-full"; }
       closeSheet();
-      toast("Round completo: chiudi il round");
+      if (scored.flip7) return toast(`FLIP 7! +15 a ${s.playerName}`, "party");
+      const live = store.getRoom().live;
+      const missing = live ? missingIds(live).length : 0;
+      toast(missing
+        ? `${s.playerName}: ${scored.total} punti · ${missing === 1 ? "manca 1 giocatore" : `mancano ${missing} giocatori`}`
+        : "Round completo: chiudi il round");
     },
 
     "calc-mode"(ctx, el) {

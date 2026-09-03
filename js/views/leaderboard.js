@@ -21,14 +21,14 @@ const GAME_RECORDS = {
     note: `dopo il round ${r.bestComebackRound + 1} era sotto di ${r.bestComeback} punti, poi ha vinto` })
 };
 
-/** Pulsante "rivedi" verso la partita del record (vuoto se il record non ne ha una). */
+/** Pulsante "Vedi" verso la partita del record (vuoto se il record non ne ha una). */
 function gameLink(key, r, cls = "rewatch") {
   const spec = GAME_RECORDS[key];
   const ref = spec ? spec(r) : null;
   const g = ref && ref.game ? (getRoom().history || {})[ref.game] : null;
   if (!g) return "";
-  return `<button class="${cls}" data-action="award-game" data-g="${ref.game}" ${ref.pid ? `data-pid="${ref.pid}" data-round="${ref.round}"` : ""} data-note="${esc(ref.note)}">
-    ${icon("history", "tiny")} rivedi · ${fmtDate(g.playedAt)}</button>`;
+  return `<button class="${cls}" data-action="award-game" data-g="${ref.game}" ${ref.pid ? `data-pid="${ref.pid}" data-round="${ref.round}"` : ""} data-note="${esc(ref.note)}" title="${fmtDate(g.playedAt)}">
+    Vedi ${icon("chevron", "tiny")}</button>`;
 }
 
 const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
@@ -92,7 +92,7 @@ function renderPodium(rows, gamesCount) {
       ${place === 1 ? `<div class="pod-crown">${crownEmblem("big")}</div>` : ""}
       ${avatar(r.playerId, r.name, place === 1 ? "lg" : "")}
       <span class="pod-name">${esc(r.name)}</span>
-      <div class="pod-step">${crownEmblem("mini")}<b>${r.crowns}</b></div>
+      <div class="pod-step"><span class="pod-tally">${crownEmblem("mini")}<b>${r.crowns}</b></span></div>
     </div>` : "";
   return `
     <section class="crown-hero holo podium">
@@ -393,6 +393,7 @@ function awardRowSub(a, r) {
   }
   if (a.key === "avgCards") return `${r.cards} carte in ${r.hands === 1 ? "1 mano" : r.hands + " mani"}`;
   if (a.key === "bestHand") return `su ${r.rounds === 1 ? "1 mano giocata" : r.rounds + " mani giocate"}`;
+  if (a.key === "doubles") return `su ${r.cardRounds === 1 ? "1 mano segnata con le carte" : r.cardRounds + " mani segnate con le carte"}`;
   if (a.key === "bestComeback") return r.comebackWins === 1 ? "1 vittoria in rimonta" : `${r.comebackWins} vittorie in rimonta`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
   return `media ${fmtNum(r.avg, 1)}`;
@@ -503,7 +504,7 @@ function renderPlayerPage(s) {
         </div>
         <div class="hl tone-blue ${h.best.gameId ? "tap" : ""}" ${h.best.gameId ? `data-action="award-game" data-g="${h.best.gameId}" data-note="${esc(`${h.best.total} punti in questa partita, il suo record`)}"` : ""}>
           <b>${h.best.total}</b>
-          <span>il suo record<small>${h.best.playedAt ? fmtDate(h.best.playedAt) + " · rivedi" : "—"}</small></span>
+          <span>il suo record<small>${h.best.playedAt ? fmtDate(h.best.playedAt) + " · vedi" : "—"}</small></span>
         </div>
         <div class="hl">
           <b>${fmtNum(row.avg, 1)}</b>
@@ -530,17 +531,22 @@ function renderPlayerPage(s) {
           ${h.rounds ? `
           <div class="hl tone-fire ${h.bestHandGame ? "tap" : ""}" ${h.bestHandGame ? `data-action="award-game" data-g="${h.bestHandGame}" data-pid="${pid}" data-round="${h.bestHandRound}" data-note="${esc(`la mano da ${h.bestHand} punti`)}"` : ""}>
             <b>${h.bestHand}</b>
-            <span>la sua mano migliore<small>punti in un solo round${h.bestHandGame ? " · rivedi" : ""}</small></span>
+            <span>la sua mano migliore<small>punti in un solo round${h.bestHandGame ? " · vedi" : ""}</small></span>
           </div>` : ""}
           ${h.bestComeback ? `
           <div class="hl tone-rose tap" data-action="award-game" data-g="${h.bestComebackGame}" data-pid="${pid}" data-round="${h.bestComebackRound}" data-note="${esc(`dopo il round ${h.bestComebackRound + 1} era sotto di ${h.bestComeback} punti, poi ha vinto`)}">
             <b>−${h.bestComeback}</b>
-            <span>la rimonta più grande<small>era sotto di tanto, poi ha vinto · rivedi</small></span>
+            <span>la rimonta più grande<small>era sotto di tanto, poi ha vinto · vedi</small></span>
           </div>` : ""}
           ${h.hands ? `
           <div class="hl tone-violet">
             <b>${fmtNum(h.avgCards, 1)}</b>
             <span>carte a mano<small>su ${h.hands === 1 ? "1 mano segnata" : h.hands + " mani segnate"} carta per carta</small></span>
+          </div>` : ""}
+          ${h.cardRounds ? `
+          <div class="hl tone-orange">
+            <b>${h.doubles}</b>
+            <span>${h.doubles === 1 ? "×2 pescato" : "×2 pescati"}<small>in ${h.cardRounds === 1 ? "1 mano segnata con le carte" : h.cardRounds + " mani segnate con le carte"}</small></span>
           </div>` : ""}` : ""}
       </div>
 

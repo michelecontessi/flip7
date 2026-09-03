@@ -7,6 +7,7 @@
 // contorno inciso, sfumature piene, luci bianche. ViewBox 48x48.
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf } from "./ui.js";
+import { icon } from "./icons.js";
 import { getRoom } from "./store.js";
 
 export const AVATAR_COLORS = [
@@ -293,7 +294,7 @@ export function avatar(pid, name, cls = "sm") {
   return avatarHtml(playerAvatar(pid), name, cls);
 }
 
-// --- foto: ritaglio centrale, riduzione e compressione -----------------------
+// --- foto: lettura, ritaglio, riduzione e compressione -----------------------
 async function loadImage(file) {
   if (typeof createImageBitmap === "function") {
     try { return await createImageBitmap(file, { imageOrientation: "from-image" }); }
@@ -313,22 +314,53 @@ async function loadImage(file) {
 }
 
 /**
- * Trasforma un file immagine in un francobollo quadrato (JPEG in data URL),
- * abbassando la qualita' finche' sta dentro `maxChars` (limite delle regole).
+ * La foto scelta, tenuta a piena risoluzione finche' il pannello avatar resta
+ * aperto: serve a poter ricentrare il ritaglio quante volte si vuole senza
+ * ripartire dal file.
+ * @typedef {{img:CanvasImageSource, w:number, h:number}} PhotoSource
  */
-export async function fileToAvatarImage(file, { size = 160, maxChars = 30000 } = {}) {
-  const src = await loadImage(file);
-  const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height;
+export async function loadPhoto(file) {
+  const img = await loadImage(file);
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
   if (!w || !h) throw new Error("Immagine non leggibile");
-  const side = Math.min(w, h);
-  const canvas = document.createElement("canvas");
+  return { img, w, h };
+}
+
+/** Ritaglio di partenza: il quadrato piu' grande, preso al centro. */
+export const centerCrop = () => ({ zoom: 1, cx: 0.5, cy: 0.5 });
+
+/** Lato (in pixel della foto) del quadrato ritagliato al livello di zoom dato. */
+const cropSide = (src, crop) => Math.min(src.w, src.h) / Math.max(1, crop.zoom || 1);
+
+/**
+ * Tiene il ritaglio dentro la foto: cosi' trascinando non si finisce mai fuori
+ * bordo, con la fascia bianca al posto dell'immagine.
+ */
+export function clampCrop(src, crop) {
+  const side = cropSide(src, crop);
+  const halfX = side / 2 / src.w, halfY = side / 2 / src.h;
+  return {
+    zoom: Math.max(1, Math.min(5, crop.zoom || 1)),
+    cx: Math.min(1 - halfX, Math.max(halfX, crop.cx)),
+    cy: Math.min(1 - halfY, Math.max(halfY, crop.cy))
+  };
+}
+
+/** Disegna il ritaglio su un canvas quadrato di `size` pixel. */
+export function drawCrop(canvas, src, crop, size) {
+  const c = clampCrop(src, crop);
+  const side = cropSide(src, c);
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, size, size); // le png trasparenti su jpeg diventerebbero nere
-  ctx.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
-  if (typeof src.close === "function") src.close();
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(src.img, c.cx * src.w - side / 2, c.cy * src.h - side / 2, side, side, 0, 0, size, size);
+  return canvas;
+}
 
+/** JPEG in data URL, con la qualita' abbassata finche' sta dentro `maxChars`. */
+function encodeAvatar(canvas, maxChars) {
   let quality = 0.84;
   let out = canvas.toDataURL("image/jpeg", quality);
   while (out.length > maxChars && quality > 0.3) {
@@ -337,4 +369,108 @@ export async function fileToAvatarImage(file, { size = 160, maxChars = 30000 } =
   }
   if (out.length > maxChars || !IMAGE_RE.test(out)) throw new Error("Foto troppo pesante: provane una più semplice");
   return out;
+}
+
+/** Francobollo quadrato (JPEG in data URL) del ritaglio scelto. */
+export function cropToAvatarImage(src, crop, { size = 160, maxChars = 30000 } = {}) {
+  return encodeAvatar(drawCrop(document.createElement("canvas"), src, crop, size), maxChars);
+}
+
+// --- ritaglio interattivo ----------------------------------------------------
+// Una foto caricata quasi mai e' gia' centrata: qui si trascina e si ingrandisce
+// finche' la faccia sta nel cerchio, e si puo' tornarci sopra quante volte si vuole.
+const STAGE = 260;
+
+/**
+ * Apre il ritaglio della foto. Risolve col nuovo `crop`, oppure null se annullato.
+ * @param {PhotoSource} src
+ * @param {{zoom:number, cx:number, cy:number}} start
+ */
+export function openAvatarCropper(src, start = centerCrop()) {
+  return new Promise((resolve) => {
+    const root = document.getElementById("dialog-root");
+    if (!root) return resolve(null);
+
+    let crop = clampCrop(src, { ...start });
+    const wrap = document.createElement("div");
+    wrap.className = "dlg-wrap";
+    wrap.innerHTML = `
+      <div class="dlg-backdrop"></div>
+      <div class="dlg crop-dlg" role="dialog" aria-modal="true">
+        <div class="dlg-title">Centra la foto</div>
+        <div class="crop-stage">
+          <canvas class="crop-canvas"></canvas>
+          <span class="crop-ring" aria-hidden="true"></span>
+        </div>
+        <div class="crop-zoom">
+          <button class="icon-btn" data-z="-.4" aria-label="Riduci">${icon("minus")}</button>
+          <input type="range" min="1" max="5" step="0.01" value="${crop.zoom}" aria-label="Ingrandimento">
+          <button class="icon-btn" data-z=".4" aria-label="Ingrandisci">${icon("plus")}</button>
+        </div>
+        <p class="dlg-msg">Trascina la foto per spostarla, la barra per ingrandirla.</p>
+        <div class="dlg-actions">
+          <button class="btn ghost" data-r="cancel">Annulla</button>
+          <button class="btn primary" data-r="ok">${icon("check", "tiny")} Usa questa</button>
+        </div>
+      </div>`;
+
+    root.appendChild(wrap);
+    document.body.classList.add("sheet-open");
+
+    const canvas = wrap.querySelector(".crop-canvas");
+    const range = wrap.querySelector('input[type="range"]');
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    canvas.style.width = canvas.style.height = STAGE + "px";
+    const paint = () => { crop = clampCrop(src, crop); drawCrop(canvas, src, crop, Math.round(STAGE * dpr)); };
+    paint();
+
+    // trascinamento: un pixel sullo schermo = un pixel della foto, alla scala del ritaglio
+    let dragging = null;
+    const stage = wrap.querySelector(".crop-stage");
+    stage.addEventListener("pointerdown", (ev) => {
+      dragging = { x: ev.clientX, y: ev.clientY };
+      stage.setPointerCapture(ev.pointerId);
+    });
+    stage.addEventListener("pointermove", (ev) => {
+      if (!dragging) return;
+      const k = (Math.min(src.w, src.h) / crop.zoom) / STAGE;
+      crop.cx -= ((ev.clientX - dragging.x) * k) / src.w;
+      crop.cy -= ((ev.clientY - dragging.y) * k) / src.h;
+      dragging = { x: ev.clientX, y: ev.clientY };
+      paint();
+    });
+    const endDrag = () => { dragging = null; };
+    stage.addEventListener("pointerup", endDrag);
+    stage.addEventListener("pointercancel", endDrag);
+    stage.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      crop.zoom = Math.max(1, Math.min(5, crop.zoom * (ev.deltaY < 0 ? 1.08 : 1 / 1.08)));
+      range.value = crop.zoom;
+      paint();
+    }, { passive: false });
+
+    range.addEventListener("input", () => { crop.zoom = Number(range.value); paint(); });
+
+    const done = (value) => {
+      wrap.remove();
+      const openSheetRoot = document.getElementById("sheet-root");
+      if (!root.children.length && !(openSheetRoot && openSheetRoot.classList.contains("open"))) {
+        document.body.classList.remove("sheet-open");
+      }
+      resolve(value);
+    };
+    wrap.addEventListener("click", (ev) => {
+      const step = ev.target.closest("[data-z]");
+      if (step) {
+        crop.zoom = Math.max(1, Math.min(5, crop.zoom + Number(step.dataset.z)));
+        range.value = crop.zoom;
+        return paint();
+      }
+      const hit = ev.target.closest("[data-r], .dlg-backdrop");
+      if (!hit) return;
+      if (hit.classList.contains("dlg-backdrop") || hit.dataset.r === "cancel") return done(null);
+      if (hit.dataset.r === "ok") return done(clampCrop(src, crop));
+    });
+    wrap.addEventListener("keydown", (ev) => { if (ev.key === "Escape") done(null); });
+  });
 }
