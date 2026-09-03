@@ -12,9 +12,35 @@ const filters = () => ({ period: localState.period, source: localState.source })
 
 const COLUMNS = [
   { key: "crowns", label: "crown", icon: "crownFill" },
+  { key: "winRate", label: "vinte" },
   { key: "avg", label: "media" },
   { key: "games", label: "part." }
 ];
+
+let ringSeq = 0;
+/**
+ * Anello delle vittorie: la fetta dorata e' la quota di partite vinte, il
+ * numero al centro la stessa cosa in percentuale. A colpo d'occhio si vede
+ * chi vince spesso anche se ha giocato poco.
+ */
+function winRing(rate) {
+  const pct = Math.max(0, Math.min(100, Math.round((rate || 0) * 100)));
+  const id = "wr" + (++ringSeq);
+  const r = 15, circ = 2 * Math.PI * r;
+  return `<span class="win-ring ${pct ? "" : "zero"}" title="${pct}% di partite vinte">
+    <svg viewBox="0 0 36 36" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffe1a0"/><stop offset=".5" stop-color="#f0a91e"/><stop offset="1" stop-color="#d1860c"/>
+        </linearGradient>
+      </defs>
+      <circle class="wr-track" cx="18" cy="18" r="${r}"/>
+      ${pct ? `<circle class="wr-arc" cx="18" cy="18" r="${r}" stroke="url(#${id})"
+        stroke-dasharray="${(circ * pct / 100).toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 18 18)"/>` : ""}
+      <text class="wr-num" x="18" y="22.6" text-anchor="middle">${pct}</text>
+    </svg>
+  </span>`;
+}
 
 const sortRows = (rows) => sortLeaderboard(rows, localState.sort, localState.dir);
 
@@ -50,7 +76,7 @@ function renderPodium(rows, gamesCount) {
       <div class="pod-row">
         ${col(top[1], 2)}${col(top[0], 1)}${col(top[2], 3)}
       </div>
-      <div class="ch-sub">${leader.crowns} vittorie su ${gamesCount} partite · media ${fmtNum(leader.avg, 1)}</div>
+      <div class="ch-sub">${leader.crowns === 1 ? "1 vittoria" : leader.crowns + " vittorie"} su ${gamesCount === 1 ? "1 partita" : gamesCount + " partite"} · media ${fmtNum(leader.avg, 1)}</div>
     </section>`;
 }
 
@@ -256,9 +282,10 @@ export const leaderboardView = {
               <span class="lbname">
                 ${avatar(r.playerId, r.name, "sm")}
                 <span class="txt">${esc(r.name)}
-                  <small>rec. ${r.best} · ${fmtNum(r.winRate * 100, 0)}%</small></span>
+                  <small>rec. ${r.best}</small></span>
               </span>
               <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
+              ${winRing(r.winRate)}
               <span class="col avg">${fmtNum(r.avg, 1)}</span>
               <span class="col games">${r.games}</span>
             </li>`).join("")}
@@ -269,7 +296,8 @@ export const leaderboardView = {
 
       ${renderTrend(room, me)}
 
-      <p class="foot-note">Una vittoria = una Crown. Tocca un giocatore per la sua scheda, un record per la classifica di quella statistica.</p>`;
+      <p class="foot-note">Una vittoria = una Crown, e l'anello dorato è la quota di partite vinte.
+        Tocca un giocatore per la sua scheda, un record per la classifica di quella statistica.</p>`;
   },
 
   actions: {
@@ -331,7 +359,7 @@ function awardRowSub(a, r) {
   }
   if (a.key === "freezeRate") {
     const s = r.freezes === 1 ? "congelato 1 volta" : `congelato ${r.freezes} volte`;
-    return `${s} in ${r.tracked === 1 ? "1 partita" : r.tracked + " partite"}`;
+    return `${s} in ${r.frozenTracked === 1 ? "1 partita" : r.frozenTracked + " partite"}`;
   }
   if (a.key === "avgCards") return `${r.cards} carte in ${r.hands === 1 ? "1 mano" : r.hands + " mani"}`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
@@ -456,20 +484,21 @@ function renderPlayerPage(s) {
         ${h.detailedGames ? `
           <div class="hl tone-gold">
             <b>${h.flip7s}</b>
-            <span>${h.flip7s === 1 ? "Flip 7 riuscito" : "Flip 7 riusciti"}<small>in ${h.detailedGames} partite tracciate</small></span>
+            <span>${h.flip7s === 1 ? "Flip 7 riuscito" : "Flip 7 riusciti"}<small>in ${h.detailedGames === 1 ? "1 partita tracciata" : h.detailedGames + " partite tracciate"}</small></span>
           </div>
           <div class="hl tone-red">
             <b>${h.busts}</b>
             <span>${h.busts === 1 ? "sballo" : "sballi"}<small>round buttati via</small></span>
           </div>
+          ${h.freezeGames ? `
           <div class="hl tone-ice">
             <b>${h.freezes}</b>
-            <span>${h.freezes === 1 ? "volta congelato" : "volte congelato"}<small>fermato da un Congela</small></span>
-          </div>
+            <span>${h.freezes === 1 ? "volta congelato" : "volte congelato"}<small>in ${h.freezeGames === 1 ? "1 partita" : h.freezeGames + " partite"} con i Congela segnati</small></span>
+          </div>` : ""}
           ${h.hands ? `
           <div class="hl tone-violet">
             <b>${fmtNum(h.avgCards, 1)}</b>
-            <span>carte a mano<small>su ${h.hands === 1 ? "1 mano" : h.hands + " mani"} segnate carta per carta</small></span>
+            <span>carte a mano<small>su ${h.hands === 1 ? "1 mano segnata" : h.hands + " mani segnate"} carta per carta</small></span>
           </div>` : ""}` : ""}
       </div>
 

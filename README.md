@@ -217,8 +217,11 @@ L'ordine è **Crown, poi media punti**: a parità di vittorie passa avanti chi h
 più alta, e se anche quella è uguale chi ha giocato più partite. Vale anche quando
 riordini per un'altra colonna: le Crown restano il primo spareggio.
 
-La tabella mostra anche media punti, record personale e partite giocate: tocca
-un'intestazione per riordinare, e usa il menù in alto a destra per filtrare il periodo
+Accanto alle Crown c'è l'**anello delle vittorie**: la fetta dorata è la quota di
+partite vinte e il numero al centro la stessa cosa in percentuale, così si vede al volo
+chi vince spesso anche se ha giocato poche partite. La tabella mostra anche media punti,
+record personale e partite giocate: tocca un'intestazione per riordinare (l'anello
+compreso), e usa il menù in alto a destra per filtrare il periodo
 (sempre / anno / mese / ultimi 30 giorni).
 
 Toccando un giocatore si apre la sua **scheda a schermo intero**, con riquadri diversi
@@ -229,9 +232,9 @@ uno dall'altro invece di una griglia tutta uguale:
 - **la serie più lunga** di vittorie di fila, e sotto la frase del momento
   (*in serie: 4 di fila* / *non vince da 6 partite*);
 - **il suo record** con la data, **media a partita**, **percentuale di vittorie**;
-- **Flip 7 riusciti**, **sballi** e **volte congelato**, contati sulle partite segnate
-  round per round, e la **lunghezza media delle mani** dove le carte sono state
-  segnate una per una;
+- **Flip 7 riusciti** e **sballi**, contati sulle partite segnate round per round, le
+  **volte congelato** (solo dalle partite in cui i Congela sono stati segnati) e la
+  **lunghezza media delle mani** dove le carte sono state messe una per una;
 - il grafico **Andamento su tutte le partite** — non solo le ultime dieci: le barre si
   stringono al crescere dello storico, si scorre lateralmente e si apre già sull'ultima
   partita giocata. In oro le vittorie, la tratteggiata è l'obiettivo.
@@ -242,7 +245,9 @@ statistica (a pari merito si condividono; toccandone uno si apre la classifica c
 - **Gambler**: più Flip 7 piazzati
 - **Golosone**: più sballi a partita · **Tanaia**: meno sballi a partita (braccine corte)
 - **Cannoniere**: il punteggio più alto in una singola partita
-- **Surgelato**: più volte congelato a partita, il bersaglio preferito dei *Congela*
+- **Surgelato**: più volte congelato a partita, il bersaglio preferito dei *Congela*.
+  Conta solo le partite segnate da quando esiste il tasto **Congelato**: quelle più
+  vecchie non hanno il dato e resterebbero a zero, falsando la media
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
   le mani sballate né quelle inserite col tastierino)
 

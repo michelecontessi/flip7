@@ -363,3 +363,32 @@ test("reviseGame conta anche le congelate", () => {
   assert.equal(out.results.a.freezes, 1);
   assert.equal(out.results.a.total, 43 + 10);
 });
+
+test("congelate: le partite vecchie senza quel dato non annacquano la media", () => {
+  const hist = {
+    vecchia: { playedAt: 1, results: { a: { name: "Ale", total: 100, flip7s: 0, busts: 1 }, b: { name: "Bea", total: 90, flip7s: 0, busts: 0 } }, winnerIds: { a: true } },
+    nuova: { playedAt: 2, results: { a: { name: "Ale", total: 80, flip7s: 0, busts: 0, freezes: 3 }, b: { name: "Bea", total: 95, flip7s: 0, busts: 0, freezes: 0 } }, winnerIds: { b: true } }
+  };
+  const { rows } = leaderboard(hist, {});
+  const ale = rows.find((r) => r.playerId === "a");
+  assert.equal(ale.tracked, 2);
+  assert.equal(ale.frozenTracked, 1, "conta solo la partita che ha registrato le congelate");
+  assert.equal(ale.freezeRate, 3, "3 congelate in 1 partita, non 1,5 in 2");
+  assert.deepEqual(awards(rows).find((x) => x.id === "surgelato").winners.map((w) => w.playerId), ["a"]);
+});
+
+test("congelate: con solo partite vecchie il Surgelato non si assegna", () => {
+  const hist = { g: { playedAt: 1, results: { a: { name: "Ale", total: 10, busts: 0 }, b: { name: "Bea", total: 20, busts: 2 } }, winnerIds: { b: true } } };
+  const { rows } = leaderboard(hist, {});
+  assert.equal(awards(rows).find((x) => x.id === "surgelato"), undefined);
+  assert.equal(awardRanking(rows, "surgelato").rows.length, 0);
+});
+
+test("la classifica si ordina anche per percentuale di vittorie", () => {
+  const rows = [
+    { playerId: "a", name: "Ale", crowns: 5, games: 20, winRate: 0.25, avg: 100, points: 2000, best: 200 },
+    { playerId: "b", name: "Bea", crowns: 2, games: 3, winRate: 2 / 3, avg: 90, points: 270, best: 180 }
+  ];
+  assert.deepEqual(sortLeaderboard(rows, "winRate", -1).map((r) => r.playerId), ["b", "a"]);
+  assert.deepEqual(sortLeaderboard(rows, "winRate", 1).map((r) => r.playerId), ["a", "b"]);
+});

@@ -660,18 +660,18 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 }
 .period-select .ico { position: absolute; right: 10px; pointer-events: none; color: var(--muted); width: 14px; height: 14px; }
 
-.lb-head, .lbrow { display: grid; grid-template-columns: 24px 1fr 50px 50px 34px; align-items: center; gap: 6px; }
+.lb-head, .lbrow { display: grid; grid-template-columns: 20px 1fr 42px 34px 42px 26px; align-items: center; gap: 4px; }
 .lb-head { padding: 6px 8px 5px; border-bottom: 1px solid var(--line); }
 .lb-head > span { font-size: 12px; color: var(--dim); }
 .lb-sort {
-  background: none; border: 0; padding: 4px 0; color: var(--dim); font-size: 12px; font-weight: 600;
+  background: none; border: 0; padding: 4px 0; color: var(--dim); font-size: 11.5px; font-weight: 600;
   display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px;
 }
 .lb-sort .ico { width: 15px; height: 15px; }
 .lb-sort.on { color: var(--text); }
 .lb-sort .arrow { display: flex; }
 .lb-sort .arrow.up { transform: rotate(180deg); }
-.lb-sort .arrow .ico { width: 12px; height: 12px; }
+.lb-sort .arrow .ico { width: 11px; height: 11px; }
 .lb-list { display: flex; flex-direction: column; }
 .lbrow { position: relative; padding: 11px 8px; border-bottom: 1px solid var(--line); text-align: left; background: none; border-left: 0; border-right: 0; border-top: 0; }
 .lbrow:last-child { border-bottom: 0; }
@@ -692,6 +692,15 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .lbrow.top .lbname .txt { font-weight: 750; }
 .col.avg { font-weight: 700; }
 .col.games { color: var(--muted); }
+
+/* anello delle vittorie: quota vinta in oro, percentuale al centro */
+.win-ring { width: 32px; height: 32px; margin: 0 auto; display: block; }
+.win-ring svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.wr-track { fill: none; stroke: var(--line-strong); stroke-width: 3.4; }
+.wr-arc { fill: none; stroke-width: 3.4; stroke-linecap: round; }
+.wr-num { font-family: var(--font-display); font-weight: 600; font-size: 13px; fill: var(--text); }
+.win-ring.zero .wr-num { fill: var(--dim); }
+.lbrow.top .wr-arc { filter: drop-shadow(0 1px 3px rgba(200,140,20,.45)); }
 
 /* ---------- storico ---------- */
 .hlist { display: flex; flex-direction: column; }

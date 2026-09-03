@@ -166,7 +166,8 @@ export const SORTS = {
   avg: { label: "Media punti", cmp: (a, b) => b.avg - a.avg || b.crowns - a.crowns },
   games: { label: "Partite", cmp: (a, b) => b.games - a.games || b.crowns - a.crowns },
   points: { label: "Punti totali", cmp: (a, b) => b.points - a.points || b.crowns - a.crowns },
-  best: { label: "Record", cmp: (a, b) => b.best - a.best || b.crowns - a.crowns }
+  best: { label: "Record", cmp: (a, b) => b.best - a.best || b.crowns - a.crowns },
+  winRate: { label: "Vinte %", cmp: (a, b) => b.winRate - a.winRate || b.crowns - a.crowns }
 };
 
 /**
@@ -190,7 +191,7 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, hands: 0, cards: 0 };
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0 };
         acc.set(pid, e);
       }
       e.name = res.name || e.name;
@@ -202,6 +203,9 @@ export function leaderboard(history, players, opts = {}) {
       e.busts += Number(res.busts) || 0;
       e.freezes += Number(res.freezes) || 0;
       if (res.busts !== undefined || res.flip7s !== undefined) e.tracked += 1; // segnata round per round
+      // le congelate esistono solo dalle partite segnate dopo l'arrivo del tasto
+      // "Congelato": quelle di prima non fanno media, altrimenti la annacquerebbero
+      if (res.freezes !== undefined) e.frozenTracked += 1;
       const hs = handStats(game.rounds && game.rounds[pid]);
       e.hands += hs.hands;
       e.cards += hs.cards;
@@ -217,7 +221,7 @@ export function leaderboard(history, players, opts = {}) {
     avg: e.games ? e.points / e.games : 0,
     winRate: e.games ? e.crowns / e.games : 0,
     bustRate: e.tracked ? e.busts / e.tracked : 0,
-    freezeRate: e.tracked ? e.freezes / e.tracked : 0,
+    freezeRate: e.frozenTracked ? e.freezes / e.frozenTracked : 0,
     avgCards: e.hands ? e.cards / e.hands : 0,
     worst: e.worst === Infinity ? 0 : e.worst
   }));
@@ -264,7 +268,8 @@ export const AWARDS = [
 // round (`tracked`); le mani lunghe solo dove le carte sono state segnate una
 // per una (`hands`). Chi ha solo totali recuperati a mano non concorre.
 const awardPool = (a, rows) =>
-  a.key === "flip7s" || a.key === "bustRate" || a.key === "freezeRate" ? rows.filter((r) => r.tracked > 0)
+  a.key === "freezeRate" ? rows.filter((r) => r.frozenTracked > 0)
+    : a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0)
     : a.key === "avgCards" ? rows.filter((r) => r.hands > 0)
     : rows;
 // arrotondo per confrontare le medie senza sorprese da virgola mobile
@@ -356,7 +361,7 @@ export function playerHighlights(games, playerId) {
   const chrono = [...games].sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
   const won = (g) => Boolean(g.winnerIds && g.winnerIds[playerId]);
 
-  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, hands = 0, cards = 0;
+  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0;
   let best = { total: -1, playedAt: 0 };
 
   for (const g of chrono) {
@@ -367,6 +372,7 @@ export function playerHighlights(games, playerId) {
     flip7s += Number(res.flip7s) || 0;
     busts += Number(res.busts) || 0;
     freezes += Number(res.freezes) || 0;
+    if (res.freezes !== undefined) freezeGames += 1;
     const hs = handStats(g.rounds && g.rounds[playerId]);
     hands += hs.hands;
     cards += hs.cards;
@@ -382,7 +388,7 @@ export function playerHighlights(games, playerId) {
 
   return {
     bestStreak, currentStreak, sinceLastWin,
-    flip7s, busts, freezes, overTarget,
+    flip7s, busts, freezes, freezeGames, overTarget,
     hands, avgCards: hands ? cards / hands : 0,
     best: best.total < 0 ? { total: 0, playedAt: 0 } : best,
     played: chrono.length,
