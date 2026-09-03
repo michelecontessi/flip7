@@ -129,6 +129,23 @@ export function winnersOf(standings) {
   return standings.filter((r) => r.total === top).map((r) => r.playerId);
 }
 
+/**
+ * Chi e' arrivato secondo in una partita chiusa: il punteggio piu' alto fra
+ * quelli che NON hanno vinto (a pari merito il secondo posto e' di tutti).
+ * Vuoto se la partita ha un solo giocatore o se hanno vinto tutti.
+ */
+export function runnersUpOf(game) {
+  const results = (game && game.results) || {};
+  const winners = (game && game.winnerIds) || {};
+  const ids = Object.keys(results);
+  if (ids.length < 2) return [];
+  const losers = ids.filter((pid) => !winners[pid]);
+  if (!losers.length) return [];
+  const total = (pid) => Number(results[pid].total) || 0;
+  const top = Math.max(...losers.map(total));
+  return losers.filter((pid) => total(pid) === top);
+}
+
 // ---------------------------------------------------------------------------
 // Classifica perpetua
 // ---------------------------------------------------------------------------
@@ -207,10 +224,11 @@ export function leaderboard(history, players, opts = {}) {
   for (const game of games) {
     const results = game.results || {};
     const winners = game.winnerIds || {};
+    const seconds = new Set(runnersUpOf(game));
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, doubles: 0, cardRounds: 0, bestComeback: 0, comebackWins: 0,
+        e = { playerId: pid, name: res.name || "?", crowns: 0, seconds: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, doubles: 0, cardRounds: 0, bestComeback: 0, comebackWins: 0,
           bestGame: null, bestHandGame: null, bestHandRound: -1, bestComebackGame: null, bestComebackRound: -1 };
         acc.set(pid, e);
       }
@@ -238,6 +256,7 @@ export function leaderboard(history, players, opts = {}) {
       if (cb.deficit > e.bestComeback) { e.bestComeback = cb.deficit; e.bestComebackGame = game.id; e.bestComebackRound = cb.round; }
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
+      if (seconds.has(pid)) e.seconds += 1;
     }
   }
 
@@ -294,7 +313,9 @@ export const AWARDS = [
   { id: "sculone", key: "bestComeback", title: "Sculone", desc: "la rimonta più grande, da sotto fino alla vittoria", emblem: "sculone", tone: "gold",
     unit: (v) => `rimonta da −${v}` },
   { id: "doppiogiochista", key: "doubles", title: "Doppiogiochista", desc: "il ×2 gli finisce in mano più che a tutti", emblem: "doppiogiochista", tone: "violet",
-    unit: (v) => v === 1 ? "1 ×2 pescato" : `${v} ×2 pescati` }
+    unit: (v) => v === 1 ? "1 ×2 pescato" : `${v} ×2 pescati` },
+  { id: "rosicone", key: "seconds", title: "Rosicone", desc: "il secondo posto è casa sua, e ancora rosica", emblem: "rosicone", tone: "silver",
+    unit: (v) => v === 1 ? "1 secondo posto" : `${v} secondi posti` }
 ];
 
 // Flip 7, sballi e congelate esistono solo nelle partite segnate round per
@@ -307,6 +328,7 @@ const awardPool = (a, rows) =>
     : a.key === "bestHand" ? rows.filter((r) => r.rounds > 0)
     : a.key === "doubles" ? rows.filter((r) => r.cardRounds > 0)
     : a.key === "bestComeback" ? rows.filter((r) => r.bestComeback > 0)
+    : a.key === "seconds" ? rows.filter((r) => r.games > 0)
     : rows;
 // arrotondo per confrontare le medie senza sorprese da virgola mobile
 const awardVal = (a, r) => Math.round((Number(r[a.key]) || 0) * 1000) / 1000;
@@ -376,7 +398,14 @@ export function leaderboardTrend(history, players, opts = {}) {
       e.best = Math.max(e.best, Number(res.total) || 0);
       if (winners[pid]) e.crowns += 1;
     }
-    const rows = [...acc.values()].map((e) => ({ ...e, avg: e.games ? e.points / e.games : 0 }));
+    // stessa formula della classifica vera: Crown, quota di vittorie, media
+    // punti (poi partite, punti, record). Senza winRate il grafico saltava lo
+    // spareggio della quota e disegnava posizioni diverse da quelle in lista.
+    const rows = [...acc.values()].map((e) => ({
+      ...e,
+      avg: e.games ? e.points / e.games : 0,
+      winRate: e.games ? e.crowns / e.games : 0
+    }));
     const snap = {};
     sortLeaderboard(rows).forEach((r, i) => { snap[r.playerId] = { rank: i + 1, avg: r.avg }; });
     steps.push({ playedAt: game.playedAt || 0, snap });

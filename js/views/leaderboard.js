@@ -395,6 +395,7 @@ function awardRowSub(a, r) {
   if (a.key === "bestHand") return `su ${r.rounds === 1 ? "1 mano giocata" : r.rounds + " mani giocate"}`;
   if (a.key === "doubles") return `su ${r.cardRounds === 1 ? "1 mano segnata con le carte" : r.cardRounds + " mani segnate con le carte"}`;
   if (a.key === "bestComeback") return r.comebackWins === 1 ? "1 vittoria in rimonta" : `${r.comebackWins} vittorie in rimonta`;
+  if (a.key === "seconds") return `${r.crowns === 1 ? "1 vittoria" : r.crowns + " vittorie"} su ${r.games === 1 ? "1 partita" : r.games + " partite"}`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
   return `media ${fmtNum(r.avg, 1)}`;
 }

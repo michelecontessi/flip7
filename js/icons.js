@@ -349,7 +349,44 @@ const EMBLEMS = {
       <text x="38" y="30.4" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif"
             font-weight="700" font-size="13" fill="#fff8e6" stroke="#7d4104" stroke-width=".8">×2</text>
       <path d="M31.5 15.5h7" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
-    </g>`
+    </g>`,
+
+  // Rosicone: la corona del secondo posto. Stessa sagoma di quella vera ma
+  // d'argento e sfumata, come una Crown che non si e' mai presa del tutto.
+  rosicone: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fbfdff"/><stop offset=".45" stop-color="#cfdae6"/>
+        <stop offset="1" stop-color="#8b9aab"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#e9eff6"/><stop offset="1" stop-color="#93a2b3"/>
+      </linearGradient>
+      <linearGradient id="${id}f" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0"   stop-color="#fff" stop-opacity="1"/>
+        <stop offset=".38" stop-color="#fff" stop-opacity=".9"/>
+        <stop offset=".72" stop-color="#fff" stop-opacity=".38"/>
+        <stop offset="1"   stop-color="#fff" stop-opacity=".05"/>
+      </linearGradient>
+      <mask id="${id}m"><rect x="0" y="0" width="56" height="52" fill="url(#${id}f)"/></mask>
+    </defs>
+    <g class="ae-spark" fill="#c3d1de">
+      <path d="M7.5 8.5 8.4 5.4l.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1-3.1-.9Z"/>
+      <path d="M49.5 33l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <g mask="url(#${id}m)">
+      <path d="M11 36 7.6 14.6l9.5 6.9L28 7.2l10.9 14.3 9.5-6.9L45 36Z"
+            fill="url(#${id})" stroke="#6d7c8d" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="18.5" cy="30" r="2.2" fill="#fff" opacity=".5"/>
+      <circle cx="37.5" cy="30" r="2.2" fill="#fff" opacity=".5"/>
+      <circle cx="7.6" cy="14.6" r="2.6" fill="url(#${id}b)" stroke="#6d7c8d" stroke-width="1.6"/>
+      <circle cx="28" cy="7.2" r="3" fill="url(#${id}b)" stroke="#6d7c8d" stroke-width="1.6"/>
+      <circle cx="48.4" cy="14.6" r="2.6" fill="url(#${id}b)" stroke="#6d7c8d" stroke-width="1.6"/>
+      <rect x="9.4" y="38" width="37.2" height="8.4" rx="3"
+            fill="url(#${id}b)" stroke="#6d7c8d" stroke-width="2"/>
+    </g>
+    <text x="28" y="45.4" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif"
+          font-weight="700" font-size="8.4" fill="#5a697a">2</text>`
 };
 
 /** Emblema di un record. `kind` e' la chiave di EMBLEMS. */

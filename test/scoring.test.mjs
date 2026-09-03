@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { computeRound, formulaOf, isBlankEntry } from "../js/scoring.js";
-import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey, awards, awardRanking, roundStarter, FREEZE_STATS_SINCE } from "../js/stats.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, playerTotal, liveStandings, winnersOf, runnersUpOf, roundKey, awards, awardRanking, roundStarter, FREEZE_STATS_SINCE } from "../js/stats.js";
 
 // una partita giocata dopo l'avvio del conteggio delle congelate
 const DOPO = FREEZE_STATS_SINCE + 60000;
@@ -190,7 +190,7 @@ test("trofei: senza partite tracciate restano solo quelli sui totali", () => {
     g1: { playedAt: 1000, results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 } }, winnerIds: { a: true } }
   };
   const list = awards(leaderboard(hist, {}).rows);
-  assert.deepEqual(list.map((a) => a.id), ["cannoniere"]);
+  assert.deepEqual(list.map((a) => a.id), ["cannoniere", "rosicone"]);
 });
 
 test("trofei: il Tanaia ignora chi non ha partite tracciate", () => {
@@ -546,4 +546,64 @@ test("i record da una partita sola ricordano quale partita (e quale mano)", () =
   assert.equal(h.best.gameId, "g2");
   assert.deepEqual([h.bestHandGame, h.bestHandRound], ["g2", 0]);
   assert.deepEqual([h.bestComebackGame, h.bestComebackRound, h.bestComeback], ["g1", 0, 32]);
+});
+
+test("secondi posti: il piu' alto fra chi non ha vinto, a pari merito tutti", () => {
+  const hist = {
+    g1: { playedAt: 1, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 }, c: { name: "Cri", total: 50 } } },
+    g2: { playedAt: 2, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 }, c: { name: "Cri", total: 90 } } },
+    g3: { playedAt: 3, winnerIds: { a: true }, results: { a: { name: "Ale", total: 100 } } }
+  };
+  assert.deepEqual(runnersUpOf(hist.g1), ["b"]);
+  assert.deepEqual(runnersUpOf(hist.g2).sort(), ["b", "c"]);
+  assert.deepEqual(runnersUpOf(hist.g3), [], "da solo non c'e' secondo");
+
+  const rows = leaderboard(hist, {}).rows;
+  const by = (id) => rows.find((r) => r.playerId === id);
+  assert.equal(by("a").seconds, 0);
+  assert.equal(by("b").seconds, 2);
+  assert.equal(by("c").seconds, 1);
+});
+
+test("trofei: il Rosicone va a chi arriva secondo piu' volte", () => {
+  const hist = {
+    g1: { playedAt: 1, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 }, c: { name: "Cri", total: 50 } } },
+    g2: { playedAt: 2, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 }, c: { name: "Cri", total: 50 } } },
+    g3: { playedAt: 3, winnerIds: { c: true },
+      results: { a: { name: "Ale", total: 80 }, b: { name: "Bea", total: 70 }, c: { name: "Cri", total: 200 } } }
+  };
+  const rows = leaderboard(hist, {}).rows;
+  const ros = awards(rows).find((x) => x.id === "rosicone");
+  assert.deepEqual(ros.winners.map((w) => w.playerId), ["b"]);
+  assert.equal(ros.value, 2);
+  assert.equal(ros.unit(1), "1 secondo posto");
+  assert.equal(ros.unit(2), "2 secondi posti");
+  // la classifica del trofeo elenca tutti, anche chi non e' mai arrivato secondo
+  assert.deepEqual(awardRanking(rows, "rosicone").rows.map((r) => [r.playerId, r.value]),
+    [["b", 2], ["a", 1], ["c", 0]]);
+});
+
+test("il grafico dell'andamento usa gli spareggi della classifica (crown, quota, media)", () => {
+  const hist = {
+    g1: { playedAt: 1, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 }, c: { name: "Cri", total: 80 } } },
+    g2: { playedAt: 2, winnerIds: { a: true },
+      results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 }, c: { name: "Cri", total: 80 } } },
+    g3: { playedAt: 3, winnerIds: { b: true },
+      results: { a: { name: "Ale", total: 10 }, b: { name: "Bea", total: 300 }, c: { name: "Cri", total: 20 } } },
+    g4: { playedAt: 4, winnerIds: { b: true },
+      results: { b: { name: "Bea", total: 300 }, c: { name: "Cri", total: 20 } } }
+  };
+  // Ale e Bea chiudono a 2 Crown: Ale davanti perche' ne ha vinte 2 su 3 contro
+  // 2 su 4, anche se Bea ha la media punti molto piu' alta
+  const rows = leaderboard(hist, {}).rows;
+  assert.deepEqual(sortLeaderboard(rows).map((r) => r.playerId), ["a", "b", "c"]);
+
+  const { steps } = leaderboardTrend(hist, {});
+  const last = steps[steps.length - 1].snap;
+  assert.deepEqual([last.a.rank, last.b.rank, last.c.rank], [1, 2, 3]);
 });
