@@ -219,3 +219,147 @@ test("apre la mano: sorteggiato al via, poi ruota a ogni round", () => {
   assert.equal(roundStarter({ ...live, round: 3 }), "b");   // giro completo
   assert.equal(roundStarter({ players: live.players, round: 2 }), null); // partite vecchie senza sorteggio
 });
+
+// ---------------------------------------------------------------------------
+// Correzione di una partita chiusa (reviseGame)
+// ---------------------------------------------------------------------------
+import { reviseGame, roundCount } from "../js/stats.js";
+
+const closedGame = () => ({
+  playedAt: new Date(2026, 4, 10, 21, 0).getTime(),
+  finishedAt: new Date(2026, 4, 10, 21, 40).getTime(),
+  targetScore: 200,
+  source: "live",
+  results: { a: { name: "Ale", total: 60, flip7s: 1, busts: 0 }, b: { name: "Bea", total: 20, flip7s: 0, busts: 1 } },
+  winnerIds: { a: true },
+  rounds: {
+    a: { r0: { numbers: [1, 2, 3, 4, 5, 6, 7] }, r1: { numbers: [10] } },
+    b: { r0: { numbers: [12], busted: true }, r1: { numbers: [20] } }
+  },
+  createdAt: 1
+});
+
+test("roundCount conta i round dal massimo indice, buchi compresi", () => {
+  assert.equal(roundCount(null), 0);
+  assert.equal(roundCount({ a: { r0: {}, r3: {} }, b: { r1: {} } }), 4);
+});
+
+test("reviseGame: totali, Flip 7, sballi e vincitore ricalcolati dalle mani corrette", () => {
+  const g = closedGame();
+  const rounds = JSON.parse(JSON.stringify(g.rounds));
+  rounds.b.r1 = { numbers: [12, 11, 10], plus: [10], doubled: true }; // 66+10 = 76
+  const out = reviseGame(g, {
+    playedAt: g.playedAt, targetScore: 200,
+    players: [{ playerId: "a", name: "Ale" }, { playerId: "b", name: "Bea" }],
+    rounds, winnerId: null
+  });
+  assert.equal(out.results.a.total, 43 + 10);
+  assert.equal(out.results.a.flip7s, 1);
+  assert.equal(out.results.b.total, 76);
+  assert.equal(out.results.b.busts, 1);
+  assert.deepEqual(out.winnerIds, { b: true });
+  assert.equal(out.source, "live");
+  assert.equal(out.createdAt, 1);
+  assert.ok(out.editedAt > 0);
+  assert.equal(g.results.b.total, 20, "l'originale non viene toccato");
+});
+
+test("reviseGame: un round svuotato per tutti sparisce e i successivi scalano", () => {
+  const g = closedGame();
+  const rounds = JSON.parse(JSON.stringify(g.rounds));
+  delete rounds.a.r0;
+  delete rounds.b.r0;
+  const out = reviseGame(g, { playedAt: g.playedAt, targetScore: 200, players: [{ playerId: "a", name: "Ale" }, { playerId: "b", name: "Bea" }], rounds });
+  assert.deepEqual(Object.keys(out.rounds.a), ["r0"]);
+  assert.equal(out.rounds.a.r0.numbers[0], 10);
+  assert.equal(roundCount(out.rounds), 1);
+  assert.equal(out.results.a.total, 10);
+  assert.equal(out.results.a.flip7s, 0);
+});
+
+test("reviseGame: giocatore tolto e aggiunto, vincitore scelto a mano, data spostata con la stessa ora", () => {
+  const g = closedGame();
+  const newDay = new Date(2026, 4, 12, 0, 0).getTime();
+  const out = reviseGame(g, {
+    playedAt: new Date(2026, 4, 12, 21, 0).getTime(), targetScore: 250,
+    players: [{ playerId: "a", name: "Alessandro" }, { playerId: "c", name: "Cri" }],
+    rounds: JSON.parse(JSON.stringify(g.rounds)),
+    winnerId: "c"
+  });
+  assert.deepEqual(Object.keys(out.results).sort(), ["a", "c"]);
+  assert.equal(out.results.a.name, "Alessandro");
+  assert.equal(out.results.c.total, 0);
+  assert.equal(out.rounds.b, undefined, "le mani di chi e' stato tolto spariscono");
+  assert.deepEqual(out.winnerIds, { c: true });
+  assert.equal(out.targetScore, 250);
+  assert.ok(out.playedAt > newDay);
+  assert.equal(out.finishedAt - out.playedAt, 40 * 60 * 1000, "la fine segue lo spostamento della data");
+});
+
+test("reviseGame: senza mani valgono i totali scritti e il vincitore ignoto ricade sul piu' alto", () => {
+  const g = { playedAt: 5, targetScore: 200, source: "manual", results: { a: { name: "Ale", total: 100 }, b: { name: "Bea", total: 90 } }, winnerIds: { a: true }, rounds: null };
+  const out = reviseGame(g, {
+    playedAt: 5, targetScore: 200,
+    players: [{ playerId: "a", name: "Ale", total: "80" }, { playerId: "b", name: "Bea", total: 95.4 }],
+    rounds: null, winnerId: "zzz"
+  });
+  assert.equal(out.results.a.total, 80);
+  assert.equal(out.results.b.total, 95);
+  assert.equal(out.results.a.flip7s, undefined, "una partita a mano resta senza statistiche di round");
+  assert.deepEqual(out.winnerIds, { b: true });
+  assert.equal(out.rounds, null);
+});
+
+// ---------------------------------------------------------------------------
+// Congelato e record nuovi (Surgelato, Architetto)
+// ---------------------------------------------------------------------------
+import { handStats } from "../js/stats.js";
+
+test("congelato: i punti restano quelli delle carte, ma la mano non e' vuota", () => {
+  const r = computeRound({ numbers: [4, 9], plus: [2], frozen: true });
+  assert.equal(r.total, 15);
+  assert.equal(r.frozen, true);
+  assert.equal(formulaOf({ numbers: [4, 9], plus: [2], frozen: true }), "(4+9) +2 · congelato");
+  assert.equal(isBlankEntry({ numbers: [], plus: [], frozen: true }), false);
+  assert.equal(computeRound({ numbers: [4], busted: true, frozen: true }).frozen, false, "sballato vince sul congelato");
+});
+
+test("handStats: conta solo le mani costruite con le carte e non sballate", () => {
+  const rows = { r0: { numbers: [1, 2, 3] }, r1: { numbers: [5, 5], busted: true }, r2: { manual: 40 }, r3: { numbers: [7, 8, 9, 10, 11] } };
+  assert.deepEqual(handStats(rows), { hands: 2, cards: 8 });
+  assert.deepEqual(handStats(null), { hands: 0, cards: 0 });
+});
+
+test("record: Surgelato a chi viene congelato piu' spesso, Architetto alle mani piu' lunghe", () => {
+  const hist = {
+    g1: {
+      playedAt: 1, results: { a: { name: "Ale", total: 50, flip7s: 0, busts: 0, freezes: 2 }, b: { name: "Bea", total: 60, flip7s: 0, busts: 0, freezes: 0 } },
+      winnerIds: { b: true },
+      rounds: { a: { r0: { numbers: [1, 2] }, r1: { numbers: [3, 4, 5, 6] } }, b: { r0: { numbers: [12] }, r1: { manual: 30 } } }
+    },
+    g2: { playedAt: 2, results: { a: { name: "Ale", total: 10 }, c: { name: "Cri", total: 90 } }, winnerIds: { c: true }, rounds: null }
+  };
+  const { rows } = leaderboard(hist, {});
+  const ale = rows.find((r) => r.playerId === "a");
+  assert.equal(ale.freezes, 2);
+  assert.equal(ale.freezeRate, 2, "due congelate in una sola partita tracciata");
+  assert.equal(ale.avgCards, 3);
+  assert.equal(rows.find((r) => r.playerId === "b").avgCards, 1);
+  const list = awards(rows);
+  assert.deepEqual(list.find((a) => a.id === "surgelato").winners.map((w) => w.playerId), ["a"]);
+  assert.deepEqual(list.find((a) => a.id === "architetto").winners.map((w) => w.playerId), ["a"]);
+  assert.equal(list.find((a) => a.id === "architetto").unit(3), "3 carte a mano");
+  assert.equal(list.find((a) => a.id === "surgelato").unit(1), "1 congelata a partita");
+  assert.equal(list.find((a) => a.id === "golosone"), undefined, "nessuno ha sballato: niente Golosone");
+  const rank = awardRanking(rows, "architetto");
+  assert.deepEqual(rank.rows.map((r) => r.playerId), ["a", "b"], "Cri non ha mani segnate carta per carta");
+});
+
+test("reviseGame conta anche le congelate", () => {
+  const g = closedGame();
+  const rounds = JSON.parse(JSON.stringify(g.rounds));
+  rounds.a.r1.frozen = true;
+  const out = reviseGame(g, { playedAt: g.playedAt, targetScore: 200, players: [{ playerId: "a", name: "Ale" }, { playerId: "b", name: "Bea" }], rounds });
+  assert.equal(out.results.a.freezes, 1);
+  assert.equal(out.results.a.total, 43 + 10);
+});

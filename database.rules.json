@@ -23,11 +23,17 @@
         "players": {
           ".read": "auth != null",
           "$pid": {
-            ".write": "auth != null && (auth.uid === 'OWNER_UID' || (!data.exists() && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()))"
+            ".write": "auth != null && (auth.uid === 'OWNER_UID' || (!data.exists() && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()))",
+            "avatar": {
+              ".write": "auth != null && (auth.uid === 'OWNER_UID' || root.child('rooms/' + $roomId + '/bindings/' + auth.uid).val() === $pid)",
+              ".validate": "!newData.exists() || (newData.hasChild('image') && newData.child('image').isString() && newData.child('image').val().length <= 40000) || (newData.hasChild('sym') && newData.child('sym').isString() && newData.child('sym').val().length <= 24 && newData.child('bg').isString() && newData.child('bg').val().length <= 9)"
+            }
           }
         },
         "history": {
-          ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"
+          "$gameId": {
+            ".write": "auth != null && (auth.uid === 'OWNER_UID' || (!data.exists() && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()))"
+          }
         },
         "control": {
           ".write": "auth != null && root.child('rooms/' + $roomId + '/members/' + auth.uid).exists()"

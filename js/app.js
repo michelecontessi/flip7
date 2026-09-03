@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import * as store from "./store.js";
 import { prefs } from "./prefs.js";
-import { esc, initials, colorOf, toast, drawSheet, closeSheet, sheet, captureSheetInputs, shareRoom, roomUrl, drawPage, closePage, page, askText, askChoice } from "./ui.js";
+import { esc, toast, drawSheet, closeSheet, sheet, captureSheetInputs, shareRoom, roomUrl, drawPage, closePage, page, askText, askChoice } from "./ui.js";
 import { liveView } from "./views/live.js";
 import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
@@ -11,6 +11,7 @@ import { setupView } from "./views/setup.js";
 import { tableView } from "./views/table.js";
 import { DEFAULTS } from "./config.js";
 import { icon, wordmark, fanArt, googleG } from "./icons.js";
+import { avatar } from "./avatar.js";
 import { applyTheme, watchSystemTheme } from "./theme.js";
 
 const VIEWS = {
@@ -55,10 +56,10 @@ function renderTopbar(c) {
       </div>
     </div>
     <div class="top-actions">
-      ${status.mode !== "firebase" || prefs.get("owner") ? `<button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>` : ""}
+      ${store.isOwner() ? `<button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>` : ""}
       <button class="me-btn" data-action="go-setup" aria-label="Chi sono">
       ${meName
-        ? `<span class="avatar sm" style="background:${colorOf(meName)}">${initials(meName)}</span>`
+        ? avatar(me, meName, "sm")
         : `<span class="avatar sm ghost">${icon("user", "tiny")}</span>`}
       </button>
     </div>`;

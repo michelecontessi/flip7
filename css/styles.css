@@ -383,6 +383,34 @@ select {
 .avatar.sm { width: 30px; height: 30px; font-size: 11.5px; }
 .avatar.lg { width: 54px; height: 54px; font-size: 19px; }
 .avatar.ghost { background: var(--surface-2); color: var(--muted); }
+/* avatar scelti dal giocatore: foto o simbolo su colore */
+.avatar.img { overflow: hidden; background: var(--surface-2); }
+.avatar.img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar.sym { overflow: hidden; }
+.avatar.sym .ava-sym { width: 86%; height: 86%; display: block; }
+.avatar.hp { width: 19px; height: 19px; }
+.avatar.hp.w { box-shadow: 0 0 0 2px var(--gold); }
+.ava-btn { position: relative; background: none; border: 0; padding: 0; display: flex; border-radius: 50%; flex: none; }
+.ava-pen {
+  position: absolute; right: -4px; bottom: -4px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface); color: var(--muted); box-shadow: var(--shadow-1); display: grid; place-items: center;
+}
+.ava-pen .ico { width: 10px; height: 10px; }
+.ava-row { display: flex; align-items: center; gap: 12px; }
+.ava-row-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ava-row-txt small { font-size: 12.5px; }
+.ava-preview { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 2px; }
+.ava-preview-name { font-weight: 700; }
+.ava-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 7px; }
+.ava-pick {
+  height: 50px; border: 0; border-radius: 12px; padding: 0;
+  background: var(--surface-2); display: grid; place-items: center;
+}
+.ava-pick .ava-sym { width: 38px; height: 38px; display: block; }
+.ava-pick.on { box-shadow: 0 0 0 2.5px var(--primary); }
+.ava-colors { display: flex; flex-wrap: wrap; gap: 9px; }
+.ava-color { width: 34px; height: 34px; border-radius: 50%; border: 0; padding: 0; box-shadow: inset 0 0 0 2px rgba(255,255,255,.55); }
+.ava-color.on { box-shadow: 0 0 0 2.5px var(--text), inset 0 0 0 2.5px var(--bg); }
 .tag {
   margin-left: 6px; font-size: 10.5px; font-weight: 650;
   padding: 2px 7px; border-radius: 6px; background: var(--surface-2); color: var(--muted);
@@ -472,6 +500,10 @@ select {
 .opens-strip .ico { width: 15px; height: 15px; flex: none; }
 .opens-strip > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .opens-strip b { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.opens-strip { flex-wrap: wrap; row-gap: 6px; }
+.opens-strip .opens-seq { margin-left: auto; gap: 2px; flex: none; }
+.opens-seq .avatar.xs { width: 22px; height: 22px; font-size: 8.5px; }
+.opens-seq .sep { font-style: normal; color: var(--dim); font-size: 13px; padding: 0 1px; }
 
 .round-cell {
   min-height: 40px; width: 100%;
@@ -490,6 +522,7 @@ select {
 .rc-empty { font-size: 17px; color: var(--dim); }
 .rc-tag { font-size: 9.5px; color: var(--red); font-weight: 650; }
 .rc-tag.flip7 { color: var(--gold); }
+.rc-val.frozen, .rc-tag.frozen { color: var(--c-blue); }
 .total-cell { text-align: right; font-variant-numeric: tabular-nums; line-height: 1.05; }
 .total-cell b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; display: block; }
 .total-cell small { font-size: 11px; color: var(--muted); font-weight: 600; }
@@ -525,7 +558,23 @@ table.rounds tbody th { text-align: left; font-weight: 650; position: sticky; le
 table.rounds td.bust { color: var(--red); }
 table.rounds td.flip7 { color: var(--gold); font-weight: 800; }
 table.rounds td.dim { color: var(--dim); opacity: .5; }
+table.rounds td.frozen { color: var(--c-blue); font-weight: 700; }
 table.rounds td.tot { font-weight: 800; }
+/* tabella delle mani in modifica: ogni casella e' un pulsante */
+table.rounds.edit td { padding: 4px 3px; }
+table.rounds.edit td.tot { padding: 4px 9px; }
+.rcell {
+  min-width: 44px; height: 38px; border: 0; border-radius: 10px; padding: 0 8px;
+  background: var(--surface-2); color: inherit; font: inherit; font-weight: 700;
+  font-variant-numeric: tabular-nums; display: inline-grid; place-items: center;
+}
+.rcell.empty { background: transparent; color: var(--dim); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.rcell.bust { color: var(--red); }
+.rcell.flip7 { color: var(--gold); }
+.rcell.frozen { color: var(--c-blue); }
+.gedit-pts { width: 84px; max-width: 84px; text-align: center; font-weight: 700; }
+.gedit-tot { font-family: var(--font-display); font-size: 18px; min-width: 40px; text-align: right; }
+.page-body > .ghost-btn.center-self { align-self: center; }
 
 /* ---------- vincitore ---------- */
 .winner-banner {
@@ -689,7 +738,7 @@ table.rounds td.tot { font-weight: 800; }
 .stat.gold b { color: var(--gold); }
 
 /* ---------- pannello a scomparsa ---------- */
-#sheet-root { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+#sheet-root { position: fixed; inset: 0; z-index: 58; pointer-events: none; }
 #sheet-root.open { pointer-events: auto; }
 .sheet-backdrop { position: absolute; inset: 0; background: rgba(20,18,14,.42); animation: fade .16s ease; }
 @keyframes fade { from { opacity: 0; } }
@@ -760,6 +809,8 @@ table.rounds td.tot { font-weight: 800; }
 }
 .score-display.flip7 { background: var(--holo-soft); }
 .score-display.bust { background: var(--surface-2); }
+.score-display.frozen { background: rgba(60,140,220,.10); }
+.score-display.frozen .sd-value { color: var(--c-blue); }
 .sd-value { font-size: 48px; font-weight: 600; line-height: 1; letter-spacing: -.02em; animation: bump .18s ease-out; }
 @keyframes bump { from { transform: scale(.9); } }
 .flip7-badge {
@@ -812,6 +863,8 @@ table.rounds td.tot { font-weight: 800; }
 }
 .quick.on.gold { background: var(--holo); color: #2a1c02; }
 .quick.on.red { background: var(--red); color: #fff; }
+.quick.on.ice { background: #2f8fd8; color: #fff; }
+.quick-row .quick { min-width: 0; padding: 0 6px; font-size: 13.5px; }
 
 .calc-section { display: flex; flex-direction: column; gap: 8px; }
 .calc-label { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--dim); }
@@ -954,6 +1007,7 @@ table.rounds td.tot { font-weight: 800; }
   border: 2px solid var(--surface);
 }
 .pg-check .ico { width: 12px; height: 12px; }
+.pg-check.num { font-family: var(--font-display); font-style: normal; font-weight: 600; font-size: 11.5px; line-height: 1; }
 .pg.on .pg-check { display: grid; }
 .pg-name {
   font-size: 12px; font-weight: 650; max-width: 100%;
@@ -1309,10 +1363,11 @@ table.rounds td.tot { font-weight: 800; }
 .tone-violet { background: rgba(130,90,220,.11); } .tone-violet b { color: var(--c-violet); }
 .tone-red    { background: rgba(210,70,60,.10); }  .tone-red b    { color: var(--c-red); }
 .tone-gold   { background: rgba(210,160,40,.13); } .tone-gold b   { color: var(--c-gold); }
+.tone-ice    { background: rgba(70,170,235,.12); } .tone-ice b    { color: var(--c-blue); }
 .mood { text-align: center; font-size: 14px; color: var(--muted); padding: 2px 6px; }
 .mood b { color: var(--text); font-weight: 700; }
 
-/* ---------- trofei ---------- */
+/* ---------- record ---------- */
 .award-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .award {
   border-radius: 16px; padding: 18px 12px 15px;
@@ -1329,17 +1384,23 @@ table.rounds td.tot { font-weight: 800; }
 .award.tone-red   .award-title { color: var(--c-red); }
 .award.tone-blue  .award-title { color: var(--c-blue); }
 .award.tone-green .award-title { color: var(--c-green); }
+.award.tone-ice    .award-title { color: var(--c-blue); }
+.award.tone-violet .award-title { color: var(--c-violet); }
 .award.tone-gold  .award-value { background: rgba(210,160,40,.16);  color: var(--c-gold); }
 .award.tone-red   .award-value { background: rgba(210,70,60,.13);   color: var(--c-red); }
 .award.tone-blue  .award-value { background: rgba(60,140,220,.14);  color: var(--c-blue); }
 .award.tone-green .award-value { background: rgba(38,168,118,.14);  color: var(--c-green); }
+.award.tone-ice    .award-value { background: rgba(70,170,235,.16);  color: var(--c-blue); }
+.award.tone-violet .award-value { background: rgba(130,90,220,.14);  color: var(--c-violet); }
 .award.tone-gold  .award-emblem { filter: drop-shadow(0 4px 9px rgba(190,130,20,.32)); }
 .award.tone-red   .award-emblem { filter: drop-shadow(0 4px 9px rgba(190,50,35,.3)); }
 .award.tone-blue  .award-emblem { filter: drop-shadow(0 4px 9px rgba(30,100,180,.3)); }
 .award.tone-green .award-emblem { filter: drop-shadow(0 4px 9px rgba(20,130,90,.3)); }
+.award.tone-ice    .award-emblem { filter: drop-shadow(0 4px 9px rgba(40,140,210,.3)); }
+.award.tone-violet .award-emblem { filter: drop-shadow(0 4px 9px rgba(110,70,200,.3)); }
 .ae-spark { animation: twinkle 2.6s ease-in-out infinite; transform-origin: center; }
 
-/* pagina di un trofeo */
+/* pagina di un record */
 .award-hero {
   display: grid; justify-items: center; text-align: center; gap: 3px;
   padding: 24px 16px 20px; border-radius: var(--radius);
@@ -1350,6 +1411,8 @@ table.rounds td.tot { font-weight: 800; }
 .tone-red   .award-title { color: var(--c-red); }
 .tone-blue  .award-title { color: var(--c-blue); }
 .tone-green .award-title { color: var(--c-green); }
+.tone-ice .award-title { color: var(--c-blue); }
+.tone-violet .award-title { color: var(--c-violet); }
 .aw-list { display: flex; flex-direction: column; }
 .aw-list li {
   display: grid; grid-template-columns: 24px 30px 1fr auto; align-items: center;

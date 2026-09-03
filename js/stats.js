@@ -41,7 +41,8 @@ export function liveStandings(live, players) {
       currentEntry: entry || null,
       lastRound: last,
       flip7s: countFlip7(live, pid),
-      busts: countBusts(live, pid)
+      busts: countBusts(live, pid),
+      freezes: countFreezes(live, pid)
     };
   });
   rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "it"));
@@ -86,6 +87,24 @@ function countFlip7(live, pid) {
 function countBusts(live, pid) {
   const rows = (live.scores && live.scores[pid]) || {};
   return Object.values(rows).filter((e) => e && e.busted).length;
+}
+function countFreezes(live, pid) {
+  const rows = (live.scores && live.scores[pid]) || {};
+  return Object.values(rows).filter((e) => e && e.frozen && !e.busted).length;
+}
+
+/**
+ * Lunghezza delle mani costruite con le carte: quante carte numero, su
+ * quante mani. Contano solo le mani segnate carta per carta e non sballate
+ * (una mano sballata non e' stata "costruita", e' saltata per aria).
+ */
+export function handStats(rows) {
+  let hands = 0, cards = 0;
+  for (const e of Object.values(rows || {})) {
+    const c = computeRound(e);
+    if (!c.busted && c.cards > 0) { hands += 1; cards += c.cards; }
+  }
+  return { hands, cards };
 }
 
 /** Chi ha raggiunto o superato il target. */
@@ -171,7 +190,7 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, tracked: 0 };
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, hands: 0, cards: 0 };
         acc.set(pid, e);
       }
       e.name = res.name || e.name;
@@ -181,7 +200,11 @@ export function leaderboard(history, players, opts = {}) {
       e.worst = Math.min(e.worst, Number(res.total) || 0);
       e.flip7s += Number(res.flip7s) || 0;
       e.busts += Number(res.busts) || 0;
+      e.freezes += Number(res.freezes) || 0;
       if (res.busts !== undefined || res.flip7s !== undefined) e.tracked += 1; // segnata round per round
+      const hs = handStats(game.rounds && game.rounds[pid]);
+      e.hands += hs.hands;
+      e.cards += hs.cards;
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
     }
@@ -194,6 +217,8 @@ export function leaderboard(history, players, opts = {}) {
     avg: e.games ? e.points / e.games : 0,
     winRate: e.games ? e.crowns / e.games : 0,
     bustRate: e.tracked ? e.busts / e.tracked : 0,
+    freezeRate: e.tracked ? e.freezes / e.tracked : 0,
+    avgCards: e.hands ? e.cards / e.hands : 0,
     worst: e.worst === Infinity ? 0 : e.worst
   }));
 
@@ -212,28 +237,36 @@ export function leaderboard(history, players, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Premi individuali: titoli scherzosi assegnati sulle righe della classifica.
+// Record individuali: titoli scherzosi assegnati sulle righe della classifica.
 // ---------------------------------------------------------------------------
 
-/** I quattro trofei: massimo o minimo di una statistica, vedi `pick`. */
-const perPartita = (v) => {
-  const n = Math.round(v * 10) / 10;
-  return n === 1 ? "1 sballo a partita" : `${n.toLocaleString("it-IT")} sballi a partita`;
-};
+const dec = (v) => (Math.round(v * 10) / 10).toLocaleString("it-IT");
+/** "1 sballo a partita" / "1,5 sballi a partita". */
+const perPartita = (one, many) => (v) => (Math.round(v * 10) / 10 === 1 ? `1 ${one} a partita` : `${dec(v)} ${many} a partita`);
+
+/** I record: massimo o minimo di una statistica, vedi `pick`. */
 export const AWARDS = [
   { id: "gambler", key: "flip7s", title: "Gambler", desc: "rischia tutto e piazza i Flip 7", emblem: "gambler", tone: "gold",
     unit: (v) => v === 1 ? "1 Flip 7" : `${v} Flip 7` },
   { id: "golosone", key: "bustRate", title: "Golosone", desc: "sballi per una carta di troppo", emblem: "golosone", tone: "red",
-    unit: perPartita },
+    unit: perPartita("sballo", "sballi") },
   { id: "tanaia", key: "bustRate", pick: "min", title: "Tanaia", desc: "braccine corte, sballa meno di tutti", emblem: "tanaia", tone: "green",
-    unit: perPartita },
+    unit: perPartita("sballo", "sballi") },
   { id: "cannoniere", key: "best", title: "Cannoniere", desc: "il punteggio record in una partita", emblem: "cannoniere", tone: "blue",
-    unit: (v) => `${v} punti` }
+    unit: (v) => `${v} punti` },
+  { id: "surgelato", key: "freezeRate", title: "Surgelato", desc: "il bersaglio preferito dei Congela", emblem: "surgelato", tone: "ice",
+    unit: perPartita("congelata", "congelate") },
+  { id: "architetto", key: "avgCards", title: "Architetto", desc: "costruisce le mani più lunghe", emblem: "architetto", tone: "violet",
+    unit: (v) => `${dec(v)} carte a mano` }
 ];
 
-// Flip 7 e sballi esistono solo nelle partite segnate round per round
-// (`tracked`): chi ha solo totali recuperati a mano non concorre.
-const awardPool = (a, rows) => a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0) : rows;
+// Flip 7, sballi e congelate esistono solo nelle partite segnate round per
+// round (`tracked`); le mani lunghe solo dove le carte sono state segnate una
+// per una (`hands`). Chi ha solo totali recuperati a mano non concorre.
+const awardPool = (a, rows) =>
+  a.key === "flip7s" || a.key === "bustRate" || a.key === "freezeRate" ? rows.filter((r) => r.tracked > 0)
+    : a.key === "avgCards" ? rows.filter((r) => r.hands > 0)
+    : rows;
 // arrotondo per confrontare le medie senza sorprese da virgola mobile
 const awardVal = (a, r) => Math.round((Number(r[a.key]) || 0) * 1000) / 1000;
 
@@ -323,7 +356,7 @@ export function playerHighlights(games, playerId) {
   const chrono = [...games].sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
   const won = (g) => Boolean(g.winnerIds && g.winnerIds[playerId]);
 
-  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, overTarget = 0, detailed = 0;
+  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, hands = 0, cards = 0;
   let best = { total: -1, playedAt: 0 };
 
   for (const g of chrono) {
@@ -333,6 +366,10 @@ export function playerHighlights(games, playerId) {
     if (res.flip7s !== undefined) detailed += 1;   // partita segnata round per round
     flip7s += Number(res.flip7s) || 0;
     busts += Number(res.busts) || 0;
+    freezes += Number(res.freezes) || 0;
+    const hs = handStats(g.rounds && g.rounds[playerId]);
+    hands += hs.hands;
+    cards += hs.cards;
     if (total >= (Number(g.targetScore) || 200)) overTarget += 1;
     if (total > best.total) best = { total, playedAt: g.playedAt || 0 };
   }
@@ -345,11 +382,83 @@ export function playerHighlights(games, playerId) {
 
   return {
     bestStreak, currentStreak, sinceLastWin,
-    flip7s, busts, overTarget,
+    flip7s, busts, freezes, overTarget,
+    hands, avgCards: hands ? cards / hands : 0,
     best: best.total < 0 ? { total: 0, playedAt: 0 } : best,
     played: chrono.length,
     detailedGames: detailed
   };
+}
+
+/** Numero di round di una partita dello storico (max indice + 1, buchi compresi). */
+export function roundCount(rounds) {
+  return roundsPlayed({ scores: rounds || {} });
+}
+
+/**
+ * Ricostruisce una partita chiusa a partire da una bozza corretta a mano.
+ * Con le mani (`rounds`) i totali, i Flip 7 e gli sballi si ricalcolano da
+ * quelle; senza, valgono i totali scritti. I round vuoti per tutti spariscono
+ * e i successivi scalano. Il vincitore e' chi ha piu' punti, salvo scelta
+ * esplicita (`winnerId`) fra i giocatori della partita.
+ * @param {object} game  partita originale (immutata)
+ * @param {{playedAt:number, targetScore:number, players:{playerId:string,name:string,total?:number}[], rounds:object|null, winnerId?:string|null}} draft
+ */
+export function reviseGame(game, draft) {
+  const { id: _ignored, ...base } = game || {};
+  const ids = draft.players.map((p) => p.playerId);
+
+  let rounds = null;
+  if (draft.rounds) {
+    const kept = [];
+    for (let i = 0; i < roundCount(draft.rounds); i++) {
+      if (ids.some((pid) => draft.rounds[pid] && draft.rounds[pid][roundKey(i)])) kept.push(i);
+    }
+    rounds = {};
+    for (const pid of ids) {
+      const src = draft.rounds[pid] || {};
+      const dst = {};
+      kept.forEach((from, to) => { if (src[roundKey(from)]) dst[roundKey(to)] = src[roundKey(from)]; });
+      if (Object.keys(dst).length) rounds[pid] = dst;
+    }
+  }
+
+  const results = {};
+  for (const p of draft.players) {
+    const prev = (base.results || {})[p.playerId] || {};
+    const name = p.name || prev.name || "?";
+    if (rounds) {
+      const rows = Object.values(rounds[p.playerId] || {});
+      results[p.playerId] = {
+        ...prev, name,
+        total: rows.reduce((a, e) => a + computeRound(e).total, 0),
+        flip7s: rows.filter((e) => computeRound(e).flip7).length,
+        busts: rows.filter((e) => e && e.busted).length,
+        freezes: rows.filter((e) => e && e.frozen && !e.busted).length
+      };
+    } else {
+      results[p.playerId] = { ...prev, name, total: Math.max(0, Math.round(Number(p.total) || 0)) };
+    }
+  }
+
+  const top = Math.max(...Object.values(results).map((r) => r.total));
+  const winners = draft.winnerId && results[draft.winnerId]
+    ? [draft.winnerId]
+    : Object.keys(results).filter((pid) => results[pid].total === top);
+
+  const playedAt = Number(draft.playedAt) || base.playedAt || Date.now();
+  const out = {
+    ...base,
+    playedAt,
+    targetScore: Math.max(10, Math.min(2000, Math.round(Number(draft.targetScore) || base.targetScore || 200))),
+    results,
+    winnerIds: Object.fromEntries(winners.map((pid) => [pid, true])),
+    rounds,
+    editedAt: Date.now()
+  };
+  // la fine della partita segue lo spostamento della data
+  if (base.finishedAt) out.finishedAt = base.finishedAt + (playedAt - (base.playedAt || playedAt));
+  return out;
 }
 
 /** Riepilogo veloce dello storico (per la home). */

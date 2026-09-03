@@ -3,10 +3,11 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, initials, colorOf, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, roomUrl } from "../ui.js";
+import { esc, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, roomUrl, openSheet, closeSheet, sheet } from "../ui.js";
 import { isFirebaseConfigured } from "../config.js";
 import { icon } from "../icons.js";
 import { applyTheme } from "../theme.js";
+import { avatar, avatarHtml, playerAvatar, fileToAvatarImage, symbolSvg, AVATAR_SYMBOLS, AVATAR_COLORS } from "../avatar.js";
 
 const localState = { showArchived: false };
 
@@ -14,7 +15,7 @@ export const setupView = {
   render(ctx) {
     const { room, status, me } = ctx;
     const players = Object.entries(room.players || {}).sort((a, b) => a[1].name.localeCompare(b[1].name, "it"));
-    const isOwner = status.mode !== "firebase" || Boolean(prefs.get("owner"));
+    const isOwner = store.isOwner();
     const visible = players.filter(([, p]) => localState.showArchived || !p.archived);
     const sk = room.control;
 
@@ -33,7 +34,9 @@ export const setupView = {
         <ul class="plist">
           ${visible.map(([id, p]) => `
             <li class="${p.archived ? "arch" : ""}">
-              <span class="avatar sm" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
+              ${isOwner || id === me
+                ? `<button class="ava-btn" data-action="avatar-edit" data-id="${id}" aria-label="Cambia l'avatar di ${esc(p.name)}">${avatar(id, p.name, "sm")}<i class="ava-pen">${icon("pencil")}</i></button>`
+                : avatar(id, p.name, "sm")}
               <span class="pname">${esc(p.name)}${p.archived ? '<span class="tag">archiviato</span>' : ""}</span>
               ${isOwner ? `
               <button class="icon-btn" data-action="rename-player" data-id="${id}" aria-label="Rinomina">${icon("pencil")}</button>
@@ -53,6 +56,17 @@ export const setupView = {
             ? `<div class="sk-state">${esc(sk.name)}</div><button class="btn ghost" data-action="sk-claim">Prendi il controllo</button>`
             : `<div class="sk-state none">Nessuno</div><button class="btn primary" data-action="sk-claim">Diventa segnapunti</button>`}
       </section>
+
+      ${me && room.players[me] ? `
+      <section class="card">
+        <div class="card-head">${icon("user")}<span class="card-title">Il tuo avatar</span></div>
+        <div class="ava-row">
+          ${avatar(me, room.players[me].name, "lg")}
+          <div class="ava-row-txt"><b>${esc(room.players[me].name)}</b><small class="muted">${playerAvatar(me) ? "avatar personalizzato" : "iniziali sul colore del nome"}</small></div>
+          <button class="btn small" data-action="avatar-edit" data-id="${me}">${icon("pencil", "tiny")} Cambia</button>
+        </div>
+        <p class="muted small">Un personaggio disegnato su un colore a scelta, oppure una tua foto: lo vedono tutti in classifica, nello storico e al tavolo online.</p>
+      </section>` : ""}
 
       <section class="card">
         <div class="card-head">${icon("eye")}<span class="card-title">Aspetto</span></div>
@@ -113,7 +127,7 @@ export const setupView = {
           <div class="req-list">
             ${Object.entries(room.requests).map(([uid, r]) => `
               <div class="req-row">
-                <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+                ${avatar(r.playerId, r.name, "sm")}
                 <span class="pname">${esc(r.name || "Sconosciuto")}
                   <small class="req-sub">${r.email ? `<span class="mono">${esc(r.email)}</span> · ` : ""}${r.playerId && room.players[r.playerId] ? `entra come ${esc(room.players[r.playerId].name)}` : "vuole entrare"}</small></span>
                 <button class="btn small primary" data-action="member-approve" data-id="${uid}">Approva</button>
@@ -126,7 +140,7 @@ export const setupView = {
             const bound = boundId && room.players[boundId] ? room.players[boundId].name : null;
             return `
             <li>
-              <span class="avatar sm" style="background:${colorOf(m.name)}">${initials(m.name)}</span>
+              ${avatar(boundId, m.name, "sm")}
               <span class="pname">${esc(m.name || "Membro")}${uid === status.uid ? '<span class="tag">tu</span>' : ""}
                 <small class="req-sub">${m.email ? `<span class="mono">${esc(m.email)}</span> · ` : ""}${bound ? `gioca come ${esc(bound)}` : "nessun giocatore collegato"}</small></span>
               <button class="icon-btn" data-action="member-bind" data-id="${uid}" aria-label="Collega giocatore">${icon("pencil")}</button>
@@ -154,6 +168,33 @@ export const setupView = {
 
   actions: {
     "toggle-archived"() { localState.showArchived = !localState.showArchived; },
+
+    // --- avatar: ognuno cambia il proprio, il proprietario quello di tutti ---
+    "avatar-edit"(ctx, el) {
+      const id = el.dataset.id;
+      const p = (ctx.room.players || {})[id];
+      if (!p) return;
+      if (!(store.isOwner() || ctx.me === id)) return toast("Puoi cambiare solo il tuo avatar", "warn");
+      openSheet({ type: "avatar", playerId: id, name: p.name, draft: playerAvatar(id) }, renderAvatarSheet);
+    },
+    "ava-sym"(ctx, el) {
+      const s = sheet.state;
+      s.draft = { sym: el.dataset.s, bg: (s.draft && s.draft.bg) || AVATAR_COLORS[0] };
+      return "sheet";
+    },
+    "ava-color"(ctx, el) {
+      const s = sheet.state;
+      s.draft = { sym: (s.draft && s.draft.sym) || Object.keys(AVATAR_SYMBOLS)[0], bg: el.dataset.c };
+      return "sheet";
+    },
+    "ava-reset"() { sheet.state.draft = null; return "sheet"; },
+    async "ava-save"() {
+      const s = sheet.state;
+      try { await store.setPlayerAvatar(s.playerId, s.draft); }
+      catch { return toast("Il database non accetta la modifica: puoi cambiare solo il tuo avatar", "warn"); }
+      closeSheet();
+      toast(s.draft ? "Avatar aggiornato" : "Tornate le iniziali");
+    },
 
     async "rename-player"(ctx, el) {
       const id = el.dataset.id;
@@ -245,6 +286,14 @@ export const setupView = {
 
   changes: {
     "theme"(ctx, el) { prefs.set("theme", el.value); applyTheme(); },
+    async "ava-file"(ctx, el) {
+      const file = el.files && el.files[0];
+      if (!file || !sheet.state) return;
+      try { sheet.state.draft = { image: await fileToAvatarImage(file) }; }
+      catch (e) { toast(e.message || "Foto non leggibile", "warn"); }
+      el.value = "";
+      return "sheet";
+    },
     "room-name"(ctx, el) { return store.setRoomName(el.value); },
     "room-target"(ctx, el) { return store.setTargetScore(el.value); },
     async "import-json"(ctx, el) {
@@ -261,3 +310,48 @@ export const setupView = {
     }
   }
 };
+
+// --- sheet: configuratore avatar --------------------------------------------
+function renderAvatarSheet(s) {
+  const a = s.draft;
+  const sym = a && a.sym ? a.sym : null;
+  const bg = (a && a.bg) || AVATAR_COLORS[0];
+  return `
+    <div class="sheet-head">
+      <div>
+        <div class="sheet-title">Avatar di ${esc(s.name)}</div>
+        <div class="sheet-sub">Un personaggio su un colore, oppure una foto</div>
+      </div>
+      <button class="icon-btn" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
+    </div>
+
+    <div class="ava-preview">
+      ${avatarHtml(a, s.name, "xl")}
+      <span class="ava-preview-name">${esc(s.name)}</span>
+    </div>
+
+    <div class="calc-section">
+      <div class="calc-label"><span>Personaggio</span>${sym ? `<span>${esc(AVATAR_SYMBOLS[sym].name)}</span>` : ""}</div>
+      <div class="ava-grid">
+        ${Object.entries(AVATAR_SYMBOLS).map(([key, def]) => `<button class="ava-pick ${sym === key ? "on" : ""}" data-action="ava-sym" data-s="${key}" ${sym === key ? `style="background:${bg}"` : ""} aria-label="${esc(def.name)}" title="${esc(def.name)}">${symbolSvg(key)}</button>`).join("")}
+      </div>
+    </div>
+
+    <div class="calc-section">
+      <div class="calc-label"><span>Colore</span></div>
+      <div class="ava-colors">
+        ${AVATAR_COLORS.map((c) => `<button class="ava-color ${sym && bg === c ? "on" : ""}" data-action="ava-color" data-c="${c}" style="background:${c}" aria-label="Colore ${c}"></button>`).join("")}
+      </div>
+    </div>
+
+    <div class="calc-section">
+      <div class="calc-label"><span>Oppure una foto</span></div>
+      <label class="btn ghost file">${icon("upload", "tiny")} ${a && a.image ? "Cambia foto" : "Carica una foto"}<input type="file" accept="image/*" data-change="ava-file" hidden></label>
+      <p class="muted small">Ritagliata al centro e ridotta a un francobollo: la vedono solo i membri della stanza.</p>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn ghost" data-action="ava-reset" ${a ? "" : "disabled"}>Iniziali</button>
+      <button class="btn primary" data-action="ava-save">${icon("check", "tiny")} Salva</button>
+    </div>`;
+}

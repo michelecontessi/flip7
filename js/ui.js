@@ -118,7 +118,8 @@ export function drawSheet() {
   if (!sheet.state || !sheet.render) {
     root.innerHTML = "";
     root.classList.remove("open");
-    document.body.classList.remove("sheet-open");
+    // la pagina a schermo intero sotto (se c'e') tiene bloccato lo scroll
+    if (!page.state) document.body.classList.remove("sheet-open");
     return;
   }
   root.innerHTML = `<div class="sheet-backdrop" data-action="sheet-close"></div>
@@ -155,17 +156,20 @@ export function drawPage() {
   document.body.classList.add("sheet-open");
 }
 
-/** Legge nello state dello sheet il valore di ogni input marcato data-bind. */
-export function captureSheetInputs() {
-  const root = document.getElementById("sheet-root");
-  if (!root || !sheet.state) return;
+function captureInputs(rootId, state) {
+  const root = document.getElementById(rootId);
+  if (!root || !state) return;
   root.querySelectorAll("[data-bind]").forEach((node) => {
     const path = node.dataset.bind.split(".");
-    let obj = sheet.state;
+    let obj = state;
     for (let i = 0; i < path.length - 1; i++) obj = obj[path[i]] = obj[path[i]] || {};
     obj[path[path.length - 1]] = node.type === "checkbox" ? node.checked : node.value;
   });
 }
+/** Legge nello state dello sheet il valore di ogni input marcato data-bind. */
+export function captureSheetInputs() { captureInputs("sheet-root", sheet.state); }
+/** Lo stesso, per la pagina a schermo intero. */
+export function capturePageInputs() { captureInputs("page-root", page.state); }
 
 // --- dialoghi (sostituiscono prompt/confirm nativi: piu' belli e affidabili) --
 export function askDialog({ title, message = "", input = null, choices = null, confirmLabel = "OK", cancelLabel = "Annulla", danger = false }) {

@@ -212,10 +212,61 @@ const EMBLEMS = {
       <path d="M18.2 33.4 c-3 .4 -4.4 1.8 -4.6 4" stroke="#5ecb96" stroke-width="1.8"/>
       <path d="M11.6 32.8 l-2 1.4 M11.6 32.8 l-.2 2.4" stroke="#0e5238" stroke-width="1.7"/>
       <path d="M13.6 37.8 l-1.9 1.2 M13.6 37.8 l-.2 2.2" stroke="#0e5238" stroke-width="1.6"/>
-    </g>`
+    </g>`,
+
+  // Surgelato: il cubetto di ghiaccio col fiocco inciso, brina intorno
+  surgelato: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#eefaff"/><stop offset=".5" stop-color="#8fd8ff"/>
+        <stop offset="1" stop-color="#3a9ad8"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#8fd8ff">
+      <path d="M7 9l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L3.9 9.9Z"/>
+      <path d="M50 38l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M46 6l.5-1.8.5 1.8 1.8.5-1.8.5-.5 1.8-.5-1.8-1.8-.5Z"/>
+    </g>
+    <g transform="rotate(-9 28 27)">
+      <rect x="10" y="9" width="36" height="36" rx="8" fill="url(#${id})" stroke="#1f5f8f" stroke-width="2"/>
+      <g stroke="#1f5f8f" stroke-width="2.3" stroke-linecap="round" fill="none">
+        <path d="M28 15v24M16.8 20.5l22.4 13M39.2 20.5l-22.4 13"/>
+        <path d="M28 15l-3 3M28 15l3 3M28 39l-3-3M28 39l3-3"/>
+        <path d="M16.8 20.5l4-.7M16.8 20.5l.7 4M39.2 33.5l-4 .7M39.2 33.5l-.7-4"/>
+        <path d="M39.2 20.5l-4-.7M39.2 20.5l-.7 4M16.8 33.5l4 .7M16.8 33.5l.7-4"/>
+      </g>
+      <circle cx="17.5" cy="15.5" r="3.4" fill="#fff" opacity=".6"/>
+      <circle cx="39" cy="38" r="2" fill="#fff" opacity=".3"/>
+    </g>`,
+
+  // Architetto: la scalinata di carte, ogni mano piu' alta della precedente
+  architetto: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fffdf5"/><stop offset="1" stop-color="#f0dfb8"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c9a6ff"/><stop offset="1" stop-color="#7a4fd0"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#b388ff">
+      <path d="M8 12l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L4.9 12.9Z"/>
+      <path d="M49.5 7l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <g stroke="#4a3a2a" stroke-width="1.8" stroke-linejoin="round">
+      <rect x="5" y="30" width="12.5" height="17" rx="2.4" fill="url(#${id})"/>
+      <rect x="15.5" y="24" width="12.5" height="23" rx="2.4" fill="url(#${id})"/>
+      <rect x="26" y="17" width="12.5" height="30" rx="2.4" fill="url(#${id})"/>
+      <rect x="36.5" y="9" width="12.5" height="38" rx="2.4" fill="url(#${id})"/>
+    </g>
+    <g font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="7.5" text-anchor="middle" fill="url(#${id}b)">
+      <text x="11.2" y="38.6">3</text><text x="21.7" y="32.6">5</text><text x="32.2" y="25.6">8</text><text x="42.7" y="17.6">12</text>
+    </g>
+    <path d="M9 26.5 41 5.5" fill="none" stroke="url(#${id}b)" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="1 4"/>
+    <path d="M36 5.5h5.5V11" fill="none" stroke="#7a4fd0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
 };
 
-/** Emblema di un premio. `kind` e' la chiave di EMBLEMS. */
+/** Emblema di un record. `kind` e' la chiave di EMBLEMS. */
 export function awardEmblem(kind, cls = "") {
   const draw = EMBLEMS[kind] || EMBLEMS.gambler;
   return `<svg class="award-emblem ${cls}" viewBox="0 0 56 52" aria-hidden="true" focusable="false">

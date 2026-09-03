@@ -6,7 +6,8 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, initials, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
+import { esc, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
+import { avatar } from "../avatar.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card } from "../icons.js";
 import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry } from "../scoring.js";
 import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter } from "../stats.js";
@@ -56,15 +57,20 @@ function renderIdle(room, me) {
     <section class="card">
       <div class="card-head">${icon("cards")}<span class="card-title">Nuova partita</span>
         <span class="count-pill ml-auto">${localState.selected.size}</span></div>
+      <p class="muted small">Toccali <b>nell'ordine in cui siete seduti</b>: dopo il sorteggio
+        di chi apre, le mani girano in quella sequenza.</p>
       <div class="pgrid">
-        ${list.map(([id, p]) => `
-          <button class="pg ${localState.selected.has(id) ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">
+        ${list.map(([id, p]) => {
+          const seat = [...localState.selected].indexOf(id) + 1;
+          return `
+          <button class="pg ${seat ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">
             <span class="pg-ava" style="--pc:${colorOf(p.name)}">
-              <span class="avatar lg" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
-              <i class="pg-check">${icon("check", "tiny")}</i>
+              ${avatar(id, p.name, "lg")}
+              <i class="pg-check num">${seat || ""}</i>
             </span>
             <span class="pg-name">${esc(p.name)}</span>
-          </button>`).join("")}
+          </button>`;
+        }).join("")}
         <button class="pg add" data-action="quick-add-player">
           <span class="pg-ava"><span class="avatar lg ghost">${icon("plus")}</span></span>
           <span class="pg-name muted">aggiungi</span>
@@ -97,7 +103,7 @@ function scorekeeperCard(room) {
   }
   return `
     <div class="sk-strip">
-      <span class="avatar sm" style="background:${colorOf(sk.name)}">${initials(sk.name)}</span>
+      ${avatar((room.bindings || {})[sk.uid], sk.name, "sm")}
       <span class="sk-txt">Segna i punti <b>${esc(sk.name)}</b><small>tu stai seguendo in diretta</small></span>
       <button class="btn small" data-action="sk-claim">Passa a me</button>
     </div>`;
@@ -115,7 +121,7 @@ function whoAmIBanner(room, me) {
         ${list.map(([id, p]) => `
           <button class="pg" data-action="set-me" data-id="${id}">
             <span class="pg-ava" style="--pc:${colorOf(p.name)}">
-              <span class="avatar lg" style="background:${colorOf(p.name)}">${initials(p.name)}</span>
+              ${avatar(id, p.name, "lg")}
             </span>
             <span class="pg-name">${esc(p.name)}</span>
           </button>`).join("")}
@@ -142,7 +148,7 @@ function renderYouCard(live, standings, me) {
   return `
     <section class="you-card">
       <div class="you-head">
-        <span class="avatar" style="background:${colorOf(mine.name)}">${initials(mine.name)}</span>
+        ${avatar(mine.playerId, mine.name, "")}
         <span class="you-name">${esc(mine.name)}${mine.rank === 1 && mine.total > 0 ? ` ${crownEmblem("mini")}` : ""}</span>
         <span class="you-pos">${mine.rank}º di ${standings.length}</span>
       </div>
@@ -174,6 +180,7 @@ function roundCellContent(entry, editable) {
   if (entry.busted) return `<span class="rc-val bust">0</span><span class="rc-tag">sballo</span>`;
   if (entry.skipped) return `<span class="rc-val zero">0</span>`;
   const r = computeRound(entry);
+  if (entry.frozen) return `<span class="rc-val ${r.flip7 ? "flip7" : "frozen"}">+${r.total}</span><span class="rc-tag frozen">congelato</span>`;
   if (r.flip7) return `<span class="rc-val flip7">+${r.total}</span><span class="rc-tag flip7">flip 7</span>`;
   return `<span class="rc-val">+${r.total}</span>`;
 }
@@ -204,9 +211,11 @@ function renderBoard(room, live, standings, me, { editable }) {
       ${starter ? `
       <div class="opens-strip">
         ${icon("cardFan", "tiny")}
-        <span>Apre la mano
-          <span class="avatar xs" style="background:${colorOf(nameOf(room, live, starter))}">${initials(nameOf(room, live, starter))}</span>
-          <b>${esc(nameOf(room, live, starter))}</b></span>
+        <span>Apre la mano <b>${esc(nameOf(room, live, starter))}</b></span>
+        <span class="opens-seq" title="ordine del giro, come siete seduti">
+          ${(() => { const i = ids.indexOf(starter); return [...ids.slice(i), ...ids.slice(0, i)]; })()
+            .map((pid, i) => `${i ? '<i class="sep">›</i>' : ""}${avatar(pid, nameOf(room, live, pid), "xs")}`).join("")}
+        </span>
       </div>` : ""}
 
       <div class="board-cols"><span></span><span>Giocatore</span><span>Round</span><span>Totale</span></div>
@@ -225,11 +234,12 @@ function renderBoard(room, live, standings, me, { editable }) {
           if (row.playerId === me) notes.push('<i class="you">tu</i>');
           if (row.flip7s) notes.push(row.flip7s + "× flip 7");
           if (row.busts) notes.push(row.busts + "× sballo");
+          if (row.freezes) notes.push(row.freezes + "× congelato");
           return `
             <li class="brow ${row.playerId === me ? "me" : ""} ${row.rank === 1 ? "leader" : ""}">
               <span class="rank r${row.rank}">${row.rank === 1 && row.total > 0 ? crownEmblem("rank-crown") : row.rank}</span>
               <span class="bname">
-                <span class="avatar sm" style="background:${colorOf(row.name)}">${initials(row.name)}</span>
+                ${avatar(row.playerId, row.name, "sm")}
                 <span class="txt">${esc(row.name)}${notes.length ? `<small>${notes.join(" · ")}</small>` : ""}</span>
               </span>
               ${cell}
@@ -281,7 +291,7 @@ function renderRoundsTable(room, live) {
                 if (!e) return `<td class="dim">·</td>`;
                 const c = computeRound(e);
                 sum += c.total;
-                return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : ""}">${c.total}</td>`;
+                return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}">${c.total}</td>`;
               }).join("");
               return `<tr><th>${esc(nameOf(room, live, pid))}</th>${cells}<td class="tot">${sum}</td></tr>`;
             }).join("")}
@@ -335,25 +345,34 @@ function openScoreSheet(room, live, startPid) {
   openSheet(buildSheetState(room, live, order, r, pid), renderScoreSheet, patchCalcSheet, { full: true });
 }
 
-function buildSheetState(room, live, order, roundIndex, pid) {
-  const existing = entryOf(live, pid, roundIndex);
+/**
+ * Stato del pannello punti. Lo usa la partita in corso e, con gli agganci
+ * `onSave(s)` / `onMove(s, delta)` / `saveLabel`, anche la correzione delle
+ * mani di una partita chiusa (vista Storico), che decide lei dove salvare.
+ */
+export function makeCalcState({ order, roundIndex, playerId, playerName, existing, fullTotal }) {
   const entry = existing
     ? { ...emptyEntry(), ...existing, numbers: [...(existing.numbers || [])], plus: [...(existing.plus || [])] }
     : emptyEntry();
   if (existing && existing.manual !== null && existing.manual !== undefined) localState.mode = "keypad";
-  const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
   return {
     type: "score",
     order,
     roundIndex,
-    pos: order.indexOf(pid),
-    playerId: pid,
-    playerName: nameOf(room, live, pid),
+    pos: order.indexOf(playerId),
+    playerId,
+    playerName,
     // totale partita PRIMA di questo round: cosi' sommando l'entry in corso
     // si vede in diretta dove arriverebbe il giocatore
-    baseTotal: fullTotal - (existing ? computeRound(existing).total : 0),
+    baseTotal: (fullTotal || 0) - (existing ? computeRound(existing).total : 0),
     entry
   };
+}
+
+function buildSheetState(room, live, order, roundIndex, pid) {
+  const existing = entryOf(live, pid, roundIndex);
+  const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
+  return makeCalcState({ order, roundIndex, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal });
 }
 
 function keypadValue(entry) {
@@ -374,9 +393,10 @@ function buildHand(e, r) {
 
 function noteOf(e, r, isKeypad) {
   if (e.busted) return "sballato";
-  if (isKeypad) return r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round";
+  if (isKeypad) return (r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round") + (e.frozen ? " · congelato" : "");
   return formulaOf(e);
 }
+const displayClass = (e, r) => (e.busted ? "bust" : r.flip7 ? "flip7" : e.frozen ? "frozen" : "");
 
 export function renderScoreSheet(s) {
   const e = s.entry;
@@ -390,7 +410,7 @@ export function renderScoreSheet(s) {
     <div class="sheet-nav">
       <button class="nav-btn" data-action="calc-prev" ${s.pos === 0 ? "disabled" : ""}>${icon("arrowLeft")}</button>
       <div class="nav-mid">
-        <span class="avatar sm" style="background:${colorOf(s.playerName)}">${initials(s.playerName)}</span>
+        ${avatar(s.playerId, s.playerName, "sm")}
         <div>
           <div class="nav-name">${esc(s.playerName)}</div>
           <div class="nav-sub">giocatore ${s.pos + 1} di ${s.order.length}</div>
@@ -401,7 +421,7 @@ export function renderScoreSheet(s) {
       <button class="nav-btn nav-close" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
     </div>
 
-    <div class="score-display ${e.busted ? "bust" : r.flip7 ? "flip7" : ""}">
+    <div class="score-display ${displayClass(e, r)}">
       <div class="flip7-badge" ${r.flip7 ? "" : 'style="display:none"'}>${wordmark()}<span>+15</span></div>
       <div class="sd-value">${e.busted ? "0" : r.total}</div>
       <div class="sd-note">${esc(noteOf(e, r, isKeypad))}</div>
@@ -442,21 +462,21 @@ export function renderScoreSheet(s) {
       <div class="quick-row">
         <button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>
         <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
-      </div>
-      <div class="act-row">
-        <button class="btn" data-action="calc-clear">Azzera</button>
-        <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
+        <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
       </div>` : `
+      <div class="quick-row">
+        <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballo</button>
+        <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
+      </div>`}
       <div class="act-row">
-        <button class="quick bust3 ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballo</button>
         <button class="btn" data-action="calc-clear">Azzera</button>
         <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
-      </div>`}
+      </div>
     </div>`;
 }
 
 /** Aggiorna il pannello punti sul posto, senza ridisegnarlo (niente flicker). */
-function patchCalcSheet(s) {
+export function patchCalcSheet(s) {
   const root = document.getElementById("sheet-root");
   if (!root || !s) return;
   const e = s.entry;
@@ -473,7 +493,7 @@ function patchCalcSheet(s) {
   if (dbl) dbl.classList.toggle("on", Boolean(e.doubled));
 
   const disp = root.querySelector(".score-display");
-  if (disp) disp.className = "score-display " + (e.busted ? "bust" : r.flip7 ? "flip7" : "");
+  if (disp) disp.className = "score-display " + displayClass(e, r);
   const badge = root.querySelector(".flip7-badge");
   if (badge) badge.style.display = r.flip7 ? "" : "none";
   const val = root.querySelector(".sd-value");
@@ -491,29 +511,37 @@ function patchCalcSheet(s) {
   if (q7) q7.className = "quick " + (e.flip7 ? "on gold" : "");
   const qb = root.querySelector('[data-action="calc-bust"]');
   if (qb) qb.className = "quick " + (e.busted ? "on red" : "");
+  const qf = root.querySelector('[data-action="calc-freeze"]');
+  if (qf) qf.className = "quick " + (e.frozen ? "on ice" : "");
 }
 
 function nextLabel(s) {
+  if (s.saveLabel) return s.saveLabel;
   const live = store.getRoom().live;
   if (!live) return "Salva";
   const others = missingIds(live).filter((id) => id !== s.playerId);
   return others.length ? "Salva ›" : "Salva ✓";
 }
 
-async function persistEntry(s) {
-  const e = s.entry;
-  if (isBlankEntry(e)) {
-    await store.clearRoundEntry(s.playerId, s.roundIndex);
-    return;
-  }
-  await store.setRoundEntry(s.playerId, s.roundIndex, {
+/** Entry pronta per il database: solo i campi previsti, mai undefined. */
+export function normalizeEntry(e) {
+  return {
     numbers: e.numbers || [],
     plus: e.plus || [],
     doubled: Boolean(e.doubled),
     busted: Boolean(e.busted),
+    frozen: Boolean(e.frozen) && !e.busted,
     flip7: Boolean(e.flip7),
     manual: e.manual === null || e.manual === undefined || e.manual === "" ? null : Number(e.manual)
-  });
+  };
+}
+
+async function persistEntry(s) {
+  if (isBlankEntry(s.entry)) {
+    await store.clearRoundEntry(s.playerId, s.roundIndex);
+    return;
+  }
+  await store.setRoundEntry(s.playerId, s.roundIndex, normalizeEntry(s.entry));
 }
 
 function gotoPlayer(pid) {
@@ -601,17 +629,22 @@ export const liveView = {
     "calc-open"(ctx, el) { openScoreSheet(ctx.room, ctx.room.live, el.dataset.id); },
 
     async "calc-prev"() {
-      await persistEntry(sheet.state);
-      gotoPlayer(sheet.state.order[Math.max(0, sheet.state.pos - 1)]);
+      const s = sheet.state;
+      if (s.onMove) return s.onMove(s, -1);
+      await persistEntry(s);
+      gotoPlayer(s.order[Math.max(0, s.pos - 1)]);
       return "sheet-full";
     },
     async "calc-next-player"() {
-      await persistEntry(sheet.state);
-      gotoPlayer(sheet.state.order[Math.min(sheet.state.order.length - 1, sheet.state.pos + 1)]);
+      const s = sheet.state;
+      if (s.onMove) return s.onMove(s, 1);
+      await persistEntry(s);
+      gotoPlayer(s.order[Math.min(s.order.length - 1, s.pos + 1)]);
       return "sheet-full";
     },
     async "calc-save"() {
       const s = sheet.state;
+      if (s.onSave) return s.onSave(s);
       const scored = computeRound(s.entry);
       await persistEntry(s);
       if (scored.flip7) toast(`FLIP 7! +15 a ${s.playerName}`, "party");
@@ -644,7 +677,7 @@ export const liveView = {
     },
     "key-clear"() {
       const e = sheet.state.entry;
-      e.manual = null; e.busted = false; e.flip7 = false;
+      e.manual = null; e.busted = false; e.flip7 = false; e.frozen = false;
       return "sheet";
     },
     "calc-flip7"() {
@@ -656,7 +689,14 @@ export const liveView = {
     "calc-bust"() {
       const e = sheet.state.entry;
       e.busted = !e.busted;
-      if (e.busted) e.flip7 = false;
+      if (e.busted) { e.flip7 = false; e.frozen = false; }
+      return "sheet";
+    },
+    // congelato da un Congela: incassa e basta, i punti restano quelli delle carte
+    "calc-freeze"() {
+      const e = sheet.state.entry;
+      e.frozen = !e.frozen;
+      if (e.frozen) e.busted = false;
       return "sheet";
     },
     "calc-clear"() { sheet.state.entry = emptyEntry(); return "sheet"; },

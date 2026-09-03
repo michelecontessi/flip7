@@ -363,6 +363,20 @@ export function myPlayerId() {
   return (room.bindings || {})[status.uid] || null;
 }
 
+/**
+ * Il proprietario della stanza: in modalita' locale chiunque; su Firebase chi
+ * l'ha creata. Lo si riconosce perche' e' il primo iscritto fra i membri (solo
+ * lui puo' scrivere quell'elenco), cosi' vale anche da un dispositivo nuovo.
+ * Le regole del database restano l'unica vera barriera.
+ */
+export function isOwner() {
+  if (status.mode !== "firebase") return true;
+  if (prefs.get("owner")) return true;
+  const first = Object.entries(room.members || {})
+    .sort((a, b) => ((a[1] && a[1].at) || 0) - ((b[1] && b[1].at) || 0))[0];
+  return Boolean(first && first[0] === status.uid);
+}
+
 /** Crea una stanza nuova con codice segreto e la apre. */
 export function createRoom(name) {
   const clean = String(name || "").trim();
@@ -424,6 +438,11 @@ export function renamePlayer(id, name) {
 }
 export function setPlayerArchived(id, archived) {
   return commit({ [`players/${id}/archived`]: Boolean(archived) });
+}
+/** Avatar scelto dal giocatore (null = torna alle iniziali). Le regole lasciano
+    scrivere solo al proprietario e all'account legato a quel giocatore. */
+export function setPlayerAvatar(id, avatar) {
+  return commit({ [`players/${id}/avatar`]: avatar ? JSON.parse(JSON.stringify(avatar)) : null });
 }
 // I giocatori non si eliminano: si archiviano, cosi' lo storico resta coerente.
 
@@ -524,7 +543,8 @@ export function saveGameToHistory() {
       name: row.name,
       total: row.total,
       flip7s: Object.values(rows_).filter((e) => computeRound(e).flip7).length,
-      busts: Object.values(rows_).filter((e) => e && e.busted).length
+      busts: Object.values(rows_).filter((e) => e && e.busted).length,
+      freezes: Object.values(rows_).filter((e) => e && e.frozen && !e.busted).length
     };
   }
   const winnerIds = live.winnerIds && Object.keys(live.winnerIds).length
@@ -623,6 +643,10 @@ export function addManualGame(data) {
 
 export function updateGameWinners(gameId, winnerIds) {
   return commit({ [`history/${gameId}/winnerIds`]: Object.fromEntries(winnerIds.map((id) => [id, true])) });
+}
+/** Riscrive per intero una partita chiusa (le regole lo concedono al solo proprietario). */
+export function updateGame(gameId, game) {
+  return commit({ [`history/${gameId}`]: JSON.parse(JSON.stringify(game)) });
 }
 export function deleteGame(gameId) {
   return commit({ [`history/${gameId}`]: null });

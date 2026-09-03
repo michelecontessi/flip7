@@ -3,6 +3,7 @@
 // Toccando un giocatore si apre la sua scheda a schermo intero.
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
+import { avatar } from "../avatar.js";
 import { icon, crownEmblem, awardEmblem } from "../icons.js";
 import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
 
@@ -39,7 +40,7 @@ function renderPodium(rows, gamesCount) {
   const col = (r, place) => r ? `
     <div class="pod-col p${place}">
       ${place === 1 ? `<div class="pod-crown">${crownEmblem("big")}</div>` : ""}
-      <span class="avatar ${place === 1 ? "lg" : ""}" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+      ${avatar(r.playerId, r.name, place === 1 ? "lg" : "")}
       <span class="pod-name">${esc(r.name)}</span>
       <div class="pod-step">${crownEmblem("mini")}<b>${r.crowns}</b></div>
     </div>` : "";
@@ -54,7 +55,7 @@ function renderPodium(rows, gamesCount) {
 }
 
 // ---------------------------------------------------------------------------
-// Trofei: fino a 4 titoli scherzosi (piu' Flip 7, piu' sballi, ...). Il nome
+// Record: titoli scherzosi (piu' Flip 7, piu' sballi, piu' congelate...). Il nome
 // mostrato e' quello del vincitore; a pari merito compaiono entrambi.
 // ---------------------------------------------------------------------------
 function renderAwards(rows) {
@@ -63,7 +64,7 @@ function renderAwards(rows) {
   return `
     <section class="card">
       <div class="card-head">
-        <h2 class="section-title">Trofei</h2>
+        <h2 class="section-title">Record</h2>
       </div>
       <div class="award-grid">
         ${list.map((a) => {
@@ -78,7 +79,7 @@ function renderAwards(rows) {
             <span class="award-title">${a.title}</span>
             <small class="award-desc">${a.desc}</small>
             <span class="award-holder">
-              ${solo ? `<span class="avatar xs" style="background:${colorOf(solo.name)}">${initials(solo.name)}</span>` : ""}
+              ${solo ? avatar(solo.playerId, solo.name, "xs") : ""}
               <b>${esc(label)}</b>
             </span>
             <span class="award-value">${a.unit(a.value)}</span>
@@ -253,7 +254,7 @@ export const leaderboardView = {
                 data-action="lb-detail" data-id="${r.playerId}">
               <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
               <span class="lbname">
-                <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+                ${avatar(r.playerId, r.name, "sm")}
                 <span class="txt">${esc(r.name)}
                   <small>rec. ${r.best} · ${fmtNum(r.winRate * 100, 0)}%</small></span>
               </span>
@@ -268,7 +269,7 @@ export const leaderboardView = {
 
       ${renderTrend(room, me)}
 
-      <p class="foot-note">Una vittoria = una Crown. Tocca un giocatore per la sua scheda, un trofeo per la classifica di quella statistica.</p>`;
+      <p class="foot-note">Una vittoria = una Crown. Tocca un giocatore per la sua scheda, un record per la classifica di quella statistica.</p>`;
   },
 
   actions: {
@@ -321,13 +322,18 @@ export const leaderboardView = {
 };
 
 // ---------------------------------------------------------------------------
-// Pagina di un trofeo: la stessa statistica per tutti i giocatori in gara.
+// Pagina di un record: la stessa statistica per tutti i giocatori in gara.
 // ---------------------------------------------------------------------------
 function awardRowSub(a, r) {
   if (a.key === "bustRate") {
     const s = r.busts === 1 ? "1 sballo" : `${r.busts} sballi`;
     return `${s} in ${r.tracked === 1 ? "1 partita" : r.tracked + " partite"}`;
   }
+  if (a.key === "freezeRate") {
+    const s = r.freezes === 1 ? "congelato 1 volta" : `congelato ${r.freezes} volte`;
+    return `${s} in ${r.tracked === 1 ? "1 partita" : r.tracked + " partite"}`;
+  }
+  if (a.key === "avgCards") return `${r.cards} carte in ${r.hands === 1 ? "1 mano" : r.hands + " mani"}`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
   return `media ${fmtNum(r.avg, 1)}`;
 }
@@ -351,7 +357,7 @@ function renderAwardPage(a) {
           ${a.rows.map((r) => `
             <li class="${r.rank === 1 ? "aw-top tone-" + a.tone : ""}">
               <span class="rank">${r.rank}</span>
-              <span class="avatar sm" style="background:${colorOf(r.name)}">${initials(r.name)}</span>
+              ${avatar(r.playerId, r.name, "sm")}
               <span class="nm">${esc(r.name)}<small>${awardRowSub(a, r)}</small></span>
               <b>${a.unit(r.value)}</b>
             </li>`).join("")}
@@ -420,7 +426,7 @@ function renderPlayerPage(s) {
     <div class="page-body">
       <section class="profile-hero holo">
         <span class="holo-sweep" aria-hidden="true"></span>
-        <span class="avatar xl" style="background:${colorOf(row.name)}">${initials(row.name)}</span>
+        ${avatar(pid, row.name, "xl")}
         <div class="profile-name">${esc(row.name)}</div>
         <div class="profile-sub">${row.games} partite giocate</div>
       </section>
@@ -455,7 +461,16 @@ function renderPlayerPage(s) {
           <div class="hl tone-red">
             <b>${h.busts}</b>
             <span>${h.busts === 1 ? "sballo" : "sballi"}<small>round buttati via</small></span>
-          </div>` : ""}
+          </div>
+          <div class="hl tone-ice">
+            <b>${h.freezes}</b>
+            <span>${h.freezes === 1 ? "volta congelato" : "volte congelato"}<small>fermato da un Congela</small></span>
+          </div>
+          ${h.hands ? `
+          <div class="hl tone-violet">
+            <b>${fmtNum(h.avgCards, 1)}</b>
+            <span>carte a mano<small>su ${h.hands === 1 ? "1 mano" : h.hands + " mani"} segnate carta per carta</small></span>
+          </div>` : ""}` : ""}
       </div>
 
       <p class="mood">${mood}</p>

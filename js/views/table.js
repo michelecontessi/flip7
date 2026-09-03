@@ -7,7 +7,8 @@
 // destra, con le carte dimensionate per stare tutte in un'unica schermata.
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
-import { esc, initials, colorOf, toast, askText, askConfirm, askChoice, relTime } from "../ui.js";
+import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime } from "../ui.js";
+import { avatar } from "../avatar.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card } from "../icons.js";
 import * as engine from "../game.js";
 
@@ -380,7 +381,7 @@ function renderLobby(g, ctx) {
           const seat = g.seats[sid];
           const tile = `
               <span class="pg-ava" style="--pc:${colorOf(seat.name)}">
-                <span class="avatar lg" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
+                ${avatar(seat.playerId, seat.name, "lg")}
                 <i class="pg-check">${icon(seat.bot ? "close" : "check", "tiny")}</i>
               </span>
               <span class="pg-name">${esc(seat.name)}${seat.bot ? '<small class="bot-note">tocca per togliere</small>' : ""}</span>`;
@@ -427,7 +428,7 @@ function raceBoard(g, me) {
         const b = banked(sid), r = roundPts(sid);
         return `
         <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}" data-flip="race:${sid}">
-          <span class="avatar xs" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
+          ${avatar(seat.playerId, seat.name, "xs")}
           <span class="race-track">
             <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>
             ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>` : ""}
@@ -521,7 +522,7 @@ function renderSeatRow(g, sid, ctx) {
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   return `
     <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}" data-flip="seat:${sid}">
-      <span class="avatar sm" style="background:${colorOf(seat.name)}">${initials(seat.name)}</span>
+      ${avatar(seat.playerId, seat.name, "sm")}
       <div class="seat-main">
         <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>
         <div class="seat-cards">
@@ -581,7 +582,7 @@ function renderControls(g, ctx, me) {
           ${p.options.map((sid) => `
             <button class="pg" data-action="tbl-target" data-id="${sid}">
               <span class="pg-ava ${sid === p.chooser ? "holo-ring" : ""}" style="--pc:${colorOf(g.seats[sid].name)}">
-                <span class="avatar lg" style="background:${colorOf(g.seats[sid].name)}">${initials(g.seats[sid].name)}</span>
+                ${avatar(g.seats[sid].playerId, g.seats[sid].name, "lg")}
               </span>
               <span class="pg-name">${sid === p.chooser ? "me stesso" : esc(g.seats[sid].name)}</span>
             </button>`).join("")}

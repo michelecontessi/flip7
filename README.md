@@ -56,7 +56,12 @@ quello che consuma questa app.
    Con queste regole: **solo i dispositivi approvati** vedono la stanza e scrivono
    i punti; chi apre il tuo link manda una richiesta di accesso e **solo tu**
    (il proprietario) puoi approvarla; il tabellone live resta scrivibile dal solo
-   segnapunti in carica.
+   segnapunti in carica; le partite già chiuse nello storico le può **correggere o
+   eliminare solo il proprietario**, e ognuno può cambiare **solo il proprio avatar**.
+
+   > Hai già pubblicato le regole in passato? Ogni volta che il file cambia va
+   > reincollato e ripubblicato dalla console, altrimenti il database continua a
+   > seguire quelle vecchie.
 
 5. Menu ⚙️ **Impostazioni progetto** → in fondo, **Le tue app** → icona `</>` (Web) →
    registra l'app → copia l'oggetto `firebaseConfig`.
@@ -133,13 +138,18 @@ dispositivo — e il collegamento può cambiarlo solo il proprietario, da
 
 **Durante la partita** (solo il segnapunti)
 
-1. Tab **Partita** → seleziona chi gioca → **Inizia partita**.
+1. Tab **Partita** → tocca chi gioca **nell'ordine in cui siete seduti** (ogni avatar
+   prende il numero del posto) → **Inizia partita**. Chi apre la prima mano è sorteggiato,
+   poi il giro segue quella sequenza; la striscia *Apre la mano* mostra l'ordine.
 2. A fine mano premi il pulsante **Segna i punti**: si apre il pannello sul primo
    giocatore, con le **carte** davanti. Tocchi le carte numero che ha in mano, i
    modificatori `+2…+10` e `×2`, e il totale si calcola da solo; poi **Salva e avanti ›**
    passa al giocatore dopo. Con le frecce ‹ › ti sposti a mano.
    - il bonus **Flip 7** (+15) viene aggiunto da solo alla settima carta numero diversa
    - **Sballato** mette 0 al round
+   - **Congelato** segna che quel giocatore è stato fermato da un *Congela*: i punti
+     restano quelli delle carte, ma si capisce perché la mano è corta (e conta per il
+     record *Surgelato*)
    - se preferisci fare i conti a mente, la linguetta **Tastierino** ti fa digitare
      direttamente il totale (lì il Flip 7 si aggiunge col tasto dedicato)
 3. Quando tutti hanno il punteggio, il pulsante diventa **Chiudi round** e si passa al successivo.
@@ -152,6 +162,16 @@ dispositivo — e il collegamento può cambiarlo solo il proprietario, da
 Serve correggere un errore? Tocchi la casella del round di quel giocatore e la rifai;
 *← Round precedente* riapre il round appena chiuso.
 Il segnapunti può cambiare in qualsiasi momento: chiunque può premere *prendi tu*.
+
+**Correggere una partita già chiusa** (solo il proprietario): tab **Storico** → tocca
+la partita → **Modifica**. Si apre una pagina dove cambi data, obiettivo, chi ha
+giocato e il vincitore; se la partita era stata segnata round per round trovi la
+tabella delle **mani**: tocchi una casella e la rifai con le carte, come durante la
+partita (una mano azzerata sparisce, un round vuoto per tutti viene tolto; puoi anche
+aggiungere un round in coda o togliere l'ultimo). Totali, Flip 7, sballi e Crown si
+ricalcolano da soli al salvataggio. Da lì si elimina anche la partita. Gli altri
+membri vedono lo storico ma non possono toccarlo: lo impongono le regole del
+database, non solo l'interfaccia.
 
 **La corsa al traguardo**: sotto ogni giocatore c'è una rotaia che avanza verso
 l'obiettivo, e sotto il totale i punti che gli mancano (`−69`). Chi è in testa ha la
@@ -209,15 +229,36 @@ uno dall'altro invece di una griglia tutta uguale:
 - **la serie più lunga** di vittorie di fila, e sotto la frase del momento
   (*in serie: 4 di fila* / *non vince da 6 partite*);
 - **il suo record** con la data, **media a partita**, **percentuale di vittorie**;
-- **Flip 7 riusciti** e **sballi**, contati sulle partite segnate round per round;
+- **Flip 7 riusciti**, **sballi** e **volte congelato**, contati sulle partite segnate
+  round per round, e la **lunghezza media delle mani** dove le carte sono state
+  segnate una per una;
 - il grafico **Andamento su tutte le partite** — non solo le ultime dieci: le barre si
   stringono al crescere dello storico, si scorre lateralmente e si apre già sull'ultima
   partita giocata. In oro le vittorie, la tratteggiata è l'obiettivo.
+
+Sotto il podio ci sono i **Record**, titoli scherzosi assegnati a chi primeggia in una
+statistica (a pari merito si condividono; toccandone uno si apre la classifica completa):
+
+- **Gambler**: più Flip 7 piazzati
+- **Golosone**: più sballi a partita · **Tanaia**: meno sballi a partita (braccine corte)
+- **Cannoniere**: il punteggio più alto in una singola partita
+- **Surgelato**: più volte congelato a partita, il bersaglio preferito dei *Congela*
+- **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
+  le mani sballate né quelle inserite col tastierino)
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;
 - i giocatori **non si eliminano**: chi smette di giocare si **archivia** (Setup),
   così sparisce dalle liste dei nuovi tavoli ma la classifica resta coerente.
+
+**Avatar**: di base ognuno è un cerchio con le iniziali sul colore del nome. Da
+**Setup → Il tuo avatar → Cambia** si apre il configuratore: scegli un **personaggio**
+fra i ventuno disegnati apposta per l'app (volpe, gufo, robot, dado, la carta col 7…,
+nello stesso stile di corona e trofei) e un **colore** di sfondo, oppure **carichi una foto** (viene
+ritagliata al centro e ridotta a un francobollo, così pesa pochi KB e sta nel
+database insieme al resto). Ognuno cambia solo il proprio; il proprietario può
+sistemare quello di tutti (matita sull'avatar in Setup → Giocatori), utile per chi
+non ha un account.
 
 ---
 
@@ -264,6 +305,7 @@ js/scoring.js            regole di punteggio di Flip 7
 js/stats.js              totali di partita e classifica perpetua
 js/icons.js              icone SVG, marchio FLIP 7 e facce delle carte
 js/ui.js                 helper: date, toast, bottom sheet, dialoghi, condivisione
+js/avatar.js             avatar: simboli e colori predefiniti, foto ridotte, disegno
 js/theme.js              tema chiaro/scuro
 js/game.js               motore del gioco online (regole ufficiali, logica pura)
 js/views/                partita · tavolo · classifica · storico · setup
@@ -302,7 +344,9 @@ reimportabile con **Importa**.
 è imposto dalle regole del database, non solo dall'interfaccia. Il codice stanza è
 segreto e non sta nel repository; il tuo ID di proprietario è scolpito nelle regole,
 che si cambiano solo dalla console Firebase con il tuo account Google. Dentro la
-stanza, il tabellone live resta scrivibile dal solo segnapunti in carica.
+stanza, il tabellone live resta scrivibile dal solo segnapunti in carica, le partite
+chiuse le corregge o elimina solo il proprietario, e l'avatar lo cambia solo il
+diretto interessato (o il proprietario).
 
 **E se cambio telefono, rete o cancello i dati del browser?** Nessun problema:
 l'identità è l'**account Google**, non il dispositivo. Stesso account = stesso accesso
