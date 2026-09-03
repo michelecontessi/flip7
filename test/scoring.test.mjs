@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { computeRound, formulaOf, isBlankEntry } from "../js/scoring.js";
-import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey, awards, awardRanking, roundStarter } from "../js/stats.js";
+import { leaderboard, sortLeaderboard, playerHighlights, playerTotal, liveStandings, winnersOf, roundKey, awards, awardRanking, roundStarter, FREEZE_STATS_SINCE } from "../js/stats.js";
+
+// una partita giocata dopo l'avvio del conteggio delle congelate
+const DOPO = FREEZE_STATS_SINCE + 60000;
 
 test("somma semplice delle carte numero", () => {
   assert.equal(computeRound({ numbers: [3, 7, 10] }).total, 20);
@@ -333,11 +336,11 @@ test("handStats: conta solo le mani costruite con le carte e non sballate", () =
 test("record: Surgelato a chi viene congelato piu' spesso, Architetto alle mani piu' lunghe", () => {
   const hist = {
     g1: {
-      playedAt: 1, results: { a: { name: "Ale", total: 50, flip7s: 0, busts: 0, freezes: 2 }, b: { name: "Bea", total: 60, flip7s: 0, busts: 0, freezes: 0 } },
+      playedAt: DOPO, results: { a: { name: "Ale", total: 50, flip7s: 0, busts: 0, freezes: 2 }, b: { name: "Bea", total: 60, flip7s: 0, busts: 0, freezes: 0 } },
       winnerIds: { b: true },
       rounds: { a: { r0: { numbers: [1, 2] }, r1: { numbers: [3, 4, 5, 6] } }, b: { r0: { numbers: [12] }, r1: { manual: 30 } } }
     },
-    g2: { playedAt: 2, results: { a: { name: "Ale", total: 10 }, c: { name: "Cri", total: 90 } }, winnerIds: { c: true }, rounds: null }
+    g2: { playedAt: DOPO + 1000, results: { a: { name: "Ale", total: 10 }, c: { name: "Cri", total: 90 } }, winnerIds: { c: true }, rounds: null }
   };
   const { rows } = leaderboard(hist, {});
   const ale = rows.find((r) => r.playerId === "a");
@@ -366,8 +369,8 @@ test("reviseGame conta anche le congelate", () => {
 
 test("congelate: le partite vecchie senza quel dato non annacquano la media", () => {
   const hist = {
-    vecchia: { playedAt: 1, results: { a: { name: "Ale", total: 100, flip7s: 0, busts: 1 }, b: { name: "Bea", total: 90, flip7s: 0, busts: 0 } }, winnerIds: { a: true } },
-    nuova: { playedAt: 2, results: { a: { name: "Ale", total: 80, flip7s: 0, busts: 0, freezes: 3 }, b: { name: "Bea", total: 95, flip7s: 0, busts: 0, freezes: 0 } }, winnerIds: { b: true } }
+    vecchia: { playedAt: DOPO - 864e5, results: { a: { name: "Ale", total: 100, flip7s: 0, busts: 1 }, b: { name: "Bea", total: 90, flip7s: 0, busts: 0 } }, winnerIds: { a: true } },
+    nuova: { playedAt: DOPO, results: { a: { name: "Ale", total: 80, flip7s: 0, busts: 0, freezes: 3 }, b: { name: "Bea", total: 95, flip7s: 0, busts: 0, freezes: 0 } }, winnerIds: { b: true } }
   };
   const { rows } = leaderboard(hist, {});
   const ale = rows.find((r) => r.playerId === "a");
@@ -391,4 +394,23 @@ test("la classifica si ordina anche per percentuale di vittorie", () => {
   ];
   assert.deepEqual(sortLeaderboard(rows, "winRate", -1).map((r) => r.playerId), ["b", "a"]);
   assert.deepEqual(sortLeaderboard(rows, "winRate", 1).map((r) => r.playerId), ["a", "b"]);
+});
+
+test("congelate: una partita giocata prima dell'avvio non conta, anche se ha il dato", () => {
+  const prima = { playedAt: FREEZE_STATS_SINCE - 1, results: { a: { name: "Ale", total: 50, busts: 0, freezes: 0 }, b: { name: "Bea", total: 60, busts: 0, freezes: 0 } }, winnerIds: { b: true } };
+  const dopo = { playedAt: FREEZE_STATS_SINCE, results: { a: { name: "Ale", total: 40, busts: 0, freezes: 2 }, b: { name: "Bea", total: 70, busts: 0, freezes: 0 } }, winnerIds: { b: true } };
+
+  const solaPrima = leaderboard({ g: prima }, {}).rows.find((r) => r.playerId === "a");
+  assert.equal(solaPrima.frozenTracked, 0, "la partita di prima resta fuori dal conteggio");
+  assert.equal(solaPrima.freezeRate, 0);
+  assert.equal(awards(leaderboard({ g: prima }, {}).rows).find((x) => x.id === "surgelato"), undefined);
+
+  const rows = leaderboard({ g1: prima, g2: dopo }, {}).rows;
+  const ale = rows.find((r) => r.playerId === "a");
+  assert.equal(ale.frozenTracked, 1, "conta solo quella dall'avvio in poi");
+  assert.equal(ale.freezeRate, 2, "2 congelate in 1 partita, non 1 in 2");
+
+  const h = playerHighlights([prima, dopo].map((g, i) => ({ id: "g" + i, ...g })), "a");
+  assert.equal(h.freezeGames, 1);
+  assert.equal(h.freezes, 2);
 });

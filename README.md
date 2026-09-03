@@ -233,7 +233,7 @@ uno dall'altro invece di una griglia tutta uguale:
   (*in serie: 4 di fila* / *non vince da 6 partite*);
 - **il suo record** con la data, **media a partita**, **percentuale di vittorie**;
 - **Flip 7 riusciti** e **sballi**, contati sulle partite segnate round per round, le
-  **volte congelato** (solo dalle partite in cui i Congela sono stati segnati) e la
+  **volte congelato** (solo dalle partite dall'avvio del conteggio in poi) e la
   **lunghezza media delle mani** dove le carte sono state messe una per una;
 - il grafico **Andamento su tutte le partite** — non solo le ultime dieci: le barre si
   stringono al crescere dello storico, si scorre lateralmente e si apre già sull'ultima
@@ -246,8 +246,11 @@ statistica (a pari merito si condividono; toccandone uno si apre la classifica c
 - **Golosone**: più sballi a partita · **Tanaia**: meno sballi a partita (braccine corte)
 - **Cannoniere**: il punteggio più alto in una singola partita
 - **Surgelato**: più volte congelato a partita, il bersaglio preferito dei *Congela*.
-  Conta solo le partite segnate da quando esiste il tasto **Congelato**: quelle più
-  vecchie non hanno il dato e resterebbero a zero, falsando la media
+  Conta solo dalle partite giocate dopo l'avvio del conteggio: quelle di prima o non
+  hanno il dato, o ce l'hanno a zero soltanto perché nessuno usava ancora il tasto
+  **Congelato**, e abbasserebbero la media di chi viene congelato davvero. La data di
+  partenza è `FREEZE_STATS_SINCE` in [js/stats.js](js/stats.js), una riga sola da
+  spostare se il conteggio deve cominciare da un altro giorno
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
   le mani sballate né quelle inserite col tastierino)
 

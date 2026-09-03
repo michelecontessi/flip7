@@ -1,6 +1,6 @@
 // Service worker minimale: network-first, cache solo come rete di sicurezza.
 // Cosi' gli aggiornamenti arrivano sempre e l'app si apre anche senza rete.
-const CACHE = "flip7-v42";
+const CACHE = "flip7-v43";
 const SHELL = [
   "./", "./index.html", "./css/styles.css", "./icon.svg", "./manifest.webmanifest",
   "./js/app.js", "./js/store.js", "./js/stats.js", "./js/scoring.js", "./js/ui.js",

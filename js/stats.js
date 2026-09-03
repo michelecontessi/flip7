@@ -136,6 +136,15 @@ export const matchesSource = (g, source) =>
     : source === "online" ? g.source === "online"
     : g.source !== "online";
 
+/**
+ * Da quando valgono le statistiche sulle congelate. Le partite precedenti non
+ * contano: o non hanno il dato, oppure ce l'hanno a zero solo perche' nessuno
+ * usava ancora il tasto "Congelato", e abbasserebbero la media di chi viene
+ * congelato davvero. Sposta questa data se il conteggio parte da un altro giorno.
+ */
+export const FREEZE_STATS_SINCE = Date.parse("2026-09-03T11:35:00+02:00");
+const tracksFreezes = (game, res) => res.freezes !== undefined && (game.playedAt || 0) >= FREEZE_STATS_SINCE;
+
 export const PERIODS = {
   all: { label: "Sempre", since: () => 0 },
   year: { label: "Quest'anno", since: () => new Date(new Date().getFullYear(), 0, 1).getTime() },
@@ -201,11 +210,11 @@ export function leaderboard(history, players, opts = {}) {
       e.worst = Math.min(e.worst, Number(res.total) || 0);
       e.flip7s += Number(res.flip7s) || 0;
       e.busts += Number(res.busts) || 0;
-      e.freezes += Number(res.freezes) || 0;
       if (res.busts !== undefined || res.flip7s !== undefined) e.tracked += 1; // segnata round per round
-      // le congelate esistono solo dalle partite segnate dopo l'arrivo del tasto
-      // "Congelato": quelle di prima non fanno media, altrimenti la annacquerebbero
-      if (res.freezes !== undefined) e.frozenTracked += 1;
+      if (tracksFreezes(game, res)) {
+        e.freezes += Number(res.freezes) || 0;
+        e.frozenTracked += 1;
+      }
       const hs = handStats(game.rounds && game.rounds[pid]);
       e.hands += hs.hands;
       e.cards += hs.cards;
@@ -371,8 +380,10 @@ export function playerHighlights(games, playerId) {
     if (res.flip7s !== undefined) detailed += 1;   // partita segnata round per round
     flip7s += Number(res.flip7s) || 0;
     busts += Number(res.busts) || 0;
-    freezes += Number(res.freezes) || 0;
-    if (res.freezes !== undefined) freezeGames += 1;
+    if (tracksFreezes(g, res)) {
+      freezes += Number(res.freezes) || 0;
+      freezeGames += 1;
+    }
     const hs = handStats(g.rounds && g.rounds[playerId]);
     hands += hs.hands;
     cards += hs.cards;
