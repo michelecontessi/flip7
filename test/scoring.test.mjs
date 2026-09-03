@@ -334,7 +334,7 @@ test("handStats: conta solo le mani costruite con le carte e non sballate", () =
   assert.equal(hs.cards, 8);
   assert.equal(hs.rounds, 4, "tutte le mani, anche sballate o col tastierino");
   assert.equal(hs.bestHand, 45, "la mano piu' ricca: 7+8+9+10+11");
-  assert.deepEqual(handStats(null), { hands: 0, cards: 0, bestHand: 0, rounds: 0 });
+  assert.deepEqual(handStats(null), { hands: 0, cards: 0, bestHand: 0, bestHandRound: -1, rounds: 0 });
 });
 
 test("record: Surgelato a chi viene congelato piu' spesso, Architetto alle mani piu' lunghe", () => {
@@ -479,4 +479,23 @@ test("Fenice va alla rimonta piu' grande e chi non e' mai stato sotto non concor
   assert.equal(f.unit(32), "rimonta da −32");
   assert.deepEqual(awardRanking(rows, "fenice").rows.map((r) => r.playerId), ["a"]);
   assert.equal(playerHighlights([{ id: "g1", ...hist.g1 }, { id: "g2", ...hist.g2 }], "a").bestComeback, 32);
+});
+
+test("i record da una partita sola ricordano quale partita (e quale mano)", () => {
+  const hist = {
+    g1: { playedAt: 1, winnerIds: { a: true }, results: { a: { name: "Ale", total: 60 }, b: { name: "Bea", total: 50 } },
+      rounds: { a: { r0: { numbers: [10] }, r1: { numbers: [12, 11, 10, 9, 8] } }, b: { r0: { numbers: [12, 11, 10, 9] }, r1: { numbers: [8] } } } },
+    g2: { playedAt: 2, winnerIds: { b: true }, results: { a: { name: "Ale", total: 95 }, b: { name: "Bea", total: 100 } },
+      rounds: { a: { r0: { numbers: [12, 11, 10, 9, 8, 7, 6] }, r1: { numbers: [12] } }, b: { r0: { numbers: [12, 11, 10] }, r1: { manual: 67 } } } }
+  };
+  const ale = leaderboard(hist, {}).rows.find((r) => r.playerId === "a");
+  assert.equal(ale.bestGame, "g2");
+  assert.equal(ale.bestHandGame, "g2");
+  assert.equal(ale.bestHandRound, 0, "il Flip 7 da 78 nel primo round");
+  assert.equal(ale.bestComebackGame, "g1");
+  assert.equal(ale.bestComebackRound, 0, "dopo il primo round era 42 a 10");
+  const h = playerHighlights([{ id: "g1", ...hist.g1 }, { id: "g2", ...hist.g2 }], "a");
+  assert.equal(h.best.gameId, "g2");
+  assert.deepEqual([h.bestHandGame, h.bestHandRound], ["g2", 0]);
+  assert.deepEqual([h.bestComebackGame, h.bestComebackRound, h.bestComeback], ["g1", 0, 32]);
 });

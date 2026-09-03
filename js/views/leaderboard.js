@@ -6,6 +6,30 @@ import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { avatar } from "../avatar.js";
 import { icon, crownEmblem, awardEmblem } from "../icons.js";
 import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
+import { openGameSheet } from "./history.js";
+import { getRoom } from "../store.js";
+
+// ---------------------------------------------------------------------------
+// I record nati da UNA partita (o una mano) rimandano a quella partita, per
+// rivederla: qui si dice quale campo della riga tiene la partita e cosa
+// evidenziare nel dettaglio.
+// ---------------------------------------------------------------------------
+const GAME_RECORDS = {
+  best: (r) => ({ game: r.bestGame, note: `${r.best} punti in questa partita, il suo record` }),
+  bestHand: (r) => ({ game: r.bestHandGame, pid: r.playerId, round: r.bestHandRound, note: `la mano da ${r.bestHand} punti` }),
+  bestComeback: (r) => ({ game: r.bestComebackGame, pid: r.playerId, round: r.bestComebackRound,
+    note: `dopo il round ${r.bestComebackRound + 1} era sotto di ${r.bestComeback} punti, poi ha vinto` })
+};
+
+/** Pulsante "rivedi" verso la partita del record (vuoto se il record non ne ha una). */
+function gameLink(key, r, cls = "rewatch") {
+  const spec = GAME_RECORDS[key];
+  const ref = spec ? spec(r) : null;
+  const g = ref && ref.game ? (getRoom().history || {})[ref.game] : null;
+  if (!g) return "";
+  return `<button class="${cls}" data-action="award-game" data-g="${ref.game}" ${ref.pid ? `data-pid="${ref.pid}" data-round="${ref.round}"` : ""} data-note="${esc(ref.note)}">
+    ${icon("history", "tiny")} rivedi · ${fmtDate(g.playedAt)}</button>`;
+}
 
 const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
 const filters = () => ({ period: localState.period, source: localState.source });
@@ -109,6 +133,7 @@ function renderAwards(rows) {
               <b>${esc(label)}</b>
             </span>
             <span class="award-value">${a.unit(a.value)}</span>
+            ${solo ? gameLink(a.key, solo, "rewatch card-link") : ""}
           </div>`;
         }).join("")}
       </div>
@@ -326,6 +351,11 @@ export const leaderboardView = {
       openPage(detail, renderAwardPage);
       return "page";
     },
+    "award-game"(ctx, el) {
+      const d = el.dataset;
+      openGameSheet(d.g, { pid: d.pid || null, round: d.round !== undefined ? Number(d.round) : -1, note: d.note || "" });
+      return "sheet-quiet";
+    },
     "lb-detail"(ctx, el) {
       const pid = el.dataset.id;
       const { rows } = leaderboard(ctx.room.history, ctx.room.players, filters());
@@ -388,7 +418,7 @@ function renderAwardPage(a) {
             <li class="${r.rank === 1 ? "aw-top tone-" + a.tone : ""}">
               <span class="rank">${r.rank}</span>
               ${avatar(r.playerId, r.name, "sm")}
-              <span class="nm">${esc(r.name)}<small>${awardRowSub(a, r)}</small></span>
+              <span class="nm">${esc(r.name)}<small>${awardRowSub(a, r)}</small>${gameLink(a.key, r)}</span>
               <b>${a.unit(r.value)}</b>
             </li>`).join("")}
         </ul>
@@ -471,9 +501,9 @@ function renderPlayerPage(s) {
           <b>${h.bestStreak}</b>
           <span>di fila<small>la serie più lunga</small></span>
         </div>
-        <div class="hl tone-blue">
+        <div class="hl tone-blue ${h.best.gameId ? "tap" : ""}" ${h.best.gameId ? `data-action="award-game" data-g="${h.best.gameId}" data-note="${esc(`${h.best.total} punti in questa partita, il suo record`)}"` : ""}>
           <b>${h.best.total}</b>
-          <span>il suo record<small>${h.best.playedAt ? fmtDate(h.best.playedAt) : "—"}</small></span>
+          <span>il suo record<small>${h.best.playedAt ? fmtDate(h.best.playedAt) + " · rivedi" : "—"}</small></span>
         </div>
         <div class="hl">
           <b>${fmtNum(row.avg, 1)}</b>
@@ -498,14 +528,14 @@ function renderPlayerPage(s) {
             <span>${h.freezes === 1 ? "volta congelato" : "volte congelato"}<small>in ${h.freezeGames === 1 ? "1 partita" : h.freezeGames + " partite"} con i Congela segnati</small></span>
           </div>` : ""}
           ${h.rounds ? `
-          <div class="hl tone-fire">
+          <div class="hl tone-fire ${h.bestHandGame ? "tap" : ""}" ${h.bestHandGame ? `data-action="award-game" data-g="${h.bestHandGame}" data-pid="${pid}" data-round="${h.bestHandRound}" data-note="${esc(`la mano da ${h.bestHand} punti`)}"` : ""}>
             <b>${h.bestHand}</b>
-            <span>la sua mano migliore<small>punti in un solo round</small></span>
+            <span>la sua mano migliore<small>punti in un solo round${h.bestHandGame ? " · rivedi" : ""}</small></span>
           </div>` : ""}
           ${h.bestComeback ? `
-          <div class="hl tone-rose">
+          <div class="hl tone-rose tap" data-action="award-game" data-g="${h.bestComebackGame}" data-pid="${pid}" data-round="${h.bestComebackRound}" data-note="${esc(`dopo il round ${h.bestComebackRound + 1} era sotto di ${h.bestComeback} punti, poi ha vinto`)}">
             <b>−${h.bestComeback}</b>
-            <span>la rimonta più grande<small>era sotto di tanto, poi ha vinto</small></span>
+            <span>la rimonta più grande<small>era sotto di tanto, poi ha vinto · rivedi</small></span>
           </div>` : ""}
           ${h.hands ? `
           <div class="hl tone-violet">

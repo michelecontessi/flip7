@@ -99,14 +99,14 @@ function countFreezes(live, pid) {
  * (una mano sballata non e' stata "costruita", e' saltata per aria).
  */
 export function handStats(rows) {
-  let hands = 0, cards = 0, bestHand = 0, rounds = 0;
-  for (const e of Object.values(rows || {})) {
+  let hands = 0, cards = 0, bestHand = 0, bestHandRound = -1, rounds = 0;
+  for (const [key, e] of Object.entries(rows || {})) {
     const c = computeRound(e);
     rounds += 1;
-    if (c.total > bestHand) bestHand = c.total;
+    if (c.total > bestHand) { bestHand = c.total; bestHandRound = Number(String(key).slice(1)); }
     if (!c.busted && c.cards > 0) { hands += 1; cards += c.cards; }
   }
-  return { hands, cards, bestHand, rounds };
+  return { hands, cards, bestHand, bestHandRound, rounds };
 }
 
 /** Chi ha raggiunto o superato il target. */
@@ -202,13 +202,14 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, bestComeback: 0, comebackWins: 0 };
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, bestComeback: 0, comebackWins: 0,
+          bestGame: null, bestHandGame: null, bestHandRound: -1, bestComebackGame: null, bestComebackRound: -1 };
         acc.set(pid, e);
       }
       e.name = res.name || e.name;
       e.games += 1;
       e.points += Number(res.total) || 0;
-      e.best = Math.max(e.best, Number(res.total) || 0);
+      if ((Number(res.total) || 0) > e.best || e.bestGame === null) { e.best = Number(res.total) || 0; e.bestGame = game.id; }
       e.worst = Math.min(e.worst, Number(res.total) || 0);
       e.flip7s += Number(res.flip7s) || 0;
       e.busts += Number(res.busts) || 0;
@@ -221,10 +222,10 @@ export function leaderboard(history, players, opts = {}) {
       e.hands += hs.hands;
       e.cards += hs.cards;
       e.rounds += hs.rounds;
-      e.bestHand = Math.max(e.bestHand, hs.bestHand);
-      const cb = comebackOf(game, pid);
-      if (cb > 0) e.comebackWins += 1;
-      e.bestComeback = Math.max(e.bestComeback, cb);
+      if (hs.bestHand > e.bestHand) { e.bestHand = hs.bestHand; e.bestHandGame = game.id; e.bestHandRound = hs.bestHandRound; }
+      const cb = comebackDetail(game, pid);
+      if (cb.deficit > 0) e.comebackWins += 1;
+      if (cb.deficit > e.bestComeback) { e.bestComeback = cb.deficit; e.bestComebackGame = game.id; e.bestComebackRound = cb.round; }
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
     }
@@ -383,8 +384,10 @@ export function playerHighlights(games, playerId) {
   const chrono = [...games].sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
   const won = (g) => Boolean(g.winnerIds && g.winnerIds[playerId]);
 
-  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, bestHand = 0, rounds = 0, bestComeback = 0;
-  let best = { total: -1, playedAt: 0 };
+  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, rounds = 0;
+  let best = { total: -1, playedAt: 0, gameId: null };
+  let bestHand = { total: 0, gameId: null, round: -1 };
+  let bestComeback = { deficit: 0, gameId: null, round: -1 };
 
   for (const g of chrono) {
     const res = (g.results || {})[playerId] || {};
@@ -401,10 +404,11 @@ export function playerHighlights(games, playerId) {
     hands += hs.hands;
     cards += hs.cards;
     rounds += hs.rounds;
-    bestHand = Math.max(bestHand, hs.bestHand);
-    bestComeback = Math.max(bestComeback, comebackOf(g, playerId));
+    if (hs.bestHand > bestHand.total) bestHand = { total: hs.bestHand, gameId: g.id, round: hs.bestHandRound };
+    const cb = comebackDetail(g, playerId);
+    if (cb.deficit > bestComeback.deficit) bestComeback = { deficit: cb.deficit, gameId: g.id, round: cb.round };
     if (total >= (Number(g.targetScore) || 200)) overTarget += 1;
-    if (total > best.total) best = { total, playedAt: g.playedAt || 0 };
+    if (total > best.total) best = { total, playedAt: g.playedAt || 0, gameId: g.id };
   }
 
   // strisce che arrivano fino a oggi
@@ -417,8 +421,10 @@ export function playerHighlights(games, playerId) {
     bestStreak, currentStreak, sinceLastWin,
     flip7s, busts, freezes, freezeGames, overTarget,
     hands, avgCards: hands ? cards / hands : 0,
-    rounds, bestHand, bestComeback,
-    best: best.total < 0 ? { total: 0, playedAt: 0 } : best,
+    rounds,
+    bestHand: bestHand.total, bestHandGame: bestHand.gameId, bestHandRound: bestHand.round,
+    bestComeback: bestComeback.deficit, bestComebackGame: bestComeback.gameId, bestComebackRound: bestComeback.round,
+    best: best.total < 0 ? { total: 0, playedAt: 0, gameId: null } : best,
     played: chrono.length,
     detailedGames: detailed
   };
@@ -436,21 +442,26 @@ export function roundCount(rounds) {
  * non ha le mani segnate.
  */
 export function comebackOf(game, pid) {
-  if (!game || !game.winnerIds || !game.winnerIds[pid] || !game.rounds) return 0;
+  return comebackDetail(game, pid).deficit;
+}
+/** Come comebackOf, ma dice anche dopo quale round (indice) il distacco era massimo. */
+export function comebackDetail(game, pid) {
+  const none = { deficit: 0, round: -1 };
+  if (!game || !game.winnerIds || !game.winnerIds[pid] || !game.rounds) return none;
   const n = roundCount(game.rounds);
-  if (n < 2) return 0;
+  if (n < 2) return none;
   const ids = [...new Set([...Object.keys(game.results || {}), ...Object.keys(game.rounds)])];
   const totals = Object.fromEntries(ids.map((id) => [id, 0]));
-  let worst = 0;
+  let worst = 0, round = -1;
   for (let i = 0; i < n - 1; i++) {
     for (const id of ids) {
       const e = game.rounds[id] && game.rounds[id][roundKey(i)];
       if (e) totals[id] += computeRound(e).total;
     }
     const lead = Math.max(...ids.map((id) => totals[id]));
-    worst = Math.max(worst, lead - totals[pid]);
+    if (lead - totals[pid] > worst) { worst = lead - totals[pid]; round = i; }
   }
-  return worst;
+  return { deficit: worst, round };
 }
 
 /**

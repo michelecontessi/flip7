@@ -38,6 +38,16 @@ function groupByMonth(games) {
   return groups;
 }
 
+/**
+ * Apre il dettaglio di una partita da un'altra vista (es. dai record). `hl`
+ * facoltativo: { pid, round, note } evidenzia una mano e spiega perche'.
+ */
+export function openGameSheet(id, hl = null) {
+  const g = store.getRoom().history[id];
+  if (!g) return toast("Questa partita non c'è più nello storico", "warn");
+  openSheet({ type: "game", id, game: g, hl }, renderGameSheet);
+}
+
 export const historyView = {
   render(ctx) {
     const games = historyList(ctx.room.history);
@@ -239,6 +249,7 @@ function renderGameSheet(s) {
   const g = s.game;
   const rows = sortedResults(g);
   const nRounds = roundCount(g.rounds);
+  const hl = s.hl || {};
 
   return `
     <div class="sheet-head">
@@ -270,16 +281,18 @@ function renderGameSheet(s) {
             <thead><tr><th>Giocatore</th>${Array.from({ length: nRounds }, (_, i) => `<th>R${i + 1}</th>`).join("")}</tr></thead>
             <tbody>
               ${rows.map(([id, r]) => `
-                <tr><th>${esc(r.name)}</th>${Array.from({ length: nRounds }, (_, i) => {
+                <tr class="${hl.pid === id ? "hl-row" : ""}"><th>${esc(r.name)}</th>${Array.from({ length: nRounds }, (_, i) => {
                   const e = g.rounds[id] && g.rounds[id][roundKey(i)];
-                  if (!e) return `<td class="dim">·</td>`;
+                  const mark = hl.pid === id && hl.round === i ? " hl" : "";
+                  if (!e) return `<td class="dim${mark}">·</td>`;
                   const c = computeRound(e);
-                  return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}">${c.total}</td>`;
+                  return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${mark}">${c.total}</td>`;
                 }).join("")}</tr>`).join("")}
             </tbody>
           </table>
         </div>
       </div>` : ""}
+    ${hl.note ? `<p class="hl-note">${icon("star", "tiny")} ${esc(hl.note)}</p>` : ""}
 
     <div class="sheet-actions">
       ${store.isOwner() ? `<button class="btn" data-action="game-edit">${icon("pencil", "tiny")} Modifica</button>` : ""}

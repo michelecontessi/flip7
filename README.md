@@ -248,7 +248,10 @@ uno dall'altro invece di una griglia tutta uguale:
   partita giocata. In oro le vittorie, la tratteggiata è l'obiettivo.
 
 Sotto il podio ci sono i **Record**, titoli scherzosi assegnati a chi primeggia in una
-statistica (a pari merito si condividono; toccandone uno si apre la classifica completa):
+statistica (a pari merito si condividono; toccandone uno si apre la classifica completa).
+Quelli nati da una partita sola, cioè Cannoniere, Colpo Grosso e Fenice, hanno il link
+**rivedi** che apre il dettaglio di quella partita con la mano incriminata cerchiata in
+oro; lo stesso vale per i riquadri corrispondenti nella scheda giocatore:
 
 - **Gambler**: più Flip 7 piazzati
 - **Golosone**: più sballi a partita · **Tanaia**: meno sballi a partita (braccine corte)
