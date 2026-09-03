@@ -9,6 +9,7 @@ import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
 import { setupView } from "./views/setup.js";
 import { tableView } from "./views/table.js";
+import { morph } from "./morph.js";
 import { DEFAULTS } from "./config.js";
 import { icon, wordmark, fanArt, googleG } from "./icons.js";
 import { avatar } from "./avatar.js";
@@ -217,9 +218,14 @@ export function render() {
     top.innerHTML = renderTopbar(c);
     tabs.innerHTML = renderTabbar(c);
     // la scivolata FLIP ha senso solo restando sulla stessa vista
-    const before = main.className === "view-" + route ? snapFlip(main) : null;
+    const same = main.className === "view-" + route;
+    const before = same ? snapFlip(main) : null;
     main.className = "view-" + route;
-    main.innerHTML = VIEWS[route].view.render(c);
+    const html = VIEWS[route].view.render(c);
+    // il tavolo online si ridisegna a ogni carta: si aggiorna solo cio' che
+    // cambia, cosi' carte e righe restano gli stessi elementi e non scattano
+    if (same && route === "tavolo") morph(main, html);
+    else main.innerHTML = html;
     playFlip(main, before);
   };
   // requestAnimationFrame non scatta se la pagina e' nascosta: fallback su timeout

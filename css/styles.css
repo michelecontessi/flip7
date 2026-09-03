@@ -1140,35 +1140,57 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .rank .rank-crown, .rank-crown { width: 19px; height: 18px; margin: 0 auto; display: block; }
 .you-name .crown-emblem { display: inline-block; vertical-align: -3px; margin-left: 4px; }
 
-/* ---------- tavolo online ---------- */
-.table-wrap { display: flex; flex-direction: column; gap: 12px; }
+/* ---------- tavolo online ----------
+   Pensato per il telefono: striscia di stato e comandi in cima, banco
+   accanto, poi una riga per giocatore con tutte le carte in fila. Le carte
+   si dimensionano sull'altezza dello schermo (--cardH) cosi' il tabellone
+   sta in una schermata sola; su desktop la stessa cosa su due colonne. */
+.table-wrap { display: flex; flex-direction: column; gap: 10px; }
+.t-side { gap: 10px; padding: 12px 13px; }
+.t-seats { padding: 4px 12px; gap: 0; }
+/* carta: altezza calcolata dai giocatori (--seats, messo dal render);
+   i 340px sono barra, tab, striscia, banco e comandi; i 56px l'ingombro
+   fisso di ogni posto (testata, rotaia, spazi) */
+.t-seats { --cardH: clamp(42px, calc((100dvh - 340px - var(--seats, 4) * 56px) / var(--seats, 4)), 76px); }
+.t-seats .fcard.mini { width: calc(var(--cardH) * 5 / 7); flex: 0 1 calc(var(--cardH) * 5 / 7); min-width: 0; }
 
 /* striscia del turno: dice sempre chi deve agire e cosa deve fare */
 .turn-strip {
   position: relative; overflow: hidden;
   display: flex; align-items: center; gap: 11px;
-  padding: 12px 13px; border-radius: 14px;
+  padding: 8px 6px 8px 10px; border-radius: 14px;
   background: var(--surface-2);
+  transition: background-color .25s ease;
 }
 .turn-strip.you { background: var(--holo-soft); }
 .turn-strip.end { background: rgba(28,122,86,.12); }
 .turn-strip.end .ts-txt b { color: var(--green); }
-.ts-txt { min-width: 0; }
-.ts-txt b { display: block; font-family: var(--font-display); font-size: 17px; font-weight: 600; line-height: 1.2; }
-.ts-txt small { display: block; font-size: 12.5px; color: var(--muted); }
+.turn-strip.over { background: var(--gold-bg); }
+.turn-strip.over .ts-txt b { color: var(--c-gold); }
+.ts-round { display: flex; flex-direction: column; align-items: center; line-height: 1; flex: none; min-width: 34px; }
+.ts-round small { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 1px; }
+.ts-round .round-num b { font-size: 26px; }
+.ts-txt { min-width: 0; flex: 1; }
+.ts-txt b { display: block; font-family: var(--font-display); font-size: 16.5px; font-weight: 600; line-height: 1.2; }
+.ts-txt small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; }
 .turn-strip.you .ts-txt small { color: #6b5a2c; }
+.ts-menu { width: 34px; height: 34px; border-radius: 10px; background: rgba(28,25,23,.06); }
+.ts-menu .ico { width: 18px; height: 18px; }
+.ico.turn-r { transform: rotate(-90deg); }
 
-/* il banco: mazzo a sinistra, ultima carta pescata a destra */
-.bank { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 4px 0 2px; }
-.bank-slot { display: grid; justify-items: center; gap: 6px; }
-.bank-slot > small { font-size: 11.5px; color: var(--muted); text-align: center; max-width: 120px; line-height: 1.25; }
-.bank .fcard { width: 52px; flex: none; }
+/* il banco: mazzo a sinistra, la carta si gira a destra; su mobile sta
+   accanto alla striscia per non rubare altezza */
+.bank { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.bank-cards { display: flex; align-items: center; gap: 7px; }
+.bank-note { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.25; max-width: 150px; min-height: 1.25em; }
+.bank .fcard { width: 46px; flex: none; }
 .deck-stack .fcard {
   box-shadow: -3px 3px 0 -1px #157f7d, -6px 6px 0 -2px rgba(21,127,125,.45),
               inset 0 0 0 1.5px rgba(255,255,255,.6), 0 1px 3px rgba(20,20,30,.25);
   margin-left: 6px;
 }
 .bank-arrow { color: var(--dim); display: flex; }
+.bank-arrow .ico { width: 16px; height: 16px; }
 .fcard.slot { background: transparent; border: 1.5px dashed var(--line-strong); box-shadow: none; }
 .fcard.slot::before, .fcard.slot::after { display: none; }
 /* la carta volante riempie esattamente il suo contenitore */
@@ -1177,34 +1199,37 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .fcard.veil { visibility: hidden; }
 /* gli indizi dello sballo aspettano che la carta si giri: niente spoiler */
 .spoiler-veil { visibility: hidden; }
-.seat { transition: opacity .3s ease; }
 .seat.spoiler-hold { opacity: 1 !important; }
-.seat.spoiler-hold .seat-cards .fcard { filter: none; }
+.seat.spoiler-hold .cards-row .fcard { filter: none; }
+/* il banco sta alla striscia: mai spostarsi finche' non e' tutto fermo */
+.seat-controls:empty { display: none; }
 
-.center-links { justify-content: center; }
+/* su mobile la corsa non serve: ogni posto ha la sua rotaia */
+.race { display: none; }
 
-/* le carte in mano ai posti hanno la STESSA taglia della pescata nel banco:
-   niente versione ridotta, si vedono parola e ventagli come su una carta vera */
-.fcard.mini { width: 52px; flex: none; }
-.seats { display: flex; flex-direction: column; }
+/* ---- i posti: una riga per giocatore ---- */
+.seats { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
 .seat {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 11px 4px; border-bottom: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 7px 4px 8px; border-bottom: 1px solid var(--line);
+  border-radius: 12px;
+  transition: opacity .3s ease, background-color .25s ease;
 }
 .seat:last-child { border-bottom: 0; }
-.seat.turn { background: var(--holo-soft); border-radius: 12px; padding-left: 10px; padding-right: 8px; margin: 0 -6px; border-bottom-color: transparent; }
+.seat.turn { background: var(--holo-soft); padding-left: 10px; padding-right: 8px; margin: 0 -6px; border-bottom-color: transparent; }
 /* turno chiuso (fermo, congelato, sballato): la riga si spegne in grigio */
 .seat.out-bust { opacity: .55; }
-.seat.out-stay, .seat.out-frozen { opacity: .58; }
-.seat.out-stay .seat-cards .fcard,
-.seat.out-frozen .seat-cards .fcard,
-.seat.out-bust .seat-cards .fcard { filter: grayscale(.55); }
-.seat .seat-cards .fcard.dup { filter: none; } /* il doppione resta acceso */
-.seat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.seat-head { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.seat.out-stay, .seat.out-frozen { opacity: .62; }
+.seat.out-stay .cards-row .fcard,
+.seat.out-frozen .cards-row .fcard,
+.seat.out-bust .cards-row .fcard { filter: grayscale(.55); }
+.seat .cards-row .fcard.dup { filter: none; } /* il doppione resta acceso */
+.seat-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.seat-head .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
+.seat-name { font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .seat-state {
-  font-style: normal; font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
-  text-transform: uppercase; padding: 2px 7px; border-radius: 999px;
+  font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 999px; white-space: nowrap; flex: none;
   background: var(--surface-2); color: var(--muted);
 }
 .seat-state.s-turn { background: var(--primary); color: var(--primary-ink); }
@@ -1213,22 +1238,39 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .seat-state.s-flip7 { background: var(--holo); color: #3b2703; }
 .seat-state.s-flip3 { background: rgba(226,96,14,.14); color: #e2600e; }
 .seat-state.s-wait { background: rgba(130,90,220,.12); color: var(--c-violet); }
-/* due file di carte: sopra azioni e modificatori, sotto i numeri */
-.seat-cards { display: flex; flex-direction: column; gap: 4px; min-height: 34px; justify-content: center; align-items: flex-start; }
-.cards-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.dup-note { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 650; color: var(--red); }
+/* punteggi del posto: grande il totale partita, piccolo il bottino del round */
+.seat-pts { margin-left: auto; display: flex; align-items: baseline; gap: 5px; flex: none; line-height: 1; }
+.seat-pts b { font-family: var(--font-display); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.seat-pts small { font-size: 11.5px; color: var(--dim); font-weight: 700; font-variant-numeric: tabular-nums; }
+.seat-pts small.up { color: var(--green); }
+.seat-pts small.bust { color: var(--red); }
+/* la rotaia verso il traguardo, nel colore del giocatore: piena = incassato,
+   coda chiara = bottino provvisorio del round */
+.seat-rail { display: flex; height: 5px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.seat-rail i { display: block; height: 100%; background: var(--pc, var(--dim)); transition: width .45s ease; }
+.seat-rail i.prov { opacity: .38; }
+/* le carte: una fila sola che NON va a capo. Se sono tante si stringono
+   tutte un po' (min-width 0), cosi' la mano resta sempre intera in vista */
+.cards-row { display: flex; flex-wrap: nowrap; gap: 5px; align-items: center; min-height: var(--cardH, 60px); }
+.fcard.gap-after { margin-right: 6px; }
+.hand-empty { font-size: 12px; color: var(--dim); }
+/* la nota dello sballo (o della vita persa) sta nella fila, dopo le carte:
+   non aggiunge una riga e prende SOLO lo spazio avanzato (base 0), cosi'
+   non fa mai restringere le carte */
+.dup-note { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 650; color: var(--red); flex: 1 1 0; min-width: 0; overflow: hidden; margin-left: 4px; line-height: 1.2; }
+.dup-note .ico { flex: none; }
 .bust-note { color: var(--red) !important; font-weight: 650; }
 .fcard.dup { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2px var(--red), 0 1px 3px rgba(20,20,30,.22); }
-/* l'ultima carta pescata spicca nella mano di chi l'ha presa
-   (niente animazione: il tavolo si ridisegna a ogni mossa e ripartirebbe) */
+/* l'ultima carta pescata spicca nella mano di chi l'ha presa */
 .fcard.just { outline: 2.5px solid var(--primary); outline-offset: 1.5px; }
-/* mentre la pescata vola, il suo posto in fila resta chiuso e si apre
-   in modo fluido solo all'atterraggio */
-.seat-cards .fcard { transition: width .25s ease, opacity .25s ease, margin .25s ease; }
-.seat-cards .fcard.landing {
-  width: 0 !important; opacity: 0; margin: 0 -3px;
-  border-width: 0; box-shadow: none; outline: none;
+/* mentre la pescata vola, il suo posto in fila e' un segnaposto tratteggiato
+   della stessa taglia: la fila non si muove, la carta atterra li' sopra */
+.cards-row .fcard.landing {
+  background: transparent; border: 1.5px dashed var(--line-strong);
+  box-shadow: none; outline: none; filter: none;
 }
+.cards-row .fcard.landing::before, .cards-row .fcard.landing::after { display: none; }
+.cards-row .fcard.landing > * { visibility: hidden; }
 .fcard.bust-draw { box-shadow: inset 0 0 0 1.5px rgba(48,51,86,.45), 0 0 0 2.5px var(--red), 0 1px 3px rgba(20,20,30,.25); }
 /* la Seconda Chance spesa resta in mano ma spenta: si vede che c'era
    e che ormai e' consumata (si spegne nell'istante del verdetto) */
@@ -1236,8 +1278,8 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .dup-note.saved { color: var(--green); }
 .saved-note { color: var(--green) !important; font-weight: 650; }
 
-/* verdetto in grande a centro schermo: sballo o Seconda Chance bruciata
-   si capiscono all'istante, senza cercare la scritta piccola nella riga */
+/* verdetto in grande a centro schermo: sballo, Seconda Chance bruciata o
+   FLIP 7 si capiscono all'istante, senza cercare la scritta nella riga */
 .flash-banner {
   position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%);
   z-index: 70; display: flex; align-items: center; gap: 14px;
@@ -1251,6 +1293,8 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .flash-banner.gone { opacity: 0; transform: translate(-50%, -62%); }
 .flash-banner.fb-bust { background: var(--red); }
 .flash-banner.fb-saved { background: var(--green); }
+.flash-banner.fb-flip7 { background: var(--holo); color: #3b2703; }
+.flash-banner.fb-flip7 .fb-ico { background: rgba(59,39,3,.12); }
 .fb-ico {
   width: 46px; height: 46px; flex: none; border-radius: 13px;
   display: grid; place-items: center; background: rgba(255,255,255,.2);
@@ -1260,30 +1304,14 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .fb-txt b { display: block; font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.15; }
 .fb-txt small { display: block; font-size: 13px; opacity: .92; line-height: 1.3; margin-top: 2px; }
 @keyframes fb-pop { from { transform: translate(-50%, -50%) scale(.7); opacity: 0; } }
-/* punteggi del posto: grande il totale partita, piccolo il round in corso */
-.seat-pts { text-align: right; line-height: 1.1; flex: none; }
-.seat-pts b { font-family: var(--font-display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.seat-pts small { display: block; font-size: 11px; color: var(--dim); font-weight: 600; }
-.seat-pts small.up { color: var(--green); }
-.seat-pts small.bust { color: var(--red); }
-
-.last-draw {
-  display: flex; align-items: center; gap: 11px;
-  padding: 9px 12px; border-radius: 12px; background: var(--surface-2);
-}
-.last-draw .ld-card .fcard { width: 34px; animation: bump .22s ease-out; }
-.ld-txt { font-size: 14px; color: var(--muted); }
-.ld-txt b { color: var(--text); }
 
 /* pesca / mi fermo: due bottoni pari, verde per rischiare e rosso per fermarsi */
 .table-actions { display: flex; gap: 9px; }
 .table-actions .btn { flex: 1; }
 .btn.stop { background: var(--red); color: #fff; }
-/* i comandi vivono sopra il proprio posto, dentro la card dei giocatori */
-.seat-controls { display: flex; flex-direction: column; gap: 8px; padding-bottom: 4px; }
-.seat-controls:empty { display: none; }
-/* la corsa al traguardo: una barra per giocatore, io evidenziato */
-.race { display: flex; flex-direction: column; gap: 7px; padding-top: 2px; }
+.seat-controls { display: flex; flex-direction: column; gap: 8px; }
+.seat-controls .btn.big { min-height: 50px; }
+/* la corsa al traguardo (desktop): una barra per giocatore, io evidenziato */
 .race-head { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--dim); font-weight: 650; }
 .race-row {
   display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px;
@@ -1301,14 +1329,41 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .deck-stack { position: relative; display: block; }
 .deck-count {
   position: absolute; top: -9px; right: -12px;
-  min-width: 28px; height: 28px; padding: 0 7px;
+  min-width: 26px; height: 26px; padding: 0 6px;
   display: grid; place-items: center;
   background: var(--primary); color: var(--primary-ink);
   border: 2px solid var(--surface); border-radius: 999px;
-  font-family: var(--font-display); font-size: 14px; font-weight: 600;
+  font-family: var(--font-display); font-size: 13px; font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .table-foot { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+
+/* su telefono il banco sta a fianco della striscia: due colonne, i comandi
+   sotto a tutta larghezza (grandi, per il pollice) */
+@media (max-width: 699px) {
+  .t-side {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "strip bank" "controls controls";
+    align-items: center; column-gap: 10px; row-gap: 8px;
+  }
+  .t-side .turn-strip { grid-area: strip; align-self: stretch; }
+  .t-side .bank { grid-area: bank; }
+  .t-side .seat-controls { grid-area: controls; }
+  .t-side .race { display: none; }
+  /* la didascalia del banco qui non serve: lo dice la striscia, e la carta
+     appena pescata ha comunque il suo anello in mano */
+  .bank-note { display: none; }
+  .bank .fcard { width: 38px; }
+  .bank-arrow { display: none; }
+  .bank-cards { gap: 9px; }
+  .ts-menu { align-self: flex-start; }
+  /* la striscia ha poca larghezza: testo un filo piu' piccolo, meno a capo */
+  .turn-strip { gap: 9px; padding: 7px 5px 7px 9px; }
+  .ts-txt b { font-size: 15.5px; }
+  .ts-txt small { font-size: 11.5px; }
+  .ts-round { min-width: 30px; }
+  .ts-round .round-num b { font-size: 24px; }
+}
 
 /* riquadro delle carte azione: colore della carta, icona e istruzione bene
    in vista, cosi' nessuno resta a chiedersi cosa stia succedendo */
@@ -1593,41 +1648,46 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
   /* stessa taglia delle carte numero: senza, i modificatori vengono giganti */
   .modgrid { grid-template-columns: repeat(13, 1fr); }
 
-  /* tavolo online su desktop: vista larga a due colonne, con comandi, banco
-     e corsa fissi a sinistra e i posti a destra (su mobile resta in colonna) */
+  /* tavolo online su desktop: vista larga a due colonne, con striscia, comandi,
+     banco e corsa fissi a sinistra e i posti a destra */
   #view.view-tavolo { max-width: 1020px; padding-bottom: 90px; }
   .table-wrap {
-    display: grid; grid-template-columns: 360px minmax(0, 1fr);
+    display: grid; grid-template-columns: 340px minmax(0, 1fr);
     grid-template-areas: "side seats";
     gap: 14px; align-items: start;
   }
   .t-side {
     grid-area: side; position: sticky; top: 74px;
-    max-height: calc(100dvh - 170px); overflow-y: auto;
+    max-height: calc(100dvh - 170px); overflow-y: auto; padding: 14px 15px;
   }
-  .t-seats { grid-area: seats; }
+  .t-seats { grid-area: seats; padding: 6px 14px; }
+  .race { display: flex; flex-direction: column; gap: 7px; padding-top: 2px; }
   /* il banco si adatta agli schermi bassi: mai piu' alto di un decimo scarso */
-  .bank .fcard { width: clamp(56px, 9.3dvh, 84px); }
+  .bank .fcard { width: clamp(52px, 9dvh, 78px); }
+  .bank-note { max-width: 220px; }
   /* nel riquadro azione a sinistra i bersagli stanno comodi su una riga */
   .t-side .pgrid { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
   .t-side .pg .avatar.lg { width: 44px; height: 44px; font-size: 15px; }
-  /* colonna sinistra compatta: deve starci anche su schermi bassi */
-  .t-side { gap: 11px; }
   .t-side .race-row { padding: 3px 6px; }
   /* tutto il tabellone sta nel 100% dell'altezza senza scrollare: la taglia
-     delle carte si calcola dai giocatori (--seats, messo dal render)
-     nell'ipotesi peggiore di due file di carte a testa. I 300px sono
-     barre, padding e testate; i 38px sono l'ingombro fisso di ogni posto. */
+     delle carte si calcola dai giocatori (--seats) su una fila per posto.
+     I 250px sono barre e padding; i 34px l'ingombro fisso di ogni posto. */
   .t-seats {
-    --cardH: clamp(39px, calc((100dvh - 300px - var(--seats, 4) * 38px) / (2 * var(--seats, 4))), 118px);
+    --cardH: clamp(46px, calc((100dvh - 250px - var(--seats, 4) * 34px) / var(--seats, 4)), 124px);
   }
-  .t-seats .fcard.mini { width: calc(var(--cardH) * 5 / 7); }
-  /* la riga del posto si distende: nome e stato a sinistra, carte accanto */
-  .seat { padding: 14px 6px; gap: 12px; }
-  .seat .avatar.sm { width: 36px; height: 36px; }
-  .seat-main { flex-direction: row; align-items: center; gap: 14px; }
-  .seat-head { flex-direction: column; align-items: flex-start; gap: 5px; width: 118px; flex: none; }
-  .seat-head b { overflow-wrap: anywhere; }
+  /* la riga del posto si distende: nome, stato e punti a sinistra, carte accanto */
+  .seat {
+    display: grid; grid-template-columns: 150px minmax(0, 1fr);
+    grid-template-areas: "head cards" "rail cards";
+    column-gap: 14px; row-gap: 6px; align-items: center; padding: 10px 6px;
+  }
+  .seat-head { grid-area: head; flex-wrap: wrap; row-gap: 4px; }
+  .seat-head .avatar.sm { width: 30px; height: 30px; font-size: 11.5px; }
+  .seat-name { flex: 1 1 60px; }
+  .seat-pts { margin-left: 0; flex-basis: 100%; }
+  .seat-pts b { font-size: 24px; }
+  .seat-rail { grid-area: rail; }
+  .seat .cards-row { grid-area: cards; }
   .sd-hand .fcard { width: 42px; }
   .fcard b { font-size: 19px; }
   .board-cols, .brow { grid-template-columns: 24px 1fr 86px 68px; }

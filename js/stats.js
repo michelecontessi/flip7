@@ -291,7 +291,7 @@ export const AWARDS = [
     unit: (v) => `${dec(v)} carte a mano` },
   { id: "colpogrosso", key: "bestHand", title: "Colpo Grosso", desc: "la mano più ricca in un solo round", emblem: "colpogrosso", tone: "fire",
     unit: (v) => `${v} punti in una mano` },
-  { id: "sculone", key: "bestComeback", title: "Sculone", desc: "la rimonta più grande, da sotto fino alla vittoria", emblem: "fenice", tone: "rose",
+  { id: "sculone", key: "bestComeback", title: "Sculone", desc: "la rimonta più grande, da sotto fino alla vittoria", emblem: "sculone", tone: "gold",
     unit: (v) => `rimonta da −${v}` },
   { id: "doppiogiochista", key: "doubles", title: "Doppiogiochista", desc: "il ×2 gli finisce in mano più che a tutti", emblem: "doppiogiochista", tone: "violet",
     unit: (v) => v === 1 ? "1 ×2 pescato" : `${v} ×2 pescati` }

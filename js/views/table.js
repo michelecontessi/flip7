@@ -2,9 +2,12 @@
 // Vista "Tavolo": la partita online vera e propria, separata dal segnapunti.
 // Lo stato del gioco vive in room.game; le mosse passano dal motore puro
 // (js/game.js) e vengono scritte per intero: tutti vedono la stessa cosa.
-// Layout: su mobile tutto in colonna (comandi, banco, corsa, posti); su
-// desktop due colonne, comandi/banco/corsa fissi a sinistra e i posti a
-// destra, con le carte dimensionate per stare tutte in un'unica schermata.
+// Layout (pensato per il telefono, come un tavolo da gioco online): in cima
+// la striscia che dice sempre chi deve fare cosa, con i comandi sotto; il
+// banco (mazzo e carta girata) accanto; poi una riga per giocatore con nome,
+// stato, punti e TUTTE le sue carte in fila. Le carte si dimensionano
+// sull'altezza dello schermo, cosi' il tabellone sta in una schermata sola.
+// Su desktop le stesse parti si dispongono su due colonne.
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime } from "../ui.js";
@@ -43,6 +46,11 @@ const actorOf = (g) => g.pending ? g.pending.chooser : g.flip3 ? g.flip3.target 
 /** true se il posto indicato e' controllato da questo dispositivo
     (in locale tutti i posti sono tuoi: si gioca passandosi il telefono). */
 const controls = (g, ctx, sid) => Boolean(g.seats[sid] && g.seats[sid].uid === ctx.status.uid);
+/** Posto umano e mio: e' a me che tocca fare qualcosa. */
+const mine = (g, ctx, sid) => Boolean(sid && controls(g, ctx, sid) && !g.seats[sid].bot);
+
+/** Chi ha vinto (a partita finita): il totale piu' alto. */
+const winnerOf = (g) => [...g.order].sort((a, b) => (g.seats[b].total || 0) - (g.seats[a].total || 0))[0];
 
 // --- bot di prova ------------------------------------------------------------
 /** Strategia elementare: rischia finche' il bottino del round e' magro. */
@@ -80,6 +88,11 @@ function needsAuto(g, sid) {
   return !g.pending && !g.flip3 && g.turn === sid && !g.hands[sid].out && emptyHand(g.hands[sid]);
 }
 
+// ritmo della pescata: la carta atterra in mano dopo circa 1,2 secondi,
+// le mosse automatiche partono subito dopo (cosi' il gioco scorre senza pause)
+const DRAW_MS = 1200;
+const AUTO_MS = 1300;
+
 /** Le esegue (con una piccola pausa) il dispositivo che controlla quel posto. */
 function scheduleAuto(ctx) {
   const g = game(ctx);
@@ -98,32 +111,38 @@ function scheduleAuto(ctx) {
     if (next !== g2) store.commitGame(next).catch(() => {});
     // mossa a vuoto (stato incoerente?): meglio ritentare che restare fermi
     else setTimeout(() => scheduleAuto({ room: store.getRoom(), status: store.getStatus(), me: null }), 2500);
-  }, 1500); // il ritmo asseconda l'animazione della pescata (~1,3s)
+  }, AUTO_MS);
 }
 
-function miniCard(c, cls = "mini") {
-  if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls });
-  if (engine.CARD.isPlus(c)) return modCard(engine.CARD.plus(c), { on: true, size: cls });
-  if (engine.CARD.isX2(c)) return modCard("x2", { on: true, size: cls });
+/** Una carta in mano o nel banco. `key` la identifica nel ridisegno
+    incrementale, cosi' la stessa carta resta lo stesso elemento. */
+function miniCard(c, cls = "mini", key = "") {
+  const attrs = key ? `data-key="${key}"` : "";
+  if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls, attrs });
+  if (engine.CARD.isPlus(c)) return modCard(engine.CARD.plus(c), { on: true, size: cls, attrs });
+  if (engine.CARD.isX2(c)) return modCard("x2", { on: true, size: cls, attrs });
   // azioni a colpo d'occhio: cuore, fiocco di neve, tre carte
-  if (c === "sc") return `<span class="fcard sc on ${cls}"><i class="acard">${icon("heartFill")}</i></span>`;
-  if (c === "frz") return `<span class="fcard frz on ${cls}"><i class="acard">${icon("snow")}</i></span>`;
-  return `<span class="fcard f3 on ${cls}"><i class="acard">${icon("cardFan")}</i></span>`;
+  if (c === "sc") return `<span class="fcard sc on ${cls}" ${attrs}><i class="acard">${icon("heartFill")}</i></span>`;
+  if (c === "frz") return `<span class="fcard frz on ${cls}" ${attrs}><i class="acard">${icon("snow")}</i></span>`;
+  return `<span class="fcard f3 on ${cls}" ${attrs}><i class="acard">${icon("cardFan")}</i></span>`;
 }
 
 // --- animazione della pescata ------------------------------------------------
-// La carta si gira accanto al mazzo (dorso -> faccia) e poi vola nella mano
-// di chi l'ha presa (~1,3s in tutto: online il ritmo conta). E' un elemento
-// temporaneo sopra la pagina, cosi' sopravvive ai ridisegni del tavolo.
+// La carta parte dal mazzo, si gira accanto (dorso -> faccia) e vola nella
+// mano di chi l'ha presa. E' un elemento temporaneo sopra la pagina, cosi'
+// sopravvive ai ridisegni del tavolo. Nel frattempo il suo posto in fila e'
+// gia' riservato da un segnaposto tratteggiato della stessa taglia: niente
+// righe che si allargano di scatto all'atterraggio.
 let lastAnimKey = null;
-// finche' e' true, OGNI render disegna la carta in volo "collassata" (classe
-// landing): cosi' anche i ridisegni a meta' animazione (echo del database,
-// mosse dei bot) non la fanno comparire in anticipo sul tavolo
+// pescata in volo: il render disegna la carta appena presa come segnaposto
 let landingActive = false;
 let landingToken = 0;
 // niente spoiler: gli indizi dello sballo (chip, nota del doppione, riga
 // spenta) restano nascosti finche' la carta pescata non si e' girata
 let spoilerHold = false;
+// carta azione in volo dal banco verso il bersaglio: quel posto la tiene
+// come segnaposto finche' non atterra
+let resolveTargetSid = null;
 
 /** Mentre la pescata e' in volo il turno mostrato resta su chi ha pescato:
     se chip e comandi passassero subito al prossimo, la carta in volo
@@ -131,13 +150,15 @@ let spoilerHold = false;
     (chiamato da openLanding) fa comparire il turno vero. */
 const flightHold = (g) => landingActive && g.status === "playing" && g.lastDraw && g.seats[g.lastDraw.seat] ? g.lastDraw.seat : null;
 
+const reducedMotion = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 function scheduleDrawAnim(g) {
   const key = g.lastDraw ? `${g.lastDraw.seat}:${g.lastDraw.card}:${g.deck.length}` : "nessuna";
   // il primo render fotografa lo stato e basta: mai rigiocare una pescata vecchia
   if (lastAnimKey === null) { lastAnimKey = key; return; }
   if (key === lastAnimKey || !g.lastDraw) return;
   lastAnimKey = key;
-  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { announceDraw(); return; }
+  if (reducedMotion()) { announceDraw(); return; }
   const card = g.lastDraw.card;
   landingActive = true;
   spoilerHold = true;
@@ -152,14 +173,15 @@ function flashBanner(kind, title, sub) {
   document.querySelectorAll(".flash-banner").forEach((el) => el.remove());
   const el = document.createElement("div");
   el.className = `flash-banner fb-${kind}`;
-  el.innerHTML = `<span class="fb-ico">${icon(kind === "bust" ? "bomb" : "heartFill")}</span>
+  const ico = kind === "bust" ? "bomb" : kind === "flip7" ? "seven" : "heartFill";
+  el.innerHTML = `<span class="fb-ico">${icon(ico)}</span>
     <div class="fb-txt"><b>${title}</b><small>${sub}</small></div>`;
   document.body.appendChild(el);
   setTimeout(() => el.classList.add("gone"), 1500);
   setTimeout(() => el.remove(), 1900);
 }
 
-/** Sballo o Seconda Chance bruciata: da urlare, non da cercare nella riga. */
+/** Sballo, Seconda Chance bruciata o FLIP 7: da urlare, non da cercare nella riga. */
 function announceDraw() {
   const g = engine.normalizeGame(store.getRoom().game);
   const last = g && g.lastDraw;
@@ -171,6 +193,8 @@ function announceDraw() {
     flashBanner("bust", "SBALLATO", `${name} pesca un doppio ${n}: il round vale 0`);
   } else if (last.saved) {
     flashBanner("saved", "Seconda Chance bruciata", `doppio ${n}: ${name} è salvo, ma la protezione se n'è andata`);
+  } else if (h && h.out === "flip7" && h.nums.includes(n)) {
+    flashBanner("flip7", "FLIP 7!", `${name} ha sette numeri diversi: +15 e round chiuso per tutti`);
   }
 }
 
@@ -186,128 +210,119 @@ function revealSpoilers() {
   document.querySelectorAll(".fcard.spoiler-burn").forEach((el) => el.classList.add("burned"));
 }
 
+/** Il segnaposto diventa la carta vera (senza ridisegnare: e' solo una classe). */
+function openLanding(token) {
+  if (token !== landingToken) return; // e' gia' partita un'altra pescata
+  landingActive = false;
+  document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
+}
+
 function runDrawAnim(card, token) {
-  // apre lo spazio in fila (transizione CSS) SENZA ridisegnare: rifare
-  // l'HTML mentre la carta e' in volo farebbe scattare le righe
-  const openLanding = () => {
-    if (token !== landingToken) return; // e' gia' partita un'altra pescata
-    landingActive = false;
-    document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
-  };
-  // ...il ridisegno vero (chip e comandi al prossimo) arriva a volo concluso
-  const settle = () => { openLanding(); store.refresh(); };
-  const slot = document.querySelector(".bank .bank-slot:last-child .fcard");
+  let done = false;
+  // ridisegno vero (chip e comandi al prossimo) solo a volo concluso
+  const settle = () => { openLanding(token); store.refresh(); };
+  const slot = document.querySelector(".bank .bank-slot .fcard");
   const deckEl = document.querySelector(".deck-stack .fcard");
   if (!slot || !deckEl) return settle();
   const a = slot.getBoundingClientRect();
   const m = deckEl.getBoundingClientRect();
   if (!a.width) return settle();
-  // la destinazione e' collassata: la si apre un attimo (senza dipingere)
-  // solo per misurare dove atterrera' la carta
+  // la destinazione e' il segnaposto gia' aperto nella mano: si misura e basta
   const dest = document.querySelector(".t-seats .fcard.landing");
-  let b = null;
-  if (dest) {
-    dest.style.transition = "none";
-    dest.classList.remove("landing");
-    b = dest.getBoundingClientRect();
-    dest.classList.add("landing");
-    void dest.offsetWidth;
-    dest.style.transition = "";
-  }
-
-  // la didascalia non deve svelare la carta prima che si giri
-  const caption = slot.parentElement ? slot.parentElement.querySelector("small") : null;
-  if (caption) { caption.style.transition = "opacity .3s ease"; caption.style.opacity = "0"; }
+  const b = dest ? dest.getBoundingClientRect() : null;
 
   // parte DAL mazzo, di dorso: una carta sola che ruota fino a 90 gradi,
   // cambia contenuto quando e' di taglio e completa il giro con la faccia
   // (niente trucchi backface: cosi' il numero non si vede mai specchiato)
   const fly = document.createElement("div");
   fly.className = "fly-card";
-  fly.style.cssText = `position:fixed;left:${m.left}px;top:${m.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;perspective:700px;`;
-  fly.innerHTML = `<div class="fly-inner" style="width:100%;height:100%;">${cardBack()}</div>`;
+  fly.style.cssText = `position:fixed;left:${m.left}px;top:${m.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;perspective:700px;will-change:transform;`;
+  fly.innerHTML = `<div class="fly-inner" style="width:100%;height:100%;will-change:transform;">${cardBack()}</div>`;
   document.body.appendChild(fly);
   const inner = fly.firstElementChild;
 
   const toSlot = `translate(${a.left - m.left}px,${a.top - m.top}px)`;
   // 1) scivola dal mazzo alla zona di destra, ancora coperta
   fly.animate([{ transform: "translate(0,0)" }, { transform: toSlot }],
-    { duration: 350, easing: "cubic-bezier(.3,.7,.3,1)", fill: "forwards" });
+    { duration: 280, easing: "cubic-bezier(.3,.7,.3,1)", fill: "forwards" });
   // 2) il giro comincia mentre sta ancora planando: prima meta' di dorso...
   inner.animate([{ transform: "rotateY(0deg)" }, { transform: "rotateY(90deg)" }],
-    { duration: 250, delay: 200, easing: "ease-in", fill: "forwards" });
+    { duration: 200, delay: 150, easing: "ease-in", fill: "forwards" });
   setTimeout(() => {
     // ...di taglio si scambia il contenuto, poi si finisce il giro di faccia
     inner.innerHTML = miniCard(card, "drawn");
-    if (caption) caption.style.opacity = "";
     revealSpoilers();
-    if (token === landingToken) announceDraw(); // sballo o vita persa: subito
+    if (token === landingToken) announceDraw(); // sballo, vita persa o flip 7: subito
     inner.animate([{ transform: "rotateY(-90deg)" }, { transform: "rotateY(0deg)" }],
-      { duration: 250, easing: "ease-out", fill: "forwards" });
-  }, 450);
+      { duration: 200, easing: "ease-out", fill: "forwards" });
+  }, 350);
 
-  const finish = () => { fly.remove(); settle(); revealSpoilers(); if (caption) caption.style.opacity = ""; };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    // prima compare la carta vera sotto quella in volo, poi la volante sparisce:
+    // cosi' il passaggio non lascia mai un buco ne' un doppione
+    openLanding(token);
+    deferFrame(() => fly.remove());
+    revealSpoilers();
+    store.refresh();
+  };
   const gNow = engine.normalizeGame(store.getRoom().game);
   const parkHere = gNow && gNow.pending && gNow.pending.type === card;
   if (parkHere) {
     // carta azione da assegnare: resta parcheggiata a destra finche'
     // non si sceglie il bersaglio (la copia di markup prende il suo posto)
     setTimeout(() => {
-      fly.remove();
+      if (done) return;
+      done = true;
       document.querySelectorAll(".bank .fcard.veil").forEach((el) => el.classList.remove("veil"));
+      deferFrame(() => fly.remove());
       if (token === landingToken) landingActive = false;
-      if (caption) caption.style.opacity = "";
       store.refresh(); // la carta azione e' parcheggiata: si vede chi deve scegliere
-    }, 750);
+    }, 650);
     return;
   }
   if (b) {
-    // 3) e vola nella mano di chi l'ha pescata; lo spazio nella fila si apre
-    //    in modo fluido proprio mentre la carta sta planando
+    // 3) e vola nella mano di chi l'ha pescata, esattamente sul segnaposto
     fly.animate([
       { transform: `${toSlot} scale(1)` },
       { transform: `translate(${b.left - m.left}px,${b.top - m.top}px) scale(${b.width / a.width})` }
-    ], { duration: 450, delay: 850, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
-    setTimeout(openLanding, 1000);
+    ], { duration: 340, delay: DRAW_MS - 340, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
   } else {
     // nessuna destinazione (es. azione risolta al volo): la carta svanisce li'
     fly.animate([{ opacity: 1 }, { opacity: 0 }],
-      { duration: 300, delay: 900, fill: "forwards" }).onfinish = finish;
+      { duration: 260, delay: DRAW_MS - 340, fill: "forwards" }).onfinish = finish;
   }
-  // rete di sicurezza: mai lasciare in giro carte volanti o file collassate
-  setTimeout(finish, 1700);
+  // rete di sicurezza: mai lasciare in giro carte volanti o segnaposti
+  setTimeout(finish, DRAW_MS + 300);
 }
 
 // quando il bersaglio viene scelto, la carta parcheggiata a destra completa
 // il volo verso il tavolo del bersaglio
 let parkedCard = null;
-let resolveTargetSid = null;
 
 function checkPendingFlight(g) {
-  if (g.status !== "playing" && g.status !== "roundEnd") { parkedCard = null; return; }
+  if (g.status === "lobby") { parkedCard = null; return; }
   if (g.pending) { parkedCard = g.pending.type; return; }
   if (!parkedCard) return;
   const card = parkedCard;
   parkedCard = null;
-  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (reducedMotion()) return;
   const target = g.lastAction && g.lastAction.type === card ? g.lastAction.target : null;
-  landingActive = true;
   const token = ++landingToken;
-  resolveTargetSid = target; // il render tiene collassata la carta ricevuta
+  resolveTargetSid = target; // il render tiene come segnaposto la carta ricevuta
   deferFrame(() => { runResolveFly(card, token, target); });
 }
 
 function runResolveFly(card, token, targetSid) {
-  // come nella pescata: prima si apre lo spazio senza ridisegnare...
-  const openLanding = () => {
+  let done = false;
+  const open = () => {
     if (token !== landingToken) return;
-    landingActive = false;
     resolveTargetSid = null;
     document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
   };
-  // ...e il ridisegno (chip e comandi tornano a dire il vero) a volo finito
-  const settle = () => { openLanding(); store.refresh(); };
-  const slot = document.querySelector(".bank .bank-slot:last-child .fcard");
+  const settle = () => { open(); store.refresh(); };
+  const slot = document.querySelector(".bank .bank-slot .fcard");
   if (!slot) return settle();
   const a = slot.getBoundingClientRect();
   if (!a.width) return settle();
@@ -323,35 +338,32 @@ function runResolveFly(card, token, targetSid) {
   }
   const fly = document.createElement("div");
   fly.className = "fly-card";
-  fly.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;`;
+  fly.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;will-change:transform;`;
   fly.innerHTML = miniCard(card, "drawn");
   document.body.appendChild(fly);
 
-  const finish = () => { fly.remove(); settle(); };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    open();
+    deferFrame(() => fly.remove());
+    store.refresh();
+  };
   if (dest) {
     let b;
-    if (landingDest) {
-      dest.style.transition = "none";
-      dest.classList.remove("landing");
-      b = dest.getBoundingClientRect();
-      dest.classList.add("landing");
-      void dest.offsetWidth;
-      dest.style.transition = "";
-    } else {
+    if (landingDest) b = dest.getBoundingClientRect();
+    else {
       const r = dest.getBoundingClientRect();
       b = { left: r.left + 10, top: r.top + r.height / 2 - a.height / 2, width: a.width };
     }
     fly.animate([
       { transform: "translate(0,0) scale(1)", opacity: 1 },
       { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(${b.width / a.width})`, opacity: landingDest ? 1 : 0 }
-    ], { duration: 450, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
-    // lo spazio si apre mentre la carta plana e finisce di aprirsi
-    // esattamente all'atterraggio: niente scatti al ridisegno
-    setTimeout(openLanding, 200);
+    ], { duration: 420, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" }).onfinish = finish;
   } else {
     fly.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: "forwards" }).onfinish = finish;
   }
-  setTimeout(finish, 900);
+  setTimeout(finish, 800);
 }
 
 // --- intro / lobby -----------------------------------------------------------
@@ -409,25 +421,29 @@ function renderLobby(g, ctx) {
 }
 
 // --- partita -----------------------------------------------------------------
+/** Punti provvisori del round per un posto (0 per chi ha sballato). */
+const roundPts = (g, sid) => (g.status === "playing" && g.hands[sid] && g.hands[sid].out !== "bust")
+  ? engine.handPoints(g.hands[sid]) : 0;
+/** Il fondo scala della corsa: il traguardo, o di piu' se qualcuno l'ha superato. */
+const raceMax = (g) => Math.max(g.target, ...g.order.map((sid) => (g.seats[sid].total || 0) + roundPts(g, sid)));
+
 /**
- * La corsa al traguardo: una barra per giocatore, ordinata dal primo
- * all'ultimo. Barra piena = punti incassati, coda chiara = bottino
- * provvisorio del round in corso. La propria riga e' evidenziata.
+ * La corsa al traguardo (solo su desktop, nella colonna di sinistra): una
+ * barra per giocatore, ordinata dal primo all'ultimo. Barra piena = punti
+ * incassati, coda chiara = bottino provvisorio del round in corso.
  */
 function raceBoard(g, me) {
   const banked = (sid) => g.seats[sid].total || 0;
-  const roundPts = (sid) => (g.status === "playing" && g.hands[sid] && g.hands[sid].out !== "bust")
-    ? engine.handPoints(g.hands[sid]) : 0;
-  const sorted = [...g.order].sort((a, b) => (banked(b) + roundPts(b)) - (banked(a) + roundPts(a)));
-  const max = Math.max(g.target, ...sorted.map((sid) => banked(sid) + roundPts(sid)));
+  const sorted = [...g.order].sort((a, b) => (banked(b) + roundPts(g, b)) - (banked(a) + roundPts(g, a)));
+  const max = raceMax(g);
   return `
     <div class="race">
       <div class="race-head"><span>La corsa</span><span>traguardo ${g.target}</span></div>
       ${sorted.map((sid) => {
         const seat = g.seats[sid];
-        const b = banked(sid), r = roundPts(sid);
+        const b = banked(sid), r = roundPts(g, sid);
         return `
-        <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}" data-flip="race:${sid}">
+        <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}" data-key="${sid}" data-flip="race:${sid}">
           ${avatar(seat.playerId, seat.name, "xs")}
           <span class="race-track">
             <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>
@@ -439,34 +455,103 @@ function raceBoard(g, me) {
     </div>`;
 }
 
-/** Il banco: mazzo con le carte rimaste e ultima carta pescata. */
+/** Perche' il round si e' chiuso, in una riga. */
+function roundEndReason(g) {
+  const f7 = g.order.find((sid) => g.hands[sid].out === "flip7");
+  const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust" ? g.lastDraw.seat : null;
+  if (f7) return `FLIP 7 di ${shortName(g.seats[f7])}: +15 e round chiuso per tutti`;
+  if (g.endReason === "deck") return "le carte sono finite: chi era in gioco incassa d'ufficio";
+  if (buster) return `lo sballo di ${shortName(g.seats[buster])} chiude il giro: punti incassati`;
+  return "tutti fermi, congelati o sballati: punti incassati";
+}
+
+/**
+ * La striscia in cima: dice SEMPRE chi deve fare cosa (come la barra di
+ * stato di un tavolo online), col numero del round accanto. Quando tocca a
+ * te si accende. Il menu a destra raccoglie abbandono e annullamento.
+ */
+function statusStrip(g, ctx, me) {
+  const nm = (sid) => esc(shortName(g.seats[sid]));
+  let cls = "", title = "", sub = "", veil = "";
+  if (g.status === "over") {
+    const w = winnerOf(g);
+    cls = "over";
+    title = `Vince ${nm(w)}`;
+    sub = g.order.length < 2 ? "gli altri hanno abbandonato: partita finita"
+      : `partita finita con ${g.seats[w].total || 0} punti`;
+  } else if (g.status === "roundEnd") {
+    const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust";
+    cls = "end";
+    title = `Round ${g.round} chiuso`;
+    sub = roundEndReason(g);
+    veil = spoilerHold && buster ? " spoiler-veil" : "";
+  } else {
+    const actor = actorOf(g);
+    const hold = flightHold(g);
+    if (hold && hold !== actor) {
+      cls = mine(g, ctx, hold) ? "you" : "";
+      title = mine(g, ctx, hold) ? "Tocca a te" : `Tocca a ${nm(hold)}`;
+      sub = "la carta sta arrivando…";
+    } else if (g.pending) {
+      const p = g.pending;
+      const meta = ACTION_META[p.type];
+      cls = mine(g, ctx, p.chooser) ? "you" : "";
+      title = mine(g, ctx, p.chooser) ? `Hai pescato ${meta.name}` : `${nm(p.chooser)} ha pescato ${meta.name}`;
+      sub = mine(g, ctx, p.chooser) ? meta.ask : `${meta.doing}…`;
+      veil = spoilerHold && g.lastDraw && g.lastDraw.card === p.type ? " spoiler-veil" : "";
+    } else if (g.flip3) {
+      const t = g.flip3.target;
+      const left = g.flip3.left === 1 ? "ancora una carta" : `ancora ${g.flip3.left} carte`;
+      cls = mine(g, ctx, t) ? "you" : "";
+      title = mine(g, ctx, t) ? `Peschi ${left}` : `${nm(t)} pesca ${left}`;
+      sub = "Pesca Tre: le carte arrivano da sole";
+    } else if (actor && g.seats[actor]) {
+      const first = emptyHand(g.hands[actor]);
+      if (mine(g, ctx, actor)) {
+        cls = "you";
+        title = "Tocca a te";
+        sub = first ? "la prima carta arriva da sola…" : "pesca o fermati";
+      } else {
+        title = `Tocca a ${nm(actor)}`;
+        sub = first ? "la prima carta arriva da sola…" : "deve pescare o fermarsi";
+      }
+    }
+  }
+  return `
+    <div class="turn-strip ${cls}" data-flip="strip">
+      <span class="ts-round" title="Round ${g.round}"><small>round</small>${roundCard(g.round)}</span>
+      <div class="ts-txt${veil}"><b>${title}</b><small>${sub}</small></div>
+      <button class="icon-btn ts-menu" data-action="tbl-menu" aria-label="Altre opzioni">${icon("dots")}</button>
+    </div>`;
+}
+
+/** Il banco: mazzo con le carte rimaste e la carta che si gira. */
 function bankRow(g) {
   const last = g.lastDraw;
   // il doppione appena pescato ha fatto sballare: va urlato
   const bustNow = last && g.hands[last.seat] && g.hands[last.seat].out === "bust" && engine.CARD.isNum(last.card);
+  const noteCls = (bustNow ? "bust-note" : last && last.saved ? "saved-note" : "") + (spoilerHold && last ? " spoiler-veil" : "");
+  const note = last
+    ? bustNow
+      ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: SBALLATO`
+      : last.saved
+        ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: salvo, Seconda Chance bruciata`
+        : `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>`
+    : "qui si gira la carta pescata";
   return `
     <div class="bank" data-flip="bank">
-      <div class="bank-slot">
-        <span class="deck-stack">${cardBack()}<b class="deck-count">${g.deck.length}</b></span>
-        <small>carte nel mazzo${g.discard.length ? ` · ${g.discard.length} scartate` : ""}</small>
-      </div>
-      <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
-      <div class="bank-slot">
-        ${g.pending
+      <div class="bank-cards">
+        <span class="deck-stack" title="${g.deck.length} carte nel mazzo${g.discard.length ? `, ${g.discard.length} scartate` : ""}">${cardBack()}<b class="deck-count">${g.deck.length}</b></span>
+        <span class="bank-arrow">${icon("arrowLeft", "flip")}</span>
+        <span class="bank-slot">${g.pending
           ? miniCard(g.pending.type, "drawn parked" + (landingActive ? " veil" : ""))
-          : `<span class="fcard slot"></span>`}
-        <small class="${bustNow ? "bust-note" : last && last.saved ? "saved-note" : ""}${spoilerHold && last ? " spoiler-veil" : ""}">${last
-          ? bustNow
-            ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: SBALLATO`
-            : last.saved
-              ? `${esc(shortName(g.seats[last.seat]))} pesca il <b>${engine.cardLabel(last.card)}</b> che aveva già: salvo, Seconda Chance bruciata`
-              : `${esc(shortName(g.seats[last.seat]))} ha pescato <b>${engine.cardLabel(last.card)}</b>`
-          : "qui si gira la carta pescata"}</small>
+          : `<span class="fcard slot"></span>`}</span>
       </div>
+      <small class="bank-note ${noteCls}">${note}</small>
     </div>`;
 }
 
-function renderSeatRow(g, sid, ctx) {
+function renderSeatRow(g, sid, ctx, max) {
   const seat = g.seats[sid];
   const h = g.hands[sid];
   let isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
@@ -492,52 +577,57 @@ function renderSeatRow(g, sid, ctx) {
   // doppione annullato dalla Seconda Chance: la nota resta fino alla
   // prossima pescata, cosi' la vita persa non passa inosservata
   const savedHere = g.lastDraw && g.lastDraw.seat === sid && g.lastDraw.saved;
-  // due file: sopra azioni e modificatori, sotto tutti i numeri
-  const resolvedHere = landingActive && resolveTargetSid === sid;
+  // una fila sola: prima azioni e modificatori, poi i numeri in ordine
+  const resolvedHere = resolveTargetSid === sid;
   const specials = [
-    ...(h.x2 ? [miniCard("x2", cls("x2"))] : []),
-    ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p, cls("p" + p))),
+    ...(h.x2 ? [miniCard("x2", cls("x2"), "x2")] : []),
+    ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p, cls("p" + p), "p" + p)),
     // la Seconda Chance bruciata non sparisce: resta in mano spenta
     // ("consumata") per tutto il round. Durante il giro della carta e'
     // ancora accesa (niente spoiler), si spegne al momento del verdetto.
-    ...(h.sc ? [miniCard("sc", resolvedHere ? "mini landing" : cls("sc"))]
-      : savedHere && spoilerHold ? [miniCard("sc", "mini spoiler-burn")]
-      : h.scUsed ? [miniCard("sc", "mini burned")] : [])
+    ...(h.sc ? [miniCard("sc", resolvedHere ? "mini landing" : cls("sc"), "sc")]
+      : savedHere && spoilerHold ? [miniCard("sc", "mini spoiler-burn", "sc")]
+      : h.scUsed ? [miniCard("sc", "mini burned", "sc")] : [])
   ];
   // chi e' stato congelato mostra la carta Congela ricevuta
-  if (h.out === "frozen") specials.push(miniCard("frz", resolvedHere ? "mini landing" : "mini"));
-  const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n)));
-  if (h.out === "flip7") nums.push(flip7Card({ size: "mini" }));
+  if (h.out === "frozen") specials.push(miniCard("frz", resolvedHere ? "mini landing" : "mini", "frz"));
+  const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n), "n" + n));
+  if (h.out === "flip7") nums.push(flip7Card({ size: "mini", attrs: 'data-key="f7"' }));
   // il doppione che ha sballato resta in vista, marcato in rosso
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
-    nums.push(miniCard("n" + h.bustCard, "mini dup" + (landingActive && g.lastDraw && g.lastDraw.seat === sid ? " landing" : "")));
+    nums.push(miniCard("n" + h.bustCard, "mini dup" + (landingActive && g.lastDraw && g.lastDraw.seat === sid ? " landing" : ""), "dup"));
   }
+  const cards = specials.length && nums.length
+    ? specials.slice(0, -1).join("") + specials[specials.length - 1].replace('class="fcard', 'class="fcard gap-after') + nums.join("")
+    : specials.join("") + nums.join("");
   // la carta azione sta ancora volando verso questo posto: il verdetto
   // (es. "congelato") e la riga spenta aspettano che atterri
   const outShown = h.out && !resolvedHere;
   const state = outShown ? `<i class="seat-state s-${h.out}${bustSpoiler ? " spoiler-veil" : ""}">${OUT_LABEL[h.out]}</i>`
-    : isChoosing ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "scegli tu" : "sta scegliendo"}</i>`
+    : isChoosing ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "scegli tu" : "sta scegliendo"}</i>`
     : isFlip3 ? `<i class="seat-state s-flip3">pesca ancora ${g.flip3.left}</i>`
-    : isTurn ? `<i class="seat-state s-turn">${controls(g, ctx, sid) && !seat.bot ? "tocca a te" : "il suo turno"}</i>`
+    : isTurn ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
+  const total = seat.total || 0;
+  const r = h.out === "bust" ? 0 : pts;
+  const color = colorOf(seat.name);
   return `
-    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}" data-flip="seat:${sid}">
-      ${avatar(seat.playerId, seat.name, "sm")}
-      <div class="seat-main">
-        <div class="seat-head"><b>${esc(seat.name)}</b>${state}</div>
-        <div class="seat-cards">
-          ${specials.length ? `<div class="cards-row special">${specials.join("")}</div>` : ""}
-          <div class="cards-row">${nums.join("") || '<span class="hand-empty">nessuna carta in mano</span>'}</div>
-          ${h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined
-            ? `<span class="dup-note${bustSpoiler ? " spoiler-veil" : ""}">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}
-          ${savedHere
-            ? `<span class="dup-note saved${spoilerHold ? " spoiler-veil" : ""}">${icon("heartFill", "tiny")} doppio ${engine.CARD.num(g.lastDraw.card)}: salvo, Seconda Chance bruciata</span>` : ""}
-        </div>
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
+      <div class="seat-head">
+        ${avatar(seat.playerId, seat.name, "sm")}
+        <b class="seat-name">${esc(seat.name)}</b>
+        ${state}
+        <span class="seat-pts">
+          <b>${total}</b>
+          <small class="${h.out === "bust" ? "bust" : pts > 0 ? "up" : ""}${bustSpoiler ? " spoiler-veil" : ""}">+${pts}</small>
+        </span>
       </div>
-      <div class="seat-pts">
-        <b>${seat.total || 0}</b>
-        <small class="${h.out === "bust" ? "bust" : pts > 0 ? "up" : ""}${bustSpoiler ? " spoiler-veil" : ""}">+${pts} nel round</small>
-      </div>
+      <span class="seat-rail" aria-hidden="true">
+        <i style="width:${((total / max) * 100).toFixed(1)}%"></i>${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%"></i>` : ""}
+      </span>
+      <div class="cards-row">${cards || '<span class="hand-empty">nessuna carta in mano</span>'}${h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined
+          ? `<span class="dup-note${bustSpoiler ? " spoiler-veil" : ""}">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}${savedHere
+          ? `<span class="dup-note saved${spoilerHold ? " spoiler-veil" : ""}">${icon("heartFill", "tiny")} doppio ${engine.CARD.num(g.lastDraw.card)}: salvo, Seconda Chance bruciata</span>` : ""}</div>
     </li>`;
 }
 
@@ -559,19 +649,23 @@ function actionBox(g, type, sub, body = "") {
 }
 
 function renderControls(g, ctx, me) {
+  if (g.status === "over") {
+    return `<button class="btn primary big pulse" data-action="tbl-podium">Vai al podio ${icon("chevron", "tiny turn-r")}</button>`;
+  }
+  if (g.status === "roundEnd") {
+    return me
+      ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>
+         <p class="hint">Basta che uno lo prema: il round parte per tutti in diretta.</p>`
+      : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`;
+  }
   const actor = actorOf(g);
-  const iAct = controls(g, ctx, actor) && !g.seats[actor].bot;
+  const iAct = mine(g, ctx, actor);
 
   // il turno sta passando ma la carta e' ancora in volo: i comandi del
   // prossimo compaiono solo ad atterraggio avvenuto (se chi agisce e' lo
   // stesso che ha pescato, es. Pesca Tre, si continua normalmente)
   const hold = flightHold(g);
-  if (hold && hold !== actor) {
-    const s = g.seats[hold];
-    return `<p class="hint">${controls(g, ctx, hold) && !s.bot
-      ? "La tua carta sta arrivando…"
-      : `La carta di ${esc(shortName(s))} sta arrivando…`}</p>`;
-  }
+  if (hold && hold !== actor) return "";
 
   if (g.pending) {
     const p = g.pending;
@@ -594,92 +688,52 @@ function renderControls(g, ctx, me) {
   if (g.flip3) {
     const t = g.flip3.target;
     const left = g.flip3.left === 1 ? "ancora 1 carta" : `ancora ${g.flip3.left} carte`;
-    return actionBox(g, "fl3", controls(g, ctx, t) && !g.seats[t].bot
+    return actionBox(g, "fl3", mine(g, ctx, t)
       ? `Peschi ${left}: arrivano da sole…`
       : `${esc(shortName(g.seats[t]))} pesca ${left}: arrivano da sole…`);
   }
 
-  if (iAct && !g.hands[actor].out) {
-    if (emptyHand(g.hands[actor])) return `<p class="hint">Mano vuota: la prima carta arriva da sola…</p>`;
+  if (iAct && !g.hands[actor].out && !emptyHand(g.hands[actor])) {
     return `
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit">Pesca</button>
         <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${engine.handPoints(g.hands[actor])}</button>
       </div>`;
   }
-  if (me && g.hands[me] && g.hands[me].out) return `<p class="hint">Sei ${OUT_LABEL[g.hands[me].out] || "fuori"}: aspetta la fine del round.</p>`;
   if (!me) return `<p class="hint">Stai guardando la partita.</p>`;
-  return `<p class="hint">Aspetta il tuo turno…</p>`;
+  return "";
 }
 
 /** Il mio posto sta SEMPRE in cima alla lista, chiunque sia a iniziare. */
 const seatOrder = (g, me) => (me ? [me, ...g.order.filter((sid) => sid !== me)] : g.order);
 
-function renderPlaying(g, ctx) {
+/**
+ * Il tavolo: vale per il round in corso, per la fine del round (si resta
+ * sulle mani in vista, sballi compresi, e si riparte da qui) e per la fine
+ * della partita (l'ultima mano resta in vista finche' non si va al podio).
+ */
+function renderTable(g, ctx) {
   const me = mySeat(g, ctx);
+  const max = raceMax(g);
   return `
     <div class="table-wrap" style="--seats:${g.order.length}">
       <section class="card t-side">
+        ${statusStrip(g, ctx, me)}
         <div class="seat-controls">${renderControls(g, ctx, me)}</div>
         ${bankRow(g)}
         ${raceBoard(g, me)}
       </section>
       <section class="card t-seats">
-        <div class="card-head">
-          <span class="round-head"><span class="round-word">Round</span>${roundCard(g.round)}</span>
-          <span class="round-meta ml-auto"><b>${g.order.length} giocatori</b><span>si vince a ${g.target}</span></span>
-        </div>
         <ul class="seats">
-          ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
+          ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx, max)).join("")}
         </ul>
-        <div class="board-links center-links">
-          ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
-          <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
-        </div>
       </section>
     </div>`;
 }
 
-/**
- * Fine round SENZA schermata di riepilogo: si resta sul tavolo con le mani
- * in vista (sballi compresi) e si riparte da li' col bottone verde.
- */
-function renderRoundEnd(g, ctx) {
-  const me = mySeat(g, ctx);
-  const f7 = g.order.find((sid) => g.hands[sid].out === "flip7");
-  const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust" ? g.lastDraw.seat : null;
-  const sub = f7 ? `FLIP 7 di ${shortName(g.seats[f7])}: +15 e round chiuso per tutti`
-    : g.endReason === "deck" ? "le carte sono finite: chi era in gioco incassa d'ufficio"
-    : buster ? `lo sballo di ${shortName(g.seats[buster])} chiude il giro: punti incassati`
-    : "tutti fermi, congelati o sballati: punti incassati";
-  return `
-    <div class="table-wrap" style="--seats:${g.order.length}">
-      <section class="card t-side">
-        <div class="turn-strip end">
-          <div class="ts-txt ${spoilerHold && buster ? "spoiler-veil" : ""}"><b>Round ${g.round} chiuso</b><small>${esc(sub)}</small></div>
-        </div>
-        <div class="seat-controls">
-          ${me ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>` : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`}
-          <p class="hint">Basta che uno lo prema: il round parte per tutti in diretta.</p>
-        </div>
-        ${bankRow(g)}
-        ${raceBoard(g, me)}
-      </section>
-      <section class="card t-seats">
-        <div class="card-head">
-          <span class="round-head"><span class="round-word">Round</span>${roundCard(g.round)}</span>
-          <span class="round-meta ml-auto"><b class="done-note">round chiuso</b><span>si vince a ${g.target}</span></span>
-        </div>
-        <ul class="seats">
-          ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx)).join("")}
-        </ul>
-        <div class="board-links center-links">
-          ${me ? `<button class="ghost-btn" data-action="tbl-leave">Abbandono la partita</button>` : ""}
-          <button class="ghost-btn danger" data-action="tbl-close">Annulla il tavolo</button>
-        </div>
-      </section>
-    </div>`;
-}
+// il podio si apre solo quando lo chiedi: prima si guarda l'ultima mano
+let podiumKey = null;
+const overKey = (g) => `${g.round}:${g.updatedAt || 0}`;
 
 function renderOver(g, ctx) {
   const me = mySeat(g, ctx);
@@ -700,8 +754,11 @@ function renderOver(g, ctx) {
         ${rows.map((seat) => `<li><span class="mini-name">${seat === winner ? crownEmblem("mini") : '<i class="dot-empty"></i>'}${esc(seat.name)}</span><b>${seat.total || 0}</b></li>`).join("")}
       </ul>
       ${me ? `
-        <button class="btn primary big" data-action="tbl-save">Salva nello storico (vale una Crown)</button>
-        <button class="ghost-btn" data-action="tbl-close">Chiudi senza salvare</button>` : ""}
+        <button class="btn primary big" data-action="tbl-save">Salva nello storico (vale una Crown)</button>` : ""}
+      <div class="board-links">
+        <button class="ghost-btn" data-action="tbl-lasthand">${icon("arrowLeft", "tiny")} Rivedi l'ultima mano</button>
+        ${me ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi senza salvare</button>` : ""}
+      </div>
     </section>`;
 }
 
@@ -727,13 +784,13 @@ export const tableView = {
     const g = game(ctx);
     if (!g) return renderIntro(ctx);
     if (g.status === "playing") scheduleAuto(ctx);
-    if (g.status === "playing" || g.status === "roundEnd") scheduleDrawAnim(g);
+    // anche l'ultima pescata della partita si anima: la fine si vede, non si intuisce
+    if (g.status !== "lobby") scheduleDrawAnim(g);
     checkPendingFlight(g);
     const stale = staleNotice(g);
     if (g.status === "lobby") return stale + renderLobby(g, ctx);
-    if (g.status === "roundEnd") return stale + renderRoundEnd(g, ctx);
-    if (g.status === "over") return stale + renderOver(g, ctx);
-    return stale + renderPlaying(g, ctx);
+    if (g.status === "over" && podiumKey === overKey(g)) return stale + renderOver(g, ctx);
+    return stale + renderTable(g, ctx);
   },
 
   actions: {
@@ -793,6 +850,18 @@ export const tableView = {
       s2.order = s2.order.filter((x) => x !== sid);
       return store.commitGame(s2);
     },
+    /** Il menu della striscia: abbandonare o annullare, senza occupare spazio sul tavolo. */
+    async "tbl-menu"(ctx) {
+      const g = game(ctx);
+      if (!g) return;
+      const me = mySeat(g, ctx);
+      const choices = [];
+      if (me && g.status !== "over") choices.push({ id: "leave", label: "Abbandono la partita" });
+      choices.push({ id: "close", label: "Annulla il tavolo" });
+      const pick = await askChoice("Tavolo", choices, { message: "Lo storico non si tocca in nessun caso." });
+      if (pick === "leave") return tableView.actions["tbl-leave"](ctx);
+      if (pick === "close") return tableView.actions["tbl-close"](ctx);
+    },
     async "tbl-leave"(ctx) {
       const g = game(ctx);
       const me = mySeat(g, ctx);
@@ -824,6 +893,7 @@ export const tableView = {
     "tbl-start"(ctx) {
       const g = game(ctx);
       if (!g) return;
+      podiumKey = null;
       try { return store.commitGame(engine.startGame(g)); }
       catch (e) { toast(e.message, "warn"); }
     },
@@ -854,6 +924,16 @@ export const tableView = {
       const g = game(ctx);
       if (!g || g.status !== "roundEnd") return;
       return store.commitGame(engine.nextRound(g));
+    },
+    /** Dall'ultima mano al podio (scelta locale: ognuno quando vuole). */
+    "tbl-podium"(ctx) {
+      const g = game(ctx);
+      if (!g || g.status !== "over") return;
+      podiumKey = overKey(g);
+      window.scrollTo({ top: 0 });
+    },
+    "tbl-lasthand"() {
+      podiumKey = null;
     },
     async "tbl-save"(ctx) {
       const g = game(ctx);

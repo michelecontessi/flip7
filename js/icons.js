@@ -51,6 +51,7 @@ const PATHS = {
             <rect x="7.8" y="4.6" width="8.4" height="13.6" rx="2"/>
             <rect x="13.8" y="7" width="8.4" height="12.4" rx="2" transform="rotate(18 18 13.2)"/>`,
   heartFill: `<path d="M12 20.6C6.8 16.8 3.2 13.5 3.2 9.7a4.8 4.8 0 0 1 8.8-2.7 4.8 4.8 0 0 1 8.8 2.7c0 3.8-3.6 7.1-8.8 10.9Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round"/>`,
+  dots: `<circle cx="5.2" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="1.7" fill="currentColor" stroke="none"/>`,
   snow: `<path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/>
          <path d="M9.4 4.4 12 6.6l2.6-2.2M9.4 19.6 12 17.4l2.6 2.2M3.9 10.7l3.2.6.7-3.2M20.1 13.3l-3.2-.6-.7 3.2M3.9 13.3l3.2-.6.7 3.2M20.1 10.7l-3.2.6-.7-3.2"/>`
 };
@@ -294,24 +295,37 @@ const EMBLEMS = {
       <text x="39.5" y="37.5" fill="#2270b8" transform="rotate(12 39.5 34.5)">10</text>
     </g>`,
 
-  // Fenice: l'uccello di fuoco che risale con le ali aperte, la freccia in su
-  fenice: (id) => `
+  // Sculone: il ferro di cavallo d'oro con il quadrifoglio, i due portafortuna
+  sculone: (id) => `
     <defs>
-      <linearGradient id="${id}" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0" stop-color="#c4306e"/><stop offset=".55" stop-color="#ff6a3d"/><stop offset="1" stop-color="#ffd166"/>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffe9a8"/><stop offset=".5" stop-color="#ffc247"/><stop offset="1" stop-color="#d98f16"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#a6ecc4"/><stop offset="1" stop-color="#1f9a62"/>
       </linearGradient>
     </defs>
-    <g class="ae-spark" fill="#ffb03a">
-      <path d="M8 8l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L4.9 8.9Z"/>
-      <path d="M49 12l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    <g class="ae-spark" fill="#ffc93f">
+      <path d="M6 9l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L2.9 9.9Z"/>
+      <path d="M50 6l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M51 30l.6-2 .6 2 2 .6-2 .6-.6 2-.6-2-2-.6Z"/>
     </g>
-    <path d="M4 30c4-10 11-15 19-16-3 4-4 8-3 12 4-5 9-8 15-8-2 4-2 8 0 12 3-3 7-4 12-3-5 2-8 6-9 11-6-4-11-4-14-1-1-4-5-6-10-6 4-3 6-6 6-9-6 1-11 3-16 8Z"
-          fill="url(#${id})" stroke="#7a1a3a" stroke-width="1.8" stroke-linejoin="round"/>
-    <path d="M22 20c-2 5-2 10 1 15 4-2 6-6 6-11" fill="#fff4b0" opacity=".55"/>
-    <circle cx="27.5" cy="27" r="1.5" fill="#3a0f1e"/>
-    <path d="M30.5 26.5l4 1-3.4 1.7Z" fill="#ffd166" stroke="#7a1a3a" stroke-width="1"/>
-    <path d="M18 45c8 3 16 3 24 0" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="1 4"/>
-    <path d="M42 42l2.5 3.2-4 .6" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
+    <path d="M9 8 C5 26, 12 41, 22 42.5 C32 41, 39 26, 35 8" fill="none" stroke="#8a5a10" stroke-width="11.5" stroke-linecap="round"/>
+    <path d="M9 8 C5 26, 12 41, 22 42.5 C32 41, 39 26, 35 8" fill="none" stroke="url(#${id})" stroke-width="8" stroke-linecap="round"/>
+    <path d="M9.4 14 C7.8 25, 12 36, 20 39" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1.6" stroke-linecap="round"/>
+    <g fill="#8a5a10">
+      <circle cx="8.6" cy="15" r="1.4"/><circle cx="9.6" cy="25" r="1.4"/><circle cx="14" cy="34" r="1.4"/>
+      <circle cx="35.4" cy="15" r="1.4"/><circle cx="34.4" cy="25" r="1.4"/>
+    </g>
+    <path d="M40.5 41 c1.2 2.6, 2.6 4.6, 4.8 6.4" fill="none" stroke="#1a6b45" stroke-width="2.2" stroke-linecap="round"/>
+    <g transform="translate(40 36)" fill="url(#${id}b)" stroke="#1a6b45" stroke-width="1.5" stroke-linejoin="round">
+      <path d="M0 0 C-6-3-8.5-9-4.2-11.2 C-1.4-12.6 0-9.6 0-7.4 C0-9.6 1.4-12.6 4.2-11.2 C8.5-9 6-3 0 0Z"/>
+      <path d="M0 0 C-6-3-8.5-9-4.2-11.2 C-1.4-12.6 0-9.6 0-7.4 C0-9.6 1.4-12.6 4.2-11.2 C8.5-9 6-3 0 0Z" transform="rotate(90)"/>
+      <path d="M0 0 C-6-3-8.5-9-4.2-11.2 C-1.4-12.6 0-9.6 0-7.4 C0-9.6 1.4-12.6 4.2-11.2 C8.5-9 6-3 0 0Z" transform="rotate(180)"/>
+      <path d="M0 0 C-6-3-8.5-9-4.2-11.2 C-1.4-12.6 0-9.6 0-7.4 C0-9.6 1.4-12.6 4.2-11.2 C8.5-9 6-3 0 0Z" transform="rotate(270)"/>
+    </g>
+    <circle cx="40" cy="36" r="1.4" fill="#fff" opacity=".75"/>
+    <circle cx="36.5" cy="29.5" r="1.6" fill="#fff" opacity=".45"/>`,
 
   // Doppiogiochista: due carte x2 sbucate insieme, con le scintille della fortuna
   doppiogiochista: (id) => `
@@ -357,8 +371,8 @@ const CARD_WORDS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN
  * Faccia di una carta numero (0-12) come nel gioco vero: fondo chiaro,
  * numero gigante, la parola in inglese sotto e gli indici agli angoli.
  */
-export function numberCard(n, { on = false, size = "" } = {}) {
-  return `<span class="fcard n${n} ${on ? "on" : ""} ${size}" data-face="${n}"><b>${n}</b><small>${CARD_WORDS[n] || ""}</small></span>`;
+export function numberCard(n, { on = false, size = "", attrs = "" } = {}) {
+  return `<span class="fcard n${n} ${on ? "on" : ""} ${size}" data-face="${n}" ${attrs}><b>${n}</b><small>${CARD_WORDS[n] || ""}</small></span>`;
 }
 
 /**
@@ -371,10 +385,10 @@ export function roundCard(n) {
 }
 
 /** Faccia di un modificatore (+2 … +10 oppure x2). */
-export function modCard(value, { on = false, size = "" } = {}) {
+export function modCard(value, { on = false, size = "", attrs = "" } = {}) {
   const isX2 = value === "x2";
   const label = isX2 ? "×2" : "+" + value;
-  return `<span class="fcard mod ${isX2 ? "x2" : ""} ${on ? "on" : ""} ${size}" data-face="${label}"><b>${label}</b></span>`;
+  return `<span class="fcard mod ${isX2 ? "x2" : ""} ${on ? "on" : ""} ${size}" data-face="${label}" ${attrs}><b>${label}</b></span>`;
 }
 
 /** Ventaglio decorativo di carte vere (per copertine e stati vuoti). */
@@ -395,8 +409,8 @@ export function googleG() {
 }
 
 /** Carta bonus Flip 7. */
-export function flip7Card({ size = "" } = {}) {
-  return `<span class="fcard flip7 on ${size}" data-face="7"><b>+15</b></span>`;
+export function flip7Card({ size = "", attrs = "" } = {}) {
+  return `<span class="fcard flip7 on ${size}" data-face="7" ${attrs}><b>+15</b></span>`;
 }
 
 /** Dorso della carta (il mazzo del tavolo online). */

@@ -228,6 +228,29 @@ Si apre un tavolo, ci si siede (ognuno è il **suo** giocatore, grazie al colleg
 account→giocatore), e a fine partita **la vittoria vale una Crown** nello storico, come
 le partite dal vivo. Possono giocare solo i membri approvati.
 
+**Il tavolo sta in una schermata**, anche sul telefono, senza andare su e giù: in cima la
+striscia che dice sempre chi deve fare cosa (*Tocca a te: pesca o fermati*, *Bot Ada
+pesca ancora 2 carte*, *Round 3 chiuso*) col numero del round accanto, sotto i due
+bottoni **Pesca** / **Mi fermo**, a fianco il mazzo con la carta che si gira; poi una
+riga per giocatore con nome, stato, totale, la rotaia verso il traguardo nel suo colore
+e **tutte le carte in fila** (azioni e modificatori prima, numeri dopo). Le carte si
+dimensionano sull'altezza dello schermo e sul numero di giocatori, e se una mano si fa
+lunga si stringono un po' invece di andare a capo. Il menu **⋯** nella striscia raccoglie
+*Abbandono la partita* e *Annulla il tavolo*. Su desktop le stesse parti stanno su due
+colonne, con la corsa al traguardo a sinistra.
+
+**La fine della partita si vede**: quando qualcuno supera l'obiettivo l'ultima mano resta
+sul tavolo, sballi e carte comprese, con la striscia che annuncia il vincitore. Il podio
+con la corona si apre con **Vai al podio**, e da lì si può tornare a **rivedere l'ultima
+mano**. Sballo, Seconda Chance bruciata e FLIP 7 hanno anche il loro avviso grande a
+centro schermo nell'istante in cui la carta si gira.
+
+A ogni mossa il tavolo **non viene ricostruito** ma solo aggiornato dove cambia
+([js/morph.js](js/morph.js)): righe, carte e rotaie restano gli stessi elementi, quindi
+le transizioni partono davvero e la carta in volo non salta. Mentre la pescata vola, il
+suo posto in fila è già riservato da un segnaposto tratteggiato della stessa taglia:
+la carta atterra lì sopra e la riga non si allarga di scatto.
+
 ## 6. Classifica e Crown
 
 Una **vittoria = una Crown**, punto. Nessuna formula strana: in classifica le Crown
@@ -278,9 +301,10 @@ cerchiata in oro; lo stesso vale per i riquadri corrispondenti nella scheda gioc
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
   le mani sballate né quelle inserite col tastierino)
 - **Colpo Grosso**: la mano più ricca, cioè il massimo di punti incassati in un solo round
-- **Sculone**: la rimonta più grande. Nelle partite segnate mano per mano, per chi ha vinto
-  si guarda dopo ogni round di quanto era sotto al primo in classifica: vale il distacco
-  più grande che ha poi ribaltato. Chi non è mai stato sotto non concorre
+- **Sculone**: la rimonta più grande, con ferro di cavallo e quadrifoglio come emblema.
+  Nelle partite segnate mano per mano, per chi ha vinto si guarda dopo ogni round di
+  quanto era sotto al primo in classifica: vale il distacco più grande che ha poi
+  ribaltato. Chi non è mai stato sotto non concorre
 - **Doppiogiochista**: chi si è visto arrivare più volte la carta **×2**. Conta solo le
   mani segnate carta per carta (col tastierino non si sa se il ×2 è arrivato), sballi
   compresi: la carta l'aveva in mano comunque
@@ -349,6 +373,7 @@ js/ui.js                 helper: date, toast, bottom sheet, dialoghi, condivisio
 js/avatar.js             avatar: simboli e colori predefiniti, foto ridotte, disegno
 js/theme.js              tema chiaro/scuro
 js/game.js               motore del gioco online (regole ufficiali, logica pura)
+js/morph.js              ridisegno incrementale del tavolo (aggiorna solo cio' che cambia)
 js/views/                partita · tavolo · classifica · storico · setup
 database.rules.json      regole di sicurezza del database
 sw.js, manifest.webmanifest, icon.svg    supporto PWA
