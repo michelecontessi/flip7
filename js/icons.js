@@ -291,7 +291,26 @@ const EMBLEMS = {
       <text x="15.5" y="37.5" fill="#d9441f" transform="rotate(-18 16.5 34.5)">12</text>
       <text x="28" y="36" fill="#7a4fd0" transform="rotate(-4 28 32.5)">11</text>
       <text x="39.5" y="37.5" fill="#2270b8" transform="rotate(12 39.5 34.5)">10</text>
-    </g>`
+    </g>`,
+
+  // Fenice: l'uccello di fuoco che risale con le ali aperte, la freccia in su
+  fenice: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#c4306e"/><stop offset=".55" stop-color="#ff6a3d"/><stop offset="1" stop-color="#ffd166"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ffb03a">
+      <path d="M8 8l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L4.9 8.9Z"/>
+      <path d="M49 12l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <path d="M4 30c4-10 11-15 19-16-3 4-4 8-3 12 4-5 9-8 15-8-2 4-2 8 0 12 3-3 7-4 12-3-5 2-8 6-9 11-6-4-11-4-14-1-1-4-5-6-10-6 4-3 6-6 6-9-6 1-11 3-16 8Z"
+          fill="url(#${id})" stroke="#7a1a3a" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M22 20c-2 5-2 10 1 15 4-2 6-6 6-11" fill="#fff4b0" opacity=".55"/>
+    <circle cx="27.5" cy="27" r="1.5" fill="#3a0f1e"/>
+    <path d="M30.5 26.5l4 1-3.4 1.7Z" fill="#ffd166" stroke="#7a1a3a" stroke-width="1"/>
+    <path d="M18 45c8 3 16 3 24 0" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="1 4"/>
+    <path d="M42 42l2.5 3.2-4 .6" fill="none" stroke="#7a1a3a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`
 };
 
 /** Emblema di un record. `kind` e' la chiave di EMBLEMS. */

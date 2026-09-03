@@ -363,6 +363,7 @@ function awardRowSub(a, r) {
   }
   if (a.key === "avgCards") return `${r.cards} carte in ${r.hands === 1 ? "1 mano" : r.hands + " mani"}`;
   if (a.key === "bestHand") return `su ${r.rounds === 1 ? "1 mano giocata" : r.rounds + " mani giocate"}`;
+  if (a.key === "bestComeback") return r.comebackWins === 1 ? "1 vittoria in rimonta" : `${r.comebackWins} vittorie in rimonta`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
   return `media ${fmtNum(r.avg, 1)}`;
 }
@@ -500,6 +501,11 @@ function renderPlayerPage(s) {
           <div class="hl tone-fire">
             <b>${h.bestHand}</b>
             <span>la sua mano migliore<small>punti in un solo round</small></span>
+          </div>` : ""}
+          ${h.bestComeback ? `
+          <div class="hl tone-rose">
+            <b>−${h.bestComeback}</b>
+            <span>la rimonta più grande<small>era sotto di tanto, poi ha vinto</small></span>
           </div>` : ""}
           ${h.hands ? `
           <div class="hl tone-violet">

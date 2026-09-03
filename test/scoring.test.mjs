@@ -439,3 +439,44 @@ test("Colpo Grosso: la mano piu' ricca in un solo round, contando anche gli sbal
   assert.equal(h.bestHand, 76);
   assert.equal(h.rounds, 2);
 });
+
+// ---------------------------------------------------------------------------
+// Fenice: la rimonta piu' grande
+// ---------------------------------------------------------------------------
+import { comebackOf } from "../js/stats.js";
+
+test("comebackOf: il distacco massimo dal primo, ribaltato entro l'ultimo round", () => {
+  const game = {
+    winnerIds: { a: true },
+    results: { a: { name: "Ale", total: 90 }, b: { name: "Bea", total: 80 }, c: { name: "Cri", total: 20 } },
+    rounds: {
+      a: { r0: { numbers: [5] }, r1: { numbers: [10] }, r2: { numbers: [12, 11, 10, 9, 8, 7, 6], plus: [10] } }, // 5, 15, 93
+      b: { r0: { numbers: [12, 11, 10] }, r1: { numbers: [12, 11] }, r2: { numbers: [12] } },               // 33, 56, 68
+      c: { r0: { numbers: [8] }, r1: { numbers: [8] }, r2: { numbers: [4] } }
+    }
+  };
+  assert.equal(comebackOf(game, "a"), 41, "dopo il secondo round era 56 a 15");
+  assert.equal(comebackOf(game, "b"), 0, "non ha vinto");
+  assert.equal(comebackOf({ ...game, winnerIds: { b: true } }, "b"), 0, "ha sempre guidato: nessuna rimonta");
+  assert.equal(comebackOf({ ...game, rounds: null }, "a"), 0, "senza mani non si sa");
+  assert.equal(comebackOf({ ...game, rounds: { a: { r0: { numbers: [1] } }, b: { r0: { numbers: [9] } } } }, "a"), 0, "un round solo non fa rimonta");
+});
+
+test("Fenice va alla rimonta piu' grande e chi non e' mai stato sotto non concorre", () => {
+  const hist = {
+    g1: { playedAt: 1, winnerIds: { a: true }, results: { a: { name: "Ale", total: 60 }, b: { name: "Bea", total: 50 } },
+      rounds: { a: { r0: { numbers: [10] }, r1: { numbers: [12, 11, 10, 9, 8] } }, b: { r0: { numbers: [12, 11, 10, 9] }, r1: { numbers: [8] } } } },
+    g2: { playedAt: 2, winnerIds: { b: true }, results: { a: { name: "Ale", total: 10 }, b: { name: "Bea", total: 40 } },
+      rounds: { a: { r0: { numbers: [5] }, r1: { numbers: [5] } }, b: { r0: { numbers: [12, 8] }, r1: { numbers: [12, 8] } } } }
+  };
+  const { rows } = leaderboard(hist, {});
+  const ale = rows.find((r) => r.playerId === "a");
+  assert.equal(ale.bestComeback, 32);
+  assert.equal(ale.comebackWins, 1);
+  assert.equal(rows.find((r) => r.playerId === "b").bestComeback, 0);
+  const f = awards(rows).find((x) => x.id === "fenice");
+  assert.deepEqual(f.winners.map((w) => w.playerId), ["a"]);
+  assert.equal(f.unit(32), "rimonta da −32");
+  assert.deepEqual(awardRanking(rows, "fenice").rows.map((r) => r.playerId), ["a"]);
+  assert.equal(playerHighlights([{ id: "g1", ...hist.g1 }, { id: "g2", ...hist.g2 }], "a").bestComeback, 32);
+});

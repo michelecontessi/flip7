@@ -202,7 +202,7 @@ export function leaderboard(history, players, opts = {}) {
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0 };
+        e = { playerId: pid, name: res.name || "?", crowns: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, bestComeback: 0, comebackWins: 0 };
         acc.set(pid, e);
       }
       e.name = res.name || e.name;
@@ -222,6 +222,9 @@ export function leaderboard(history, players, opts = {}) {
       e.cards += hs.cards;
       e.rounds += hs.rounds;
       e.bestHand = Math.max(e.bestHand, hs.bestHand);
+      const cb = comebackOf(game, pid);
+      if (cb > 0) e.comebackWins += 1;
+      e.bestComeback = Math.max(e.bestComeback, cb);
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
     }
@@ -276,7 +279,9 @@ export const AWARDS = [
   { id: "architetto", key: "avgCards", title: "Architetto", desc: "costruisce le mani più lunghe", emblem: "architetto", tone: "violet",
     unit: (v) => `${dec(v)} carte a mano` },
   { id: "colpogrosso", key: "bestHand", title: "Colpo Grosso", desc: "la mano più ricca in un solo round", emblem: "colpogrosso", tone: "fire",
-    unit: (v) => `${v} punti in una mano` }
+    unit: (v) => `${v} punti in una mano` },
+  { id: "fenice", key: "bestComeback", title: "Fenice", desc: "la rimonta più grande, da sotto fino alla vittoria", emblem: "fenice", tone: "rose",
+    unit: (v) => `rimonta da −${v}` }
 ];
 
 // Flip 7, sballi e congelate esistono solo nelle partite segnate round per
@@ -287,6 +292,7 @@ const awardPool = (a, rows) =>
     : a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0)
     : a.key === "avgCards" ? rows.filter((r) => r.hands > 0)
     : a.key === "bestHand" ? rows.filter((r) => r.rounds > 0)
+    : a.key === "bestComeback" ? rows.filter((r) => r.bestComeback > 0)
     : rows;
 // arrotondo per confrontare le medie senza sorprese da virgola mobile
 const awardVal = (a, r) => Math.round((Number(r[a.key]) || 0) * 1000) / 1000;
@@ -377,7 +383,7 @@ export function playerHighlights(games, playerId) {
   const chrono = [...games].sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
   const won = (g) => Boolean(g.winnerIds && g.winnerIds[playerId]);
 
-  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, bestHand = 0, rounds = 0;
+  let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, bestHand = 0, rounds = 0, bestComeback = 0;
   let best = { total: -1, playedAt: 0 };
 
   for (const g of chrono) {
@@ -396,6 +402,7 @@ export function playerHighlights(games, playerId) {
     cards += hs.cards;
     rounds += hs.rounds;
     bestHand = Math.max(bestHand, hs.bestHand);
+    bestComeback = Math.max(bestComeback, comebackOf(g, playerId));
     if (total >= (Number(g.targetScore) || 200)) overTarget += 1;
     if (total > best.total) best = { total, playedAt: g.playedAt || 0 };
   }
@@ -410,7 +417,7 @@ export function playerHighlights(games, playerId) {
     bestStreak, currentStreak, sinceLastWin,
     flip7s, busts, freezes, freezeGames, overTarget,
     hands, avgCards: hands ? cards / hands : 0,
-    rounds, bestHand,
+    rounds, bestHand, bestComeback,
     best: best.total < 0 ? { total: 0, playedAt: 0 } : best,
     played: chrono.length,
     detailedGames: detailed
@@ -420,6 +427,30 @@ export function playerHighlights(games, playerId) {
 /** Numero di round di una partita dello storico (max indice + 1, buchi compresi). */
 export function roundCount(rounds) {
   return roundsPlayed({ scores: rounds || {} });
+}
+
+/**
+ * La rimonta di chi ha vinto: dopo ogni round (tranne l'ultimo) quanto era
+ * sotto al primo in classifica; vale il distacco piu' grande che ha poi
+ * ribaltato. Zero se non ha vinto, se non e' mai stato sotto o se la partita
+ * non ha le mani segnate.
+ */
+export function comebackOf(game, pid) {
+  if (!game || !game.winnerIds || !game.winnerIds[pid] || !game.rounds) return 0;
+  const n = roundCount(game.rounds);
+  if (n < 2) return 0;
+  const ids = [...new Set([...Object.keys(game.results || {}), ...Object.keys(game.rounds)])];
+  const totals = Object.fromEntries(ids.map((id) => [id, 0]));
+  let worst = 0;
+  for (let i = 0; i < n - 1; i++) {
+    for (const id of ids) {
+      const e = game.rounds[id] && game.rounds[id][roundKey(i)];
+      if (e) totals[id] += computeRound(e).total;
+    }
+    const lead = Math.max(...ids.map((id) => totals[id]));
+    worst = Math.max(worst, lead - totals[pid]);
+  }
+  return worst;
 }
 
 /**

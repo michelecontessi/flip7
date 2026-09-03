@@ -262,6 +262,9 @@ statistica (a pari merito si condividono; toccandone uno si apre la classifica c
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
   le mani sballate né quelle inserite col tastierino)
 - **Colpo Grosso**: la mano più ricca, cioè il massimo di punti incassati in un solo round
+- **Fenice**: la rimonta più grande. Nelle partite segnate mano per mano, per chi ha vinto
+  si guarda dopo ogni round di quanto era sotto al primo in classifica: vale il distacco
+  più grande che ha poi ribaltato. Chi non è mai stato sotto non concorre
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;
