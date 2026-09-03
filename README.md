@@ -158,6 +158,9 @@ dispositivo — e il collegamento può cambiarlo solo il proprietario, da
    - **Congelato** segna che quel giocatore è stato fermato da un *Congela*: i punti
      restano quelli delle carte, ma si capisce perché la mano è corta (e conta per il
      record *Surgelato*)
+   - sotto il punteggio della mano c'è il **totale provvisorio**: *totale partita 123 → 157*,
+     cioè dove arriverebbe il giocatore salvando questa mano, e quanti punti gli mancano
+     al traguardo (o *traguardo tagliato*); si aggiorna a ogni carta toccata
    - se preferisci fare i conti a mente, la linguetta **Tastierino** ti fa digitare
      direttamente il totale (lì il Flip 7 si aggiunge col tasto dedicato)
 3. Quando tutti hanno il punteggio, il pulsante diventa **Chiudi round** e si passa al successivo.
@@ -238,6 +241,17 @@ dimensionano sull'altezza dello schermo e sul numero di giocatori, e se una mano
 lunga si stringono un po' invece di andare a capo. Il menu **⋯** nella striscia raccoglie
 *Abbandono la partita* e *Annulla il tavolo*. Su desktop le stesse parti stanno su due
 colonne, con la corsa al traguardo a sinistra.
+
+**Niente spoiler mentre la carta vola**: finché la pescata non si è girata, la mano non
+lascia trapelare nulla. Il posto riservato alla carta in arrivo è sempre l'ultimo della
+fila (qualunque cosa sia: numero, modificatore o azione), i punti del round e la rotaia
+restano fermi al valore di prima, e chip, note e riga spenta aspettano il verdetto. Solo
+quando la carta è atterrata scivola al suo posto in ordine, e i punti si aggiornano.
+
+**Il giro si legge dall'alto in basso**: il proprio posto resta sempre in cima, sotto ci
+sono gli altri nell'ordine in cui giocano nel round, a partire da chi apre (etichetta
+*apre* e numero sull'avatar: 1 è chi apre, 2 chi viene dopo…). A round chiuso la lista
+si riordina già sul giro successivo, e la striscia dice chi aprirà.
 
 **La fine della partita si vede**: quando qualcuno supera l'obiettivo l'ultima mano resta
 sul tavolo, sballi e carte comprese, con la striscia che annuncia il vincitore. Il podio

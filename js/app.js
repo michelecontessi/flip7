@@ -175,6 +175,7 @@ function snapFlip(root) {
 }
 function playFlip(root, before) {
   if (!before) return;
+  const moved = new Map();
   for (const el of root.querySelectorAll("[data-flip]")) {
     const a = before.get(el.dataset.flip);
     if (!a) continue;
@@ -183,6 +184,13 @@ function playFlip(root, before) {
     if (!dx && !dy) continue;
     // spostamento enorme = altra schermata, non un riordino: niente scivolata
     if (Math.abs(dx) + Math.abs(dy) > 360) continue;
+    moved.set(el, [dx, dy]);
+  }
+  for (const [el, [dx, dy]] of moved) {
+    // se scivola gia' il blocco che lo contiene (es. la riga con le sue carte),
+    // il figlio va con lui: animarlo a sua volta lo farebbe partire da due volte piu' lontano
+    const parent = el.parentElement && el.parentElement.closest("[data-flip]");
+    if (parent && moved.has(parent)) continue;
     el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }],
       { duration: 240, easing: "cubic-bezier(.3,.7,.3,1)" });
   }

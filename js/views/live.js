@@ -367,7 +367,7 @@ function openScoreSheet(room, live, startPid) {
  * `onSave(s)` / `onMove(s, delta)` / `saveLabel`, anche la correzione delle
  * mani di una partita chiusa (vista Storico), che decide lei dove salvare.
  */
-export function makeCalcState({ order, roundIndex, playerId, playerName, existing, fullTotal }) {
+export function makeCalcState({ order, roundIndex, playerId, playerName, existing, fullTotal, target = null }) {
   const entry = existing
     ? { ...emptyEntry(), ...existing, numbers: [...(existing.numbers || [])], plus: [...(existing.plus || [])] }
     : emptyEntry();
@@ -382,14 +382,31 @@ export function makeCalcState({ order, roundIndex, playerId, playerName, existin
     // totale partita PRIMA di questo round: cosi' sommando l'entry in corso
     // si vede in diretta dove arriverebbe il giocatore
     baseTotal: (fullTotal || 0) - (existing ? computeRound(existing).total : 0),
+    target,
     entry
   };
+}
+
+/**
+ * La riga del totale provvisorio: dove arriverebbe il giocatore salvando
+ * questa mano (prima -> dopo) e quanto gli manca al traguardo.
+ */
+function runningLine(s, e, r) {
+  const gained = e.busted ? 0 : r.total;
+  const to = s.baseTotal + gained;
+  const left = s.target ? s.target - to : null;
+  const tail = left === null ? ""
+    : left > 0 ? `<small>ne mancano <b>${left}</b></small>`
+    : `<small class="goal">traguardo tagliato</small>`;
+  if (e.busted) return `<span>totale partita</span><b>${s.baseTotal}</b><small>resta così: sballato</small>`;
+  if (!gained) return `<span>totale partita</span><b>${s.baseTotal}</b>${tail}`;
+  return `<span>totale partita</span><b class="from">${s.baseTotal}</b><i class="arr">→</i><b class="to">${to}</b>${tail}`;
 }
 
 function buildSheetState(room, live, order, roundIndex, pid) {
   const existing = entryOf(live, pid, roundIndex);
   const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
-  return makeCalcState({ order, roundIndex, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal });
+  return makeCalcState({ order, roundIndex, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal, target: live.targetScore || 200 });
 }
 
 function keypadValue(entry) {
@@ -442,7 +459,7 @@ export function renderScoreSheet(s) {
       <div class="flip7-badge" ${r.flip7 ? "" : 'style="display:none"'}>${wordmark()}<span>+15</span></div>
       <div class="sd-value">${e.busted ? "0" : r.total}</div>
       <div class="sd-note">${esc(noteOf(e, r, isKeypad))}</div>
-      <div class="sd-running">totale partita <b>${s.baseTotal + (e.busted ? 0 : r.total)}</b></div>
+      <div class="sd-running">${runningLine(s, e, r)}</div>
       ${!isKeypad ? `<div class="sd-hand">${buildHand(e, r)}</div>` : ""}
     </div>
 
@@ -521,8 +538,8 @@ export function patchCalcSheet(s) {
   if (count) count.textContent = `${(e.numbers || []).length}/7`;
   const hand = root.querySelector(".sd-hand");
   if (hand) hand.innerHTML = buildHand(e, r);
-  const running = root.querySelector(".sd-running b");
-  if (running) running.textContent = s.baseTotal + (e.busted ? 0 : r.total);
+  const running = root.querySelector(".sd-running");
+  if (running) running.innerHTML = runningLine(s, e, r);
 
   const q7 = root.querySelector('[data-action="calc-flip7"]');
   if (q7) q7.className = "quick " + (e.flip7 ? "on gold" : "");
@@ -562,7 +579,7 @@ function openSelfScoreSheet(room, live, pid) {
   const r = live.round || 0;
   const existing = entryOf(live, pid, r);
   const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
-  const s = makeCalcState({ order: [pid], roundIndex: r, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal });
+  const s = makeCalcState({ order: [pid], roundIndex: r, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal, target: live.targetScore || 200 });
   s.navSub = "i tuoi punti di questa mano";
   s.saveLabel = "Salva i miei punti";
   s.onSave = async (cs) => {

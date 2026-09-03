@@ -882,8 +882,19 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .score-display.bust .sd-value { color: var(--red); }
 .score-display.flip7 .sd-value { color: var(--gold); }
 .sd-note { font-size: 13px; color: var(--muted); height: 18px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sd-running { font-size: 13px; color: var(--muted); }
-.sd-running b { font-family: var(--font-display); font-size: 15px; color: var(--green); }
+/* totale provvisorio: prima -> dopo questa mano, e quanto manca al traguardo */
+.sd-running {
+  display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+  font-size: 13px; color: var(--muted); padding: 6px 13px; border-radius: 999px;
+  background: var(--surface-2); max-width: 100%;
+}
+.sd-running b { font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--text); line-height: 1; }
+.sd-running b.to { color: var(--green); font-size: 19px; }
+.sd-running .arr { font-style: normal; color: var(--dim); }
+.sd-running small { font-size: 12px; color: var(--dim); }
+.sd-running small b { font-size: 12.5px; color: var(--text); }
+.sd-running small.goal { color: var(--gold); font-weight: 700; }
+.score-display.flip7 .sd-running, .score-display.bust .sd-running { background: rgba(255,255,255,.55); }
 /* niente altezza fissa: le carte su desktop sono piu' alte e verrebbero tagliate */
 .sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 4px; min-height: 52px; align-items: center; max-width: 100%; overflow-x: auto; padding: 2px; }
 .hand-void { display: inline-flex; gap: 6px; filter: grayscale(1) opacity(.4); }
@@ -1226,6 +1237,19 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .seat .cards-row .fcard.dup { filter: none; } /* il doppione resta acceso */
 .seat-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .seat-head .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
+/* numero nel giro sull'avatar (1 = chi apre il round) */
+.seat-ava { position: relative; flex: none; display: block; }
+.seat-no {
+  position: absolute; right: -5px; bottom: -4px;
+  min-width: 15px; height: 15px; padding: 0 3px; border-radius: 999px;
+  display: grid; place-items: center;
+  background: var(--surface-3); color: var(--muted);
+  border: 1.5px solid var(--surface);
+  font-family: var(--font-display); font-style: normal; font-weight: 600; font-size: 9.5px; line-height: 1;
+}
+.seat-no.first { background: var(--primary); color: var(--primary-ink); }
+.seat.turn .seat-no { border-color: transparent; }
+.seat-opens { font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--c-blue); flex: none; white-space: nowrap; }
 .seat-name { font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .seat-state {
   font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .05em;
@@ -1683,6 +1707,7 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
   }
   .seat-head { grid-area: head; flex-wrap: wrap; row-gap: 4px; }
   .seat-head .avatar.sm { width: 30px; height: 30px; font-size: 11.5px; }
+  .seat-no { min-width: 17px; height: 17px; font-size: 10.5px; }
   .seat-name { flex: 1 1 60px; }
   .seat-pts { margin-left: 0; flex-basis: 100%; }
   .seat-pts b { font-size: 24px; }

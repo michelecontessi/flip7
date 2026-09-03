@@ -116,8 +116,8 @@ function scheduleAuto(ctx) {
 
 /** Una carta in mano o nel banco. `key` la identifica nel ridisegno
     incrementale, cosi' la stessa carta resta lo stesso elemento. */
-function miniCard(c, cls = "mini", key = "") {
-  const attrs = key ? `data-key="${key}"` : "";
+function miniCard(c, cls = "mini", key = "", sid = "") {
+  const attrs = key ? `data-key="${key}"${sid ? ` data-flip="card:${sid}:${key}"` : ""}` : "";
   if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls, attrs });
   if (engine.CARD.isPlus(c)) return modCard(engine.CARD.plus(c), { on: true, size: cls, attrs });
   if (engine.CARD.isX2(c)) return modCard("x2", { on: true, size: cls, attrs });
@@ -228,7 +228,7 @@ function runDrawAnim(card, token) {
   const m = deckEl.getBoundingClientRect();
   if (!a.width) return settle();
   // la destinazione e' il segnaposto gia' aperto nella mano: si misura e basta
-  const dest = document.querySelector(".t-seats .fcard.landing");
+  const dest = document.querySelector(".t-seats .fcard.landing") || document.querySelector(".t-seats .fcard.fly-dest");
   const b = dest ? dest.getBoundingClientRect() : null;
 
   // parte DAL mazzo, di dorso: una carta sola che ruota fino a 90 gradi,
@@ -483,7 +483,8 @@ function statusStrip(g, ctx, me) {
     const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust";
     cls = "end";
     title = `Round ${g.round} chiuso`;
-    sub = roundEndReason(g);
+    const nextOpener = turnOrder(g)[0];
+    sub = roundEndReason(g) + (nextOpener && g.seats[nextOpener] ? ` · poi apre ${nm(nextOpener)}` : "");
     veil = spoilerHold && buster ? " spoiler-veil" : "";
   } else {
     const actor = actorOf(g);
@@ -564,42 +565,68 @@ function renderSeatRow(g, sid, ctx, max) {
     isFlip3 = isFlip3 && sid === hold;
     isTurn = sid === hold && !h.out && !isFlip3;
   }
-  const pts = h.out === "bust" ? 0 : engine.handPoints(h);
+  // la carta che sta volando verso QUESTO posto (se non e' parcheggiata al banco)
+  const last = g.lastDraw;
+  const flying = landingActive && last && last.seat === sid && !g.pending ? last.card : null;
+  const flyNum = flying && engine.CARD.isNum(flying) ? engine.CARD.num(flying) : null;
+  const bustFly = flyNum !== null && h.out === "bust" && h.bustCard === flyNum;
+  const savedFly = flyNum !== null && Boolean(last.saved);
+  // finche' la carta vola, punti e rotaia restano quelli di prima
+  const ptsNow = h.out === "bust" ? 0 : engine.handPoints(h);
+  const pts = flying ? pointsBefore(h, last) : ptsNow;
   // l'ultima carta pescata si riconosce anche in mano (anello scuro);
   // se era il doppione dello sballo, l'evidenza ce l'ha gia' il doppione rosso
-  let just = g.lastDraw && g.lastDraw.seat === sid ? g.lastDraw.card : null;
+  let just = last && last.seat === sid ? last.card : null;
   if (h.out === "bust" && just === "n" + h.bustCard) just = null;
-  const justCls = "mini just" + (landingActive ? " landing" : "");
-  const cls = (card) => (card === just ? justCls : "mini");
+  // il doppione annullato dalla Seconda Chance: la carta in volo atterra
+  // sulla gemella gia' in mano (nessun segnaposto: non c'e' niente da svelare)
+  const cls = (card) => (card === just ? (savedFly && card === flying ? "mini just fly-dest" : "mini just") : "mini");
   // lo sballo di QUESTA pescata resta segreto finche' la carta non si gira
-  const bustSpoiler = spoilerHold && h.out === "bust" && g.lastDraw
-    && g.lastDraw.seat === sid && g.lastDraw.card === "n" + h.bustCard;
+  const bustSpoiler = spoilerHold && bustFly;
   // doppione annullato dalla Seconda Chance: la nota resta fino alla
   // prossima pescata, cosi' la vita persa non passa inosservata
-  const savedHere = g.lastDraw && g.lastDraw.seat === sid && g.lastDraw.saved;
-  // una fila sola: prima azioni e modificatori, poi i numeri in ordine
+  const savedHere = last && last.seat === sid && last.saved;
   const resolvedHere = resolveTargetSid === sid;
-  const specials = [
-    ...(h.x2 ? [miniCard("x2", cls("x2"), "x2")] : []),
-    ...h.plus.slice().sort((a, b) => a - b).map((p) => miniCard("p" + p, cls("p" + p), "p" + p)),
-    // la Seconda Chance bruciata non sparisce: resta in mano spenta
-    // ("consumata") per tutto il round. Durante il giro della carta e'
-    // ancora accesa (niente spoiler), si spegne al momento del verdetto.
-    ...(h.sc ? [miniCard("sc", resolvedHere ? "mini landing" : cls("sc"), "sc")]
-      : savedHere && spoilerHold ? [miniCard("sc", "mini spoiler-burn", "sc")]
-      : h.scUsed ? [miniCard("sc", "mini burned", "sc")] : [])
-  ];
+  const mc = (c, k, extra = "") => miniCard(c, extra || cls(c), k, sid);
+  // la carta in volo si tiene come segnaposto IN FONDO alla fila, qualunque
+  // cosa sia: la posizione non svela ne' il valore ne' il tipo di carta
+  let tail = "";
+  // una fila sola: prima azioni e modificatori, poi i numeri in ordine
+  const specials = [];
+  if (h.x2) {
+    if (flying === "x2") tail = mc("x2", "x2", "mini just landing");
+    else specials.push(mc("x2", "x2"));
+  }
+  const plus = h.plus.slice().sort((a, b) => a - b);
+  let skipPlus = flying && engine.CARD.isPlus(flying) ? engine.CARD.plus(flying) : null;
+  for (const p of plus) {
+    if (skipPlus === p) { skipPlus = null; tail = mc("p" + p, "p" + p, "mini just landing"); continue; }
+    specials.push(mc("p" + p, "p" + p));
+  }
+  // la Seconda Chance bruciata non sparisce: resta in mano spenta
+  // ("consumata") per tutto il round. Durante il giro della carta e'
+  // ancora accesa (niente spoiler), si spegne al momento del verdetto.
+  if (h.sc) {
+    if (flying === "sc") tail = mc("sc", "sc", "mini just landing");
+    else specials.push(mc("sc", "sc", resolvedHere ? "mini landing" : cls("sc")));
+  } else if (savedHere && spoilerHold) specials.push(mc("sc", "sc", "mini spoiler-burn"));
+  else if (h.scUsed) specials.push(mc("sc", "sc", "mini burned"));
   // chi e' stato congelato mostra la carta Congela ricevuta
-  if (h.out === "frozen") specials.push(miniCard("frz", resolvedHere ? "mini landing" : "mini", "frz"));
-  const nums = h.nums.slice().sort((a, b) => a - b).map((n) => miniCard("n" + n, cls("n" + n), "n" + n));
-  if (h.out === "flip7") nums.push(flip7Card({ size: "mini", attrs: 'data-key="f7"' }));
+  if (h.out === "frozen") specials.push(mc("frz", "frz", resolvedHere ? "mini landing" : "mini"));
+  const nums = [];
+  for (const n of h.nums.slice().sort((a, b) => a - b)) {
+    if (flyNum === n && !bustFly && !savedFly) { tail = mc("n" + n, "n" + n, "mini just landing"); continue; }
+    nums.push(mc("n" + n, "n" + n));
+  }
+  // il bonus del Flip 7 compare quando la settima carta e' atterrata
+  if (h.out === "flip7" && !flying) nums.push(flip7Card({ size: "mini", attrs: `data-key="f7" data-flip="card:${sid}:f7"` }));
   // il doppione che ha sballato resta in vista, marcato in rosso
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
-    nums.push(miniCard("n" + h.bustCard, "mini dup" + (landingActive && g.lastDraw && g.lastDraw.seat === sid ? " landing" : ""), "dup"));
+    if (bustFly) tail = mc("n" + h.bustCard, "dup", "mini dup landing");
+    else nums.push(mc("n" + h.bustCard, "dup", "mini dup"));
   }
-  const cards = specials.length && nums.length
-    ? specials.slice(0, -1).join("") + specials[specials.length - 1].replace('class="fcard', 'class="fcard gap-after') + nums.join("")
-    : specials.join("") + nums.join("");
+  if (specials.length && (nums.length || tail)) specials[specials.length - 1] = specials[specials.length - 1].replace('class="fcard', 'class="fcard gap-after');
+  const cards = specials.join("") + nums.join("") + tail;
   // la carta azione sta ancora volando verso questo posto: il verdetto
   // (es. "congelato") e la riga spenta aspettano che atterri
   const outShown = h.out && !resolvedHere;
@@ -609,25 +636,29 @@ function renderSeatRow(g, sid, ctx, max) {
     : isTurn ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   const total = seat.total || 0;
-  const r = h.out === "bust" ? 0 : pts;
   const color = colorOf(seat.name);
+  // posizione nel giro (1 = chi apre) e chi apre il round
+  const order = turnOrder(g);
+  const pos = order.indexOf(sid) + 1;
+  const opens = order[0] === sid && g.status !== "over";
   return `
     <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
       <div class="seat-head">
-        ${avatar(seat.playerId, seat.name, "sm")}
+        <span class="seat-ava" title="${pos}º nel giro">${avatar(seat.playerId, seat.name, "sm")}<i class="seat-no ${pos === 1 ? "first" : ""}">${pos}</i></span>
         <b class="seat-name">${esc(seat.name)}</b>
+        ${opens ? `<i class="seat-opens">${g.status === "roundEnd" ? "apre il prossimo" : "apre"}</i>` : ""}
         ${state}
         <span class="seat-pts">
           <b>${total}</b>
-          <small class="${h.out === "bust" ? "bust" : pts > 0 ? "up" : ""}${bustSpoiler ? " spoiler-veil" : ""}">+${pts}</small>
+          <small class="${h.out === "bust" && !flying ? "bust" : pts > 0 ? "up" : ""}">+${pts}</small>
         </span>
       </div>
       <span class="seat-rail" aria-hidden="true">
-        <i style="width:${((total / max) * 100).toFixed(1)}%"></i>${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%"></i>` : ""}
+        <i style="width:${((total / max) * 100).toFixed(1)}%"></i>${pts ? `<i class="prov" style="width:${((pts / max) * 100).toFixed(1)}%"></i>` : ""}
       </span>
       <div class="cards-row">${cards || '<span class="hand-empty">nessuna carta in mano</span>'}${h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined
           ? `<span class="dup-note${bustSpoiler ? " spoiler-veil" : ""}">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}${savedHere
-          ? `<span class="dup-note saved${spoilerHold ? " spoiler-veil" : ""}">${icon("heartFill", "tiny")} doppio ${engine.CARD.num(g.lastDraw.card)}: salvo, Seconda Chance bruciata</span>` : ""}</div>
+          ? `<span class="dup-note saved${spoilerHold ? " spoiler-veil" : ""}">${icon("heartFill", "tiny")} doppio ${engine.CARD.num(last.card)}: salvo, Seconda Chance bruciata</span>` : ""}</div>
     </li>`;
 }
 
@@ -694,18 +725,50 @@ function renderControls(g, ctx, me) {
   }
 
   if (iAct && !g.hands[actor].out && !emptyHand(g.hands[actor])) {
+    // la mia carta sta ancora volando: il bottone mostra il valore di prima
+    const flying = landingActive && g.lastDraw && g.lastDraw.seat === actor && !g.pending;
+    const pts = flying ? pointsBefore(g.hands[actor], g.lastDraw) : engine.handPoints(g.hands[actor]);
     return `
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit">Pesca</button>
-        <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${engine.handPoints(g.hands[actor])}</button>
+        <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${pts}</button>
       </div>`;
   }
   if (!me) return `<p class="hint">Stai guardando la partita.</p>`;
   return "";
 }
 
-/** Il mio posto sta SEMPRE in cima alla lista, chiunque sia a iniziare. */
-const seatOrder = (g, me) => (me ? [me, ...g.order.filter((sid) => sid !== me)] : g.order);
+/**
+ * L'ordine del giro da mostrare. A round chiuso e' gia' quello del prossimo
+ * (chi apriva passa in coda): la lista si riordina quando la mano finisce e
+ * si vede subito chi aprira'.
+ */
+const turnOrder = (g) => (g.status === "roundEnd" && g.order.length > 1 ? [...g.order.slice(1), g.order[0]] : g.order);
+/** Il mio posto sta SEMPRE in cima; sotto, gli altri nell'ordine in cui giocano. */
+const seatOrder = (g, me) => {
+  const o = turnOrder(g);
+  return me && o.includes(me) ? [me, ...o.filter((sid) => sid !== me)] : o;
+};
+
+/**
+ * Quanto valeva la mano PRIMA dell'ultima pescata: finche' la carta vola,
+ * punti e rotaia restano fermi li' (il nuovo valore direbbe in anticipo
+ * cosa e' arrivato, sballo compreso).
+ */
+function pointsBefore(h, last) {
+  const card = last.card;
+  const b = { nums: h.nums, plus: h.plus, x2: h.x2, out: null };
+  if (engine.CARD.isNum(card)) {
+    const n = engine.CARD.num(card);
+    // doppione (sballo o vita spesa): la carta non e' entrata in mano
+    if ((h.out === "bust" && h.bustCard === n) || last.saved) return engine.handPoints(b);
+    b.nums = h.nums.filter((x) => x !== n);
+  } else if (engine.CARD.isPlus(card)) {
+    const i = h.plus.indexOf(engine.CARD.plus(card));
+    b.plus = h.plus.filter((_, k) => k !== i);
+  } else if (engine.CARD.isX2(card)) b.x2 = false;
+  return engine.handPoints(b);
+}
 
 /**
  * Il tavolo: vale per il round in corso, per la fine del round (si resta
