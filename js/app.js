@@ -68,7 +68,7 @@ function renderTopbar(c) {
 
 function renderTabbar(c) {
   const liveOn = c.room.live && c.room.live.status === "playing";
-  const tableOn = Boolean(c.room.game);
+  const tableOn = Object.keys(c.room.game || {}).length > 0;
   return ORDER.map((key) => `
     <a class="tab ${route === key ? "on" : ""}" href="#${key}">
       <span class="tab-ico">${icon(VIEWS[key].ico)}${(key === "partita" && liveOn) || (key === "tavolo" && tableOn) ? '<i class="live-dot"></i>' : ""}</span>

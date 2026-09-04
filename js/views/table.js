@@ -1,7 +1,9 @@
 // ---------------------------------------------------------------------------
 // Vista "Tavolo": la partita online vera e propria, separata dal segnapunti.
-// Lo stato del gioco vive in room.game; le mosse passano dal motore puro
-// (js/game.js) e vengono scritte per intero: tutti vedono la stessa cosa.
+// I tavoli aperti vivono in room.game (id -> stato): se ne possono tenere
+// piu' di uno insieme, cosi' chi non gioca a quello aperto se ne apre un
+// altro invece di aspettare. Le mosse passano dal motore puro (js/game.js)
+// e vengono scritte per intero: tutti vedono la stessa cosa.
 // Layout (pensato per il telefono, come un tavolo da gioco online): in cima
 // la striscia che dice sempre chi deve fare cosa, con i comandi sotto; il
 // banco (mazzo e carta girata) accanto; poi una riga per giocatore con nome,
@@ -27,7 +29,51 @@ const ACTION_META = {
 const BOT_NAMES = ["Bot Ada", "Bot Bruno", "Bot Carla", "Bot Dina"];
 let botTimer = null;
 
-const game = (ctx) => engine.normalizeGame(ctx.room.game);
+/** Tutti i tavoli aperti, dal piu' vecchio al piu' nuovo. */
+const tablesOf = (ctx) => Object.values(ctx.room.game || {})
+  .map((t) => engine.normalizeGame(t))
+  .filter(Boolean)
+  .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+// tavolo scelto a mano su QUESTO dispositivo, e voglia di vedere l'elenco
+let viewingId = null;
+let browsing = false;
+// id del tavolo che sto guardando adesso: le mosse automatiche e le
+// animazioni devono rileggere quello, non un tavolo qualsiasi
+let shownId = null;
+
+/**
+ * Il tavolo in vista: quello scelto a mano, altrimenti quello dove sono
+ * seduto; con un tavolo solo non c'e' niente da scegliere.
+ */
+function pickTable(ctx) {
+  const list = tablesOf(ctx);
+  if (browsing) return null;
+  const chosen = list.find((t) => t.id === viewingId);
+  if (chosen) return chosen;
+  const seated = list.find((t) => mySeat(t, ctx));
+  if (seated) return seated;
+  return list.length === 1 ? list[0] : null;
+}
+
+/** Lo stato aggiornato del tavolo in vista (per timer e animazioni). */
+const current = () => engine.normalizeGame((store.getRoom().game || {})[shownId]);
+
+/** Cambiando tavolo si riparte puliti: nessuna animazione a meta'. */
+function syncTable(g) {
+  const id = g ? g.id : null;
+  if (id === shownId) return;
+  shownId = id;
+  lastAnimKey = null;
+  landingActive = false;
+  spoilerHold = false;
+  parkedCard = null;
+  resolveTargetSid = null;
+  podiumKey = null;
+}
+
+/** Il tavolo lo chiude solo chi l'ha aperto (i tavoli vecchi non hanno padrone). */
+const isTableOwner = (g, ctx) => !g.owner || !g.owner.uid || g.owner.uid === ctx.status.uid;
 /**
  * Il MIO posto: quello del mio account, mai un bot (i bot hanno lo stesso uid
  * di chi li ha aggiunti). A parita', vince il posto del giocatore collegato.
@@ -94,15 +140,14 @@ const DRAW_MS = 1200;
 const AUTO_MS = 1300;
 
 /** Le esegue (con una piccola pausa) il dispositivo che controlla quel posto. */
-function scheduleAuto(ctx) {
-  const g = game(ctx);
+function scheduleAuto(g, ctx) {
   if (!g || g.status !== "playing" || botTimer) return;
   const actor = actorOf(g);
   const seat = actor && g.seats[actor];
   if (!seat || seat.uid !== ctx.status.uid || !needsAuto(g, actor)) return;
   botTimer = setTimeout(() => {
     botTimer = null;
-    const g2 = engine.normalizeGame(store.getRoom().game);
+    const g2 = current();
     if (!g2 || g2.status !== "playing") return;
     const a2 = actorOf(g2);
     const s2 = a2 && g2.seats[a2];
@@ -110,7 +155,7 @@ function scheduleAuto(ctx) {
     const next = s2.bot ? botMove(g2, a2) : engine.hit(g2, a2);
     if (next !== g2) store.commitGame(next).catch(() => {});
     // mossa a vuoto (stato incoerente?): meglio ritentare che restare fermi
-    else setTimeout(() => scheduleAuto({ room: store.getRoom(), status: store.getStatus(), me: null }), 2500);
+    else setTimeout(() => scheduleAuto(current(), { room: store.getRoom(), status: store.getStatus(), me: null }), 2500);
   }, AUTO_MS);
 }
 
@@ -183,7 +228,7 @@ function flashBanner(kind, title, sub) {
 
 /** Sballo, Seconda Chance bruciata o FLIP 7: da urlare, non da cercare nella riga. */
 function announceDraw() {
-  const g = engine.normalizeGame(store.getRoom().game);
+  const g = current();
   const last = g && g.lastDraw;
   if (!last || !g.seats[last.seat] || !engine.CARD.isNum(last.card)) return;
   const h = g.hands[last.seat];
@@ -267,7 +312,7 @@ function runDrawAnim(card, token) {
     revealSpoilers();
     store.refresh();
   };
-  const gNow = engine.normalizeGame(store.getRoom().game);
+  const gNow = current();
   const parkHere = gNow && gNow.pending && gNow.pending.type === card;
   if (parkHere) {
     // carta azione da assegnare: resta parcheggiata a destra finche'
@@ -366,7 +411,7 @@ function runResolveFly(card, token, targetSid) {
   setTimeout(finish, 800);
 }
 
-// --- intro / lobby -----------------------------------------------------------
+// --- intro / elenco tavoli / lobby -------------------------------------------
 function renderIntro(ctx) {
   return `
     <section class="card empty-state">
@@ -376,8 +421,60 @@ function renderIntro(ctx) {
         pesca o fermati, con sballi, Congela, Pesca Tre e Seconda Chance.
         Chi vince prende la Crown come nelle partite dal vivo.</p>
       <button class="btn primary big" data-action="tbl-open">Apri un tavolo</button>
-      <p class="hint">Il tavolo si può annullare in qualsiasi momento, senza toccare lo storico.</p>
+      <p class="hint">Il tavolo lo chiude chi l'ha aperto: gli altri, se vogliono, ne aprono uno loro.</p>
     </section>`;
+}
+
+/** In una riga: a che punto e' quel tavolo. */
+function tableState(g) {
+  if (g.status === "lobby") return "in attesa di giocatori";
+  if (g.status === "over") return "partita finita";
+  if (g.status === "roundEnd") return `round ${g.round} chiuso`;
+  return `round ${g.round} in corso`;
+}
+
+/**
+ * L'elenco dei tavoli aperti: si entra in quello che si vuole, oppure se ne
+ * apre un altro. Serve da quando il tavolo lo chiude solo chi l'ha aperto:
+ * nessuno resta fuori ad aspettare che si liberi.
+ */
+function renderTables(list, ctx) {
+  return `
+    <section class="card">
+      <div class="card-head">${icon("cardFan")}<span class="card-title">Tavoli aperti</span>
+        <span class="count-pill ml-auto">${list.length}</span></div>
+      <ul class="table-list">
+        ${list.map((g) => {
+          const seats = g.order.map((sid) => g.seats[sid]);
+          const meIn = Boolean(mySeat(g, ctx));
+          const busy = !meIn && list.some((t) => t.id !== g.id && mySeat(t, ctx));
+          const go = meIn ? "sei qui" : g.status === "lobby" && !busy ? "siediti" : "guarda";
+          return `
+          <li>
+            <button class="tl-row" data-action="tbl-watch" data-id="${g.id}">
+              <span class="tl-avas">${seats.slice(0, 4).map((seat) => avatar(seat.playerId, seat.name, "xs")).join("")}
+                ${seats.length > 4 ? `<i class="tl-more">+${seats.length - 4}</i>` : ""}</span>
+              <span class="tl-txt">
+                <b>${g.owner && g.owner.name ? `Tavolo di ${esc(g.owner.name)}` : "Tavolo aperto"}</b>
+                <small>${seats.length} ${seats.length === 1 ? "seduto" : "seduti"} · ${tableState(g)} · traguardo ${g.target}</small>
+              </span>
+              <span class="tl-go ${meIn ? "here" : ""}">${go}${icon("arrowLeft", "flip tiny")}</span>
+            </button>
+          </li>`;
+        }).join("")}
+      </ul>
+      <button class="btn primary big" data-action="tbl-open">Apri un altro tavolo</button>
+      <p class="hint">Ogni tavolo lo chiude chi l'ha aperto: se quello che c'è non fa per te, aprine uno tuo.</p>
+    </section>`;
+}
+
+/** La riga sopra al tavolo quando ce n'è più di uno: dove sono e come si torna indietro. */
+function tableBar(g, list) {
+  return `
+    <div class="table-bar">
+      <button class="ghost-btn" data-action="tbl-list">${icon("arrowLeft", "tiny")} Tavoli aperti (${list.length})</button>
+      <span class="tb-name">${g.owner && g.owner.name ? `Tavolo di ${esc(g.owner.name)}` : "Tavolo aperto"}</span>
+    </div>`;
 }
 
 function renderLobby(g, ctx) {
@@ -411,12 +508,13 @@ function renderLobby(g, ctx) {
         <button class="btn primary big" data-action="tbl-start" ${g.order.length < 2 ? "disabled" : ""}>
           ${g.order.length < 2 ? "Aspetta almeno un altro giocatore" : "Dai le carte"}
         </button>
-        <button class="btn ghost small" data-action="tbl-bot">${icon("plus", "tiny")} Aggiungi un bot di prova</button>
-        <div class="board-links">
-          <button class="ghost-btn" data-action="tbl-stand">${icon("close", "tiny")} Mi alzo</button>
-          <button class="ghost-btn danger" data-action="tbl-close">Chiudi il tavolo</button>
-        </div>` : `
-        <p class="hint">Stai guardando: siediti per giocare.</p>`}
+        <button class="btn ghost small" data-action="tbl-bot">${icon("plus", "tiny")} Aggiungi un bot di prova</button>` : `
+        <p class="hint">Stai guardando: siediti per giocare, oppure apri un tavolo tuo.</p>`}
+      <div class="board-links">
+        ${seated ? `<button class="ghost-btn" data-action="tbl-stand">${icon("close", "tiny")} Mi alzo</button>` : ""}
+        <button class="ghost-btn" data-action="tbl-list">${icon("cardFan", "tiny")} Tavoli aperti</button>
+        ${isTableOwner(g, ctx) ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi il tavolo</button>` : ""}
+      </div>
     </section>`;
 }
 
@@ -477,7 +575,8 @@ function statusStrip(g, ctx, me) {
     const w = winnerOf(g);
     cls = "over";
     title = `Vince ${nm(w)}`;
-    sub = g.order.length < 2 ? "gli altri hanno abbandonato: partita finita"
+    sub = g.endReason === "left"
+      ? `${esc(g.endedBy || "qualcuno")} ha abbandonato: valgono i punteggi di adesso`
       : `partita finita con ${g.seats[w].total || 0} punti`;
   } else if (g.status === "roundEnd") {
     const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust";
@@ -571,8 +670,9 @@ function renderSeatRow(g, sid, ctx, max) {
   const flyNum = flying && engine.CARD.isNum(flying) ? engine.CARD.num(flying) : null;
   const bustFly = flyNum !== null && h.out === "bust" && h.bustCard === flyNum;
   const savedFly = flyNum !== null && Boolean(last.saved);
-  // finche' la carta vola, punti e rotaia restano quelli di prima
-  const ptsNow = h.out === "bust" ? 0 : engine.handPoints(h);
+  // finche' la carta vola, punti e rotaia restano quelli di prima;
+  // la mano interrotta da un abbandono non e' stata incassata: vale zero
+  const ptsNow = h.out === "bust" || g.endReason === "left" ? 0 : engine.handPoints(h);
   const pts = flying ? pointsBefore(h, last) : ptsNow;
   // l'ultima carta pescata si riconosce anche in mano (anello scuro);
   // se era il doppione dello sballo, l'evidenza ce l'ha gia' il doppione rosso
@@ -796,7 +896,7 @@ function renderTable(g, ctx) {
 
 // il podio si apre solo quando lo chiedi: prima si guarda l'ultima mano
 let podiumKey = null;
-const overKey = (g) => `${g.round}:${g.updatedAt || 0}`;
+const overKey = (g) => `${g.id}:${g.round}:${g.updatedAt || 0}`;
 
 function renderOver(g, ctx) {
   const me = mySeat(g, ctx);
@@ -816,11 +916,14 @@ function renderOver(g, ctx) {
       <ul class="mini-list">
         ${rows.map((seat) => `<li><span class="mini-name">${seat === winner ? crownEmblem("mini") : '<i class="dot-empty"></i>'}${esc(seat.name)}</span><b>${seat.total || 0}</b></li>`).join("")}
       </ul>
+      ${g.endReason === "left" ? `<p class="hint">Partita chiusa da <b>${esc(g.endedBy || "un giocatore")}</b>:
+        valgono i punteggi di quel momento, la mano in corso non conta.</p>` : ""}
       ${me ? `
         <button class="btn primary big" data-action="tbl-save">Salva nello storico (vale una Crown)</button>` : ""}
       <div class="board-links">
         <button class="ghost-btn" data-action="tbl-lasthand">${icon("arrowLeft", "tiny")} Rivedi l'ultima mano</button>
-        ${me ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi senza salvare</button>` : ""}
+        <button class="ghost-btn" data-action="tbl-list">${icon("cardFan", "tiny")} Tavoli aperti</button>
+        ${isTableOwner(g, ctx) ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi senza salvare</button>` : ""}
       </div>
     </section>`;
 }
@@ -830,13 +933,14 @@ function renderOver(g, ctx) {
  * tocco, cosi' una partita lasciata a meta' non blocca le successive.
  */
 const STALE_MS = 3 * 36e5; // 3 ore senza mosse
+const isStale = (g) => Boolean(g.updatedAt) && Date.now() - g.updatedAt >= STALE_MS;
 function staleNotice(g) {
-  if (!g.updatedAt || Date.now() - g.updatedAt < STALE_MS) return "";
+  if (!isStale(g)) return "";
   return `
     <section class="card stale-card">
       <p class="muted small">Ultima mossa <b>${relTime(g.updatedAt)}</b>: questo tavolo
-        sembra abbandonato. Puoi guardarlo, oppure chiuderlo per aprirne uno nuovo
-        (lo storico non si tocca).</p>
+        sembra abbandonato. Puoi guardarlo, aprirne un altro tuo, oppure chiuderlo
+        anche se non sei tu ad averlo aperto (lo storico non si tocca).</p>
       <button class="btn danger" data-action="tbl-close">Chiudi il tavolo abbandonato</button>
     </section>`;
 }
@@ -844,32 +948,59 @@ function staleNotice(g) {
 // --- export ------------------------------------------------------------------
 export const tableView = {
   render(ctx) {
-    const g = game(ctx);
-    if (!g) return renderIntro(ctx);
-    if (g.status === "playing") scheduleAuto(ctx);
+    const list = tablesOf(ctx);
+    const g = pickTable(ctx);
+    syncTable(g);
+    if (!g) return list.length ? renderTables(list, ctx) : renderIntro(ctx);
+    if (g.status === "playing") scheduleAuto(g, ctx);
     // anche l'ultima pescata della partita si anima: la fine si vede, non si intuisce
     if (g.status !== "lobby") scheduleDrawAnim(g);
     checkPendingFlight(g);
-    const stale = staleNotice(g);
-    if (g.status === "lobby") return stale + renderLobby(g, ctx);
-    if (g.status === "over" && podiumKey === overKey(g)) return stale + renderOver(g, ctx);
-    return stale + renderTable(g, ctx);
+    // con piu' tavoli aperti serve sapere dove si e' e come si torna indietro
+    const head = (list.length > 1 ? tableBar(g, list) : "") + staleNotice(g);
+    if (g.status === "lobby") return head + renderLobby(g, ctx);
+    if (g.status === "over" && podiumKey === overKey(g)) return head + renderOver(g, ctx);
+    return head + renderTable(g, ctx);
   },
 
   actions: {
+    /** Apre un tavolo nuovo, anche se ce n'è già uno: e' mio, lo chiudo io. */
     "tbl-open"(ctx) {
-      return store.commitGame(engine.createLobby(ctx.room.meta.targetScore || 200));
+      const id = "t" + store.newId();
+      const mine = ctx.me && ctx.room.players[ctx.me];
+      // se non sono collegato a un giocatore vale il nome con cui gioco altrove
+      const elsewhere = tablesOf(ctx).map((t) => { const sid = mySeat(t, ctx); return sid ? t.seats[sid].name : null; }).find(Boolean);
+      const owner = { uid: ctx.status.uid, name: (mine ? mine.name : "") || elsewhere || "" };
+      viewingId = id;
+      browsing = false;
+      podiumKey = null;
+      return store.commitGame(engine.createLobby(ctx.room.meta.targetScore || 200, { id, owner }));
+    },
+    /** Entra in un tavolo dell'elenco (o torna a guardarlo). */
+    "tbl-watch"(ctx, el) {
+      viewingId = el.dataset.id;
+      browsing = false;
+    },
+    /** Torna all'elenco dei tavoli aperti. */
+    "tbl-list"() {
+      viewingId = null;
+      browsing = true;
     },
     async "tbl-sit"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g || g.status !== "lobby") return;
+      // a un tavolo per volta: chi e' gia' seduto altrove prima si alza
+      const other = tablesOf(ctx).find((t) => t.id !== g.id && mySeat(t, ctx));
+      if (other) return toast(`Sei già seduto ${other.owner && other.owner.name ? `al tavolo di ${other.owner.name}` : "a un altro tavolo"}: alzati prima`, "warn");
       // se l'account e' gia' collegato a un giocatore, ci si siede come lui
       const bound = ctx.status.mode === "firebase" ? store.myPlayerId() : null;
       if (bound && ctx.room.players[bound]) {
         const sid = ctx.status.uid;
         const s2 = structuredClone(g);
-        s2.seats[sid] = { uid: ctx.status.uid, name: ctx.room.players[bound].name, playerId: bound, total: 0 };
+        const nm = ctx.room.players[bound].name;
+        s2.seats[sid] = { uid: ctx.status.uid, name: nm, playerId: bound, total: 0 };
         if (!s2.order.includes(sid)) s2.order = [...s2.order, sid];
+        if (s2.owner && s2.owner.uid === ctx.status.uid && !s2.owner.name) s2.owner = { ...s2.owner, name: nm };
         return store.commitGame(s2);
       }
       const roster = Object.entries(ctx.room.players || {}).filter(([, p]) => !p.archived);
@@ -890,10 +1021,12 @@ export const tableView = {
       const s2 = structuredClone(g);
       s2.seats[sid] = { uid: ctx.status.uid, name, playerId, total: 0 };
       if (!s2.order.includes(sid)) s2.order = [...s2.order, sid];
+      // il tavolo prende il nome di chi l'ha aperto appena si siede
+      if (s2.owner && s2.owner.uid === ctx.status.uid && !s2.owner.name) s2.owner = { ...s2.owner, name };
       return store.commitGame(s2);
     },
     "tbl-bot"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g || g.status !== "lobby") return;
       const used = new Set(g.order.map((sid) => g.seats[sid].name));
       const name = BOT_NAMES.find((n) => !used.has(n));
@@ -905,7 +1038,7 @@ export const tableView = {
       return store.commitGame(s2);
     },
     "tbl-unbot"(ctx, el) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       const sid = el.dataset.id;
       if (!g || g.status !== "lobby" || !g.seats[sid] || !g.seats[sid].bot) return;
       const s2 = structuredClone(g);
@@ -915,37 +1048,36 @@ export const tableView = {
     },
     /** Il menu della striscia: abbandonare o annullare, senza occupare spazio sul tavolo. */
     async "tbl-menu"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g) return;
       const me = mySeat(g, ctx);
       const choices = [];
-      if (me && g.status !== "over") choices.push({ id: "leave", label: "Abbandono la partita" });
-      choices.push({ id: "close", label: "Annulla il tavolo" });
-      const pick = await askChoice("Tavolo", choices, { message: "Lo storico non si tocca in nessun caso." });
+      if (me && g.status !== "over" && g.status !== "lobby") choices.push({ id: "leave", label: "Abbandono la partita" });
+      if (isTableOwner(g, ctx) || isStale(g)) choices.push({ id: "close", label: "Annulla il tavolo" });
+      choices.push({ id: "list", label: "Tavoli aperti (aprine un altro)" });
+      const pick = await askChoice("Tavolo", choices, {
+        message: me && g.status !== "over" && g.status !== "lobby"
+          ? "Chi abbandona chiude la partita per tutti, coi punteggi di adesso. Lo storico non si tocca."
+          : "Lo storico non si tocca in nessun caso."
+      });
+      if (pick === "list") { viewingId = null; browsing = true; return; }
       if (pick === "leave") return tableView.actions["tbl-leave"](ctx);
       if (pick === "close") return tableView.actions["tbl-close"](ctx);
     },
     async "tbl-leave"(ctx) {
-      const g = game(ctx);
-      const me = mySeat(g, ctx);
-      if (!g || !me || g.status === "lobby") return;
+      const g = pickTable(ctx);
+      const me = g && mySeat(g, ctx);
+      if (!g || !me || g.status === "lobby" || g.status === "over") return;
       const ok = await askConfirm("Abbandonare la partita?", {
-        message: g.order.length <= 2
-          ? "Resterebbe una persona sola: la partita finirebbe subito."
-          : "Le tue carte vanno negli scarti e il tavolo continua senza di te.",
-        confirmLabel: "Abbandona", danger: true
+        message: "La partita finisce qui per tutti, con i punteggi di adesso: la mano in corso non conta. Dal podio si salva nello storico come sempre.",
+        confirmLabel: "Termina la partita", danger: true
       });
       if (!ok) return;
-      const next = engine.leaveSeat(g, me);
-      // se restano solo bot il tavolo non ha piu' senso: si chiude
-      if (next.order.every((sid) => next.seats[sid].bot)) {
-        toast("Restavano solo bot: tavolo chiuso");
-        return store.commitGame(null);
-      }
-      return store.commitGame(next);
+      podiumKey = null;
+      return store.commitGame(engine.abandonGame(g, me));
     },
     "tbl-stand"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       const me = mySeat(g, ctx);
       if (!g || g.status !== "lobby" || !me) return;
       const s2 = structuredClone(g);
@@ -954,14 +1086,14 @@ export const tableView = {
       return store.commitGame(s2);
     },
     "tbl-start"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g) return;
       podiumKey = null;
       try { return store.commitGame(engine.startGame(g)); }
       catch (e) { toast(e.message, "warn"); }
     },
     "tbl-hit"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g) return;
       const actor = actorOf(g);
       if (!controls(g, ctx, actor)) return;
@@ -969,7 +1101,7 @@ export const tableView = {
       if (next !== g) return store.commitGame(next);
     },
     "tbl-stay"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g) return;
       const actor = actorOf(g);
       if (!controls(g, ctx, actor)) return;
@@ -977,20 +1109,20 @@ export const tableView = {
       if (next !== g) return store.commitGame(next);
     },
     "tbl-target"(ctx, el) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g || !g.pending) return;
       if (!controls(g, ctx, g.pending.chooser)) return;
       const next = engine.chooseTarget(g, g.pending.chooser, el.dataset.id);
       if (next !== g) return store.commitGame(next);
     },
     "tbl-nextround"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g || g.status !== "roundEnd") return;
       return store.commitGame(engine.nextRound(g));
     },
     /** Dall'ultima mano al podio (scelta locale: ognuno quando vuole). */
     "tbl-podium"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g || g.status !== "over") return;
       podiumKey = overKey(g);
       window.scrollTo({ top: 0 });
@@ -999,15 +1131,20 @@ export const tableView = {
       podiumKey = null;
     },
     async "tbl-save"(ctx) {
-      const g = game(ctx);
+      const g = pickTable(ctx);
       if (!g || g.status !== "over") return;
       await store.saveOnlineGame(g);
       toast("Partita salvata: Crown assegnata");
       location.hash = "#classifica";
     },
     async "tbl-close"(ctx) {
+      const g = pickTable(ctx);
+      if (!g) return;
+      if (!isTableOwner(g, ctx) && !isStale(g)) return toast("Questo tavolo lo chiude chi l'ha aperto", "warn");
       const ok = await askConfirm("Annullare il tavolo?", { message: "La partita online in corso andrà persa (lo storico non si tocca).", confirmLabel: "Annulla tavolo", danger: true });
-      if (ok) return store.commitGame(null);
+      if (!ok) return;
+      viewingId = null;
+      return store.closeTable(g.id);
     }
   },
 

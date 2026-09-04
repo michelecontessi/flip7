@@ -74,9 +74,19 @@ export function normalizeGame(g) {
   return state;
 }
 
-/** Crea il tavolo in attesa di giocatori. */
-export function createLobby(target = 200) {
-  return { status: "lobby", target, round: 0, seats: {}, order: [], deck: [], discard: [], hands: {}, log: [] };
+/**
+ * Crea il tavolo in attesa di giocatori.
+ * `id` distingue i tavoli aperti in contemporanea, `owner` dice chi l'ha
+ * aperto: e' l'unico che potra' chiuderlo.
+ * @param {{id?:string, owner?:{uid:string,name:string}}} meta
+ */
+export function createLobby(target = 200, meta = {}) {
+  return {
+    id: meta.id || null,
+    owner: meta.owner || null,
+    createdAt: Date.now(),
+    status: "lobby", target, round: 0, seats: {}, order: [], deck: [], discard: [], hands: {}, log: []
+  };
 }
 
 /** Avvia la partita (deckOverride serve ai test). */
@@ -177,59 +187,19 @@ export function nextRound(state) {
 }
 
 /**
- * Un giocatore abbandona il tavolo a partita in corso: le sue carte vanno
- * negli scarti e il gioco prosegue senza di lui. Se resta una sola persona,
- * la partita finisce subito.
+ * Abbandono: chi lascia la partita la chiude per tutti. Valgono i punteggi
+ * gia' incassati, qualunque siano; la mano in corso non si conta (non e'
+ * finita). Da li' si va al podio e si salva nello storico come sempre.
  */
-export function leaveSeat(state, sid) {
-  if (!state.order.includes(sid)) return state;
+export function abandonGame(state, sid) {
+  if (!state.order.includes(sid) || state.status === "lobby" || state.status === "over") return state;
   const s = structuredClone(state);
-  logIt(s, `${s.seats[sid].name} ha abbandonato il tavolo`);
-
-  const h = s.hands[sid];
-  if (h) {
-    s.discard = [...s.discard, ...h.nums.map((n) => "n" + n), ...h.plus.map((p) => "p" + p)];
-    if (h.x2) s.discard.push("x2");
-    if (h.sc) s.discard.push("sc");
-  }
-  const wasTurn = s.turn === sid;
-  const idx = s.order.indexOf(sid); // dopo la rimozione punta al posto successivo
-  delete s.seats[sid];
-  delete s.hands[sid];
-  s.order = s.order.filter((x) => x !== sid);
-  if (s.lastDraw && s.lastDraw.seat === sid) s.lastDraw = null;
-
-  if (s.order.length < 2 && s.status !== "lobby") {
-    s.status = "over";
-    s.pending = null;
-    s.flip3 = null;
-    return s;
-  }
-
-  if (s.flip3 && s.flip3.target === sid) {
-    s.discard = [...s.discard, ...(s.flip3.deferred || [])];
-    s.flip3 = null;
-  }
-  if (s.pending) {
-    if (s.pending.chooser === sid) {
-      s.discard = [...s.discard, s.pending.type]; // la carta non svanisce
-      s.pending = null;
-    } else {
-      s.pending.options = s.pending.options.filter((x) => x !== sid);
-      if (!s.pending.options.length) { s.discard = [...s.discard, s.pending.type]; s.pending = null; }
-    }
-  }
-
-  if (s.status === "playing") {
-    const act = activeSeats(s);
-    if (!act.length) return endRound(s);
-    if ((wasTurn && !s.pending && !s.flip3) || !s.order.includes(s.turn)) {
-      for (let i = 0; i < s.order.length; i++) {
-        const cand = s.order[(idx + i) % s.order.length];
-        if (!s.hands[cand].out) { s.turn = cand; break; }
-      }
-    }
-  }
+  s.status = "over";
+  s.endReason = "left";
+  s.endedBy = s.seats[sid].name;
+  s.pending = null;
+  s.flip3 = null;
+  logIt(s, `${s.seats[sid].name} ha abbandonato: partita chiusa con i punteggi di adesso`);
   return s;
 }
 

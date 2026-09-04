@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as store from "../js/store.js";
-import { createLobby, startGame, hit, stay, nextRound, leaveSeat } from "../js/game.js";
+import { createLobby, startGame, hit, stay, nextRound, abandonGame } from "../js/game.js";
 import { computeRound } from "../js/scoring.js";
 import { playerTotal, leaderboard, roundCount } from "../js/stats.js";
 
 /** Tavolo online di prova (si pesca dalla FINE del mazzo). */
-function table(names, deck, target = 200) {
-  let s = createLobby(target);
+function table(names, deck, target = 200, id = "tA") {
+  let s = createLobby(target, { id, owner: { uid: "u0", name: names[0] } });
   names.forEach((n, i) => {
     const sid = "s" + i;
     s.seats[sid] = { uid: "u" + i, name: n, playerId: "p" + i, total: 0 };
@@ -23,7 +23,7 @@ const savedGame = async (state) => {
 
 test("la partita online finisce nello storico con le mani round per round", async () => {
   const state = {
-    status: "over", target: 20, startedAt: 1000,
+    id: "tX", status: "over", target: 20, startedAt: 1000,
     order: ["s0", "s1"],
     seats: { s0: { name: "Ada", playerId: "p1", total: 22 }, s1: { name: "Bea", playerId: "p2", total: 8 } },
     rounds: [
@@ -52,7 +52,7 @@ test("la partita online finisce nello storico con le mani round per round", asyn
 
 test("sballi, congelate e Flip 7 online entrano in classifica come dal vivo", async () => {
   const state = {
-    status: "over", target: 20, startedAt: Date.now(),
+    id: "tY", status: "over", target: 20, startedAt: Date.now(),
     order: ["s0", "s1"],
     seats: { s0: { name: "Ada", playerId: "pa", total: 43 }, s1: { name: "Bea", playerId: "pb", total: 0 } },
     rounds: [
@@ -95,28 +95,33 @@ test("una partita giocata davvero al tavolo si archivia intera", async () => {
   assert.equal(g.results.p1.busts, 1);
   assert.equal(computeRound(g.rounds.p1.r0).total, 0);
   assert.deepEqual(g.winnerIds, { p0: true });
-  assert.equal(store.getRoom().game, undefined); // il tavolo si libera
+  assert.ok(!store.getRoom().game.tA);      // il tavolo si libera
 });
 
-test("chi abbandona non lascia mani orfane nello storico", async () => {
-  let s = table(["Ada", "Bea", "Caio"], ["n2", "n5", "n4"], 10);
+test("l'abbandono chiude la partita e la archivia coi punteggi di quel momento", async () => {
+  let s = table(["Ada", "Bea", "Caio"], ["n2", "n5", "n4"], 200);
   s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
   s = stay(s, "s0"); s = stay(s, "s1"); s = stay(s, "s2");
   assert.equal(s.rounds.length, 1);
   s = nextRound(s);
-  s = leaveSeat(s, "s2");                   // Caio se ne va dopo il primo round
   s.deck = ["n9", "n9"];
-  s = hit(s, s.turn); s = hit(s, s.turn); s = stay(s, s.turn); s = stay(s, s.turn);
+  s = hit(s, s.turn);                       // una mano appena cominciata
+  s = abandonGame(s, "s2");                 // Caio abbandona: finisce per tutti
+  assert.equal(s.status, "over");
 
   const g = await savedGame(s);
-  assert.deepEqual(Object.keys(g.rounds).sort(), ["p0", "p1"]);
-  assert.ok(!g.results.p2);
+  assert.deepEqual(Object.keys(g.rounds).sort(), ["p0", "p1", "p2"]);
+  assert.equal(roundCount(g.rounds), 1);    // la mano interrotta non si conta
+  for (const pid of ["p0", "p1", "p2"]) {
+    assert.equal(playerTotal({ scores: g.rounds }, pid), g.results[pid].total);
+  }
+  assert.deepEqual(g.winnerIds, { p1: true }); // vince il punteggio piu' alto (Bea, 5)
 });
 
 test("un tavolo aperto prima dell'aggiornamento salva i soli totali", async () => {
   // nessun `startedAt`: le fotografie delle mani mancano o sono a meta'
   const state = {
-    status: "over", target: 20,
+    id: "tZ", status: "over", target: 20,
     order: ["s0", "s1"],
     seats: { s0: { name: "Ada", playerId: "pv", total: 21 }, s1: { name: "Bea", playerId: "pw", total: 9 } },
     rounds: [{ s0: { numbers: [3], plus: [], doubled: false, busted: false, frozen: false },
@@ -129,4 +134,39 @@ test("un tavolo aperto prima dell'aggiornamento salva i soli totali", async () =
   // e in classifica non conta come partita segnata round per round
   const { rows } = leaderboard({ old: g }, {});
   assert.equal(rows.find((r) => r.playerId === "pv").tracked, 0);
+});
+
+test("piu' tavoli aperti insieme: ognuno vive per conto suo", async () => {
+  const a = table(["Ada", "Bea"], ["n5", "n3"], 200, "tUno");
+  const b = table(["Caio", "Dina"], ["n7", "n2"], 200, "tDue");
+  await store.commitGame(a);
+  await store.commitGame(b);
+  assert.deepEqual(store.tables().map((t) => t.id), ["tUno", "tDue"]);
+
+  // chiudere un tavolo non tocca l'altro
+  await store.closeTable("tUno");
+  assert.deepEqual(store.tables().map((t) => t.id), ["tDue"]);
+  assert.ok(store.getRoom().game.tDue);
+
+  // e salvare una partita libera solo il proprio tavolo
+  const c = table(["Eva", "Fabio"], ["n5", "n3"], 200, "tTre");
+  await store.commitGame(c);
+  let done = c;
+  done = stay(hit(done, "s0"), "s0");
+  done = stay(hit(done, "s1"), "s1");
+  await store.saveOnlineGame(done);
+  assert.deepEqual(store.tables().map((t) => t.id), ["tDue"]);
+});
+
+test("un tavolo del formato vecchio diventa il primo della mappa", () => {
+  const legacy = { status: "playing", round: 2, order: ["s0"], seats: { s0: { name: "Ada", total: 7 } } };
+  const map = store.normalizeTables(legacy);
+  assert.deepEqual(Object.keys(map), ["t0"]);
+  assert.equal(map.t0.round, 2);
+  assert.equal(map.t0.id, "t0");
+  // la forma nuova passa cosi' com'e', con l'id scritto in ogni tavolo
+  const nuovi = store.normalizeTables({ tA: { status: "lobby" }, tB: { status: "playing" } });
+  assert.deepEqual(Object.keys(nuovi).sort(), ["tA", "tB"]);
+  assert.equal(nuovi.tB.id, "tB");
+  assert.deepEqual(store.normalizeTables(null), {});
 });

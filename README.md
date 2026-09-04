@@ -231,6 +231,18 @@ Si apre un tavolo, ci si siede (ognuno è il **suo** giocatore, grazie al colleg
 account→giocatore), e a fine partita **la vittoria vale una Crown** nello storico, come
 le partite dal vivo. Possono giocare solo i membri approvati.
 
+**Più tavoli insieme, e ognuno è padrone del suo.** Il tavolo lo **chiude solo chi
+l'ha aperto**: chi non gioca a quello che c'è non deve aspettare né chiedere il
+permesso, apre il **suo** tavolo e via — dalla schermata *Tavoli aperti* si vede chi
+c'è a ciascuno, a che punto è la partita e si entra con un tocco (a un tavolo per
+volta: per cambiare, prima ci si alza). Un tavolo fermo da tre ore lo può chiudere
+chiunque, così non resta lì per sempre.
+
+**Abbandonare vuol dire chiudere la partita**, non sfilarsi: chi abbandona la termina
+per tutti con i **punteggi di quel momento** (la mano in corso, non finita, non conta).
+Da lì si va al podio e si salva nello storico come qualsiasi altra partita: la Crown
+va a chi era davanti.
+
 **Vale come una partita segnata a mano.** Alla fine di ogni mano il tavolo ne conserva la
 fotografia — numeri, `+`, `×2`, sballo e congelata — e a partita finita la archivia round
 per round, con le stesse righe del segnapunti. Quindi una partita online conta nelle
@@ -248,8 +260,9 @@ riga per giocatore con nome, stato, totale, la rotaia verso il traguardo nel suo
 e **tutte le carte in fila** (azioni e modificatori prima, numeri dopo). Le carte si
 dimensionano sull'altezza dello schermo e sul numero di giocatori, e se una mano si fa
 lunga si stringono un po' invece di andare a capo. Il menu **⋯** nella striscia raccoglie
-*Abbandono la partita* e *Annulla il tavolo*. Su desktop le stesse parti stanno su due
-colonne, con la corsa al traguardo a sinistra.
+*Abbandono la partita* (che la chiude per tutti), *Annulla il tavolo* (solo per chi
+l'ha aperto) e *Tavoli aperti*, per passare a un altro o aprirne uno nuovo.
+Su desktop le stesse parti stanno su due colonne, con la corsa al traguardo a sinistra.
 
 **Niente spoiler mentre la carta vola**: finché la pescata non si è girata, la mano non
 lascia trapelare nulla. Il posto riservato alla carta in arrivo è sempre l'ultimo della

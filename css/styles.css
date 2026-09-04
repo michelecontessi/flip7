@@ -558,7 +558,7 @@ select {
 .win-cell { display: grid; place-items: center; color: var(--gold); }
 
 .board-cta { margin-top: 8px; }
-.board-links { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.board-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
 .board-rows.in-sheet .brow { grid-template-columns: 20px 1fr 22px 54px; }
 
 /* ---------- tabella round ---------- */
@@ -1153,6 +1153,32 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 @keyframes pulse { 50% { opacity: .3; } }
 .rank .rank-crown, .rank-crown { width: 19px; height: 18px; margin: 0 auto; display: block; }
 .you-name .crown-emblem { display: inline-block; vertical-align: -3px; margin-left: 4px; }
+
+/* ---------- elenco dei tavoli aperti ----------
+   Se ne possono tenere piu' di uno: qui si sceglie dove entrare, e la
+   barra sopra al tavolo riporta indietro. */
+.table-list { display: flex; flex-direction: column; list-style: none; margin: 0 0 12px; padding: 0; }
+.table-list li { border-bottom: 1px solid var(--line); }
+.table-list li:last-child { border-bottom: 0; }
+.tl-row {
+  width: 100%; background: none; border: 0; padding: 10px 2px;
+  display: flex; align-items: center; gap: 10px; text-align: left; min-width: 0;
+}
+.tl-avas { display: flex; align-items: center; flex: none; }
+.tl-avas .avatar { margin-right: -7px; box-shadow: 0 0 0 2px var(--surface); }
+.tl-more { font-style: normal; font-size: 11px; font-weight: 700; color: var(--muted); margin-left: 11px; }
+.tl-txt { min-width: 0; flex: 1; }
+.tl-txt b { display: block; font-size: 14.5px; font-weight: 650; line-height: 1.2; }
+.tl-txt small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.tl-go {
+  flex: none; display: inline-flex; align-items: center; gap: 2px;
+  font-size: 11.5px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.tl-go.here { color: var(--green); }
+.tl-go .ico { width: 14px; height: 14px; }
+.table-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: -2px; }
+.tb-name { font-size: 12px; font-weight: 650; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- tavolo online ----------
    Pensato per il telefono: striscia di stato e comandi in cima, banco

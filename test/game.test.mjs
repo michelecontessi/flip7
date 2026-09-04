@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fullDeck, createLobby, startGame, hit, stay, chooseTarget, nextRound, handPoints, normalizeGame, leaveSeat } from "../js/game.js";
+import { fullDeck, createLobby, startGame, hit, stay, chooseTarget, nextRound, handPoints, normalizeGame, abandonGame } from "../js/game.js";
 
 // tavolo di prova: 2-3 giocatori con un mazzo costruito a mano.
 // ATTENZIONE: si pesca dalla FINE dell'array (deck.pop()).
@@ -153,30 +153,42 @@ test("normalizeGame ripara gli array che Firebase omette", () => {
   assert.equal(g.pending, null);
 });
 
-test("abbandono: carte negli scarti e turno al successivo nell'ordine", () => {
-  let s = table(["Ada", "Bea", "Caio"], ["n5", "n3"]);
-  s = hit(s, "s0");                   // Ada pesca il 3, tocca a Bea
-  s = leaveSeat(s, "s1");             // Bea abbandona mentre e' di turno
-  assert.equal(s.order.length, 2);
-  assert.ok(!s.seats.s1);
-  assert.equal(s.turn, "s2");         // passa a Caio, non torna ad Ada
-  assert.ok(s.discard.length >= 0);
-});
-
-test("abbandono: se resta uno solo la partita finisce subito", () => {
-  let s = table(["Ada", "Bea"], ["n5", "n3"]);
-  s = leaveSeat(s, "s0");
+test("abbandono: la partita finisce per tutti coi punteggi di adesso", () => {
+  // primo round chiuso: Ada 4, Bea 5, Caio 6
+  let s = table(["Ada", "Bea", "Caio"], ["n9", "n8", "n6", "n5", "n4"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  s = stay(s, "s0"); s = stay(s, "s1"); s = stay(s, "s2");
+  s = nextRound(s);
+  s = hit(s, "s1");                   // Bea si porta a casa un 8 nella mano in corso
+  s = abandonGame(s, "s1");           // e abbandona
   assert.equal(s.status, "over");
-  assert.deepEqual(s.order, ["s1"]);
+  assert.equal(s.endReason, "left");
+  assert.equal(s.endedBy, "Bea");
+  assert.deepEqual(s.order, ["s1", "s2", "s0"]);   // nessuno sparisce dal tavolo
+  assert.equal(s.seats.s0.total, 4);
+  assert.equal(s.seats.s1.total, 5);              // la mano in corso non si conta
+  assert.equal(s.seats.s2.total, 6);
+  assert.equal(s.rounds.length, 1);               // e non entra nello storico
 });
 
-test("abbandono del bersaglio di una scelta: l'opzione sparisce", () => {
-  // mazzo: Ada pesca subito un Congela con 3 giocatori attivi -> pending
+test("abbandono: nessuna scelta resta appesa", () => {
   let s = table(["Ada", "Bea", "Caio"], ["n2", "n4", "frz"]);
   s = hit(s, "s0");
   assert.ok(s.pending);
-  s = leaveSeat(s, "s2");             // Caio (fra le opzioni) abbandona
-  assert.ok(!s.pending.options.includes("s2"));
+  s = abandonGame(s, "s2");
+  assert.equal(s.status, "over");
+  assert.equal(s.pending, null);
+  assert.equal(s.flip3, null);
+});
+
+test("abbandono: in lobby o a partita finita non cambia niente", () => {
+  let lobby = createLobby(200);
+  lobby.seats.s0 = { name: "Ada", total: 0 };
+  lobby.order = ["s0"];
+  assert.equal(abandonGame(lobby, "s0"), lobby);
+  let s = table(["Ada", "Bea"], ["n5", "n3"]);
+  s = abandonGame(s, "s0");
+  assert.equal(abandonGame(s, "s1"), s);          // gia' finita: si resta cosi'
 });
 
 test("lo sballo registra quale doppione l'ha causato", () => {

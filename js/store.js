@@ -26,8 +26,21 @@ export function emptyRoom() {
     members: {},
     requests: {},
     bindings: {},
-    game: null
+    game: {}
   };
+}
+
+// `game` non e' piu' un tavolo solo: e' la MAPPA dei tavoli aperti
+// (id -> stato). Sta sotto la stessa chiave di prima, cosi' le regole del
+// database restano quelle. Un tavolo del formato vecchio (stato scritto
+// direttamente li' sotto) diventa il primo della mappa.
+const LEGACY_TABLE = "t0";
+export function normalizeTables(v) {
+  if (!v || typeof v !== "object") return {};
+  if (typeof v.status === "string") return { [LEGACY_TABLE]: { ...v, id: LEGACY_TABLE } };
+  const out = {};
+  for (const [id, t] of Object.entries(v)) if (t && typeof t === "object") out[id] = { ...t, id };
+  return out;
 }
 
 function normalize(v) {
@@ -42,7 +55,7 @@ function normalize(v) {
     members: v.members || {},
     requests: v.requests || {},
     bindings: v.bindings || {},
-    game: v.game || null
+    game: normalizeTables(v.game)
   };
 }
 
@@ -572,11 +585,21 @@ export function cancelGame() {
 // ---------------------------------------------------------------------------
 // Tavolo online
 // ---------------------------------------------------------------------------
-/** Sovrascrive lo stato del tavolo (JSON pulito: Firebase rifiuta undefined).
+/** I tavoli aperti in questo momento, in ordine di apertura. */
+export function tables() {
+  return Object.values(room.game || {}).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+}
+
+/** Sovrascrive lo stato di UN tavolo (JSON pulito: Firebase rifiuta undefined).
     Ogni mossa aggiorna updatedAt: serve a riconoscere i tavoli abbandonati. */
 export function commitGame(state) {
-  if (state !== null) state = { ...state, updatedAt: Date.now() };
-  return commit({ game: state === null ? null : JSON.parse(JSON.stringify(state)) });
+  if (!state || !state.id) throw new Error("Tavolo senza id");
+  return commit({ [`game/${state.id}`]: JSON.parse(JSON.stringify({ ...state, updatedAt: Date.now() })) });
+}
+
+/** Chiude un tavolo senza salvare nulla (lo storico non si tocca). */
+export function closeTable(id) {
+  return commit({ [`game/${id}`]: null });
 }
 
 /**
@@ -620,7 +643,7 @@ export function saveOnlineGame(state) {
   const winnerIds = Object.fromEntries(Object.entries(results).filter(([, r]) => r.total === top).map(([id]) => [id, true]));
   const gameId = newId();
   const now = Date.now();
-  return commit({
+  const updates = {
     [`history/${gameId}`]: {
       playedAt: state.startedAt || now,
       finishedAt: now,
@@ -630,9 +653,10 @@ export function saveOnlineGame(state) {
       winnerIds,
       rounds: tracked ? rounds : null,
       createdAt: now
-    },
-    game: null
-  }).then(() => gameId);
+    }
+  };
+  if (state.id) updates[`game/${state.id}`] = null; // il tavolo si libera
+  return commit(updates).then(() => gameId);
 }
 
 // ---------------------------------------------------------------------------
