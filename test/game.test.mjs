@@ -238,3 +238,42 @@ test("appena il mazzo si svuota, gli scarti rientrano subito", () => {
   assert.equal(s.deck.length, 2);
   assert.equal(s.discard.length, 0);
 });
+
+test("ogni round finito lascia la fotografia delle mani (per lo storico)", () => {
+  // pescate (dalla fine): Ada n4, Bea x2, Ada p6, Bea n3, Ada n4 di nuovo -> sballa
+  let s = table(["Ada", "Bea"], ["n4", "n3", "p6", "x2", "n4"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s0"); s = hit(s, "s1");
+  s = hit(s, "s0");                       // doppio 4: Ada sballa
+  assert.equal(s.hands.s0.out, "bust");
+  s = stay(s, "s1");
+  assert.equal(s.status, "roundEnd");
+  assert.equal(s.rounds.length, 1);
+  assert.deepEqual(s.rounds[0].s0, { numbers: [4], plus: [6], doubled: false, busted: true, frozen: false });
+  assert.deepEqual(s.rounds[0].s1, { numbers: [3], plus: [], doubled: true, busted: false, frozen: false });
+  // il round dopo si aggiunge in coda, senza toccare il primo
+  s = nextRound(s);
+  s.deck = ["n2", "n7"];
+  s = hit(s, s.turn); s = hit(s, s.turn); s = stay(s, s.turn); s = stay(s, s.turn);
+  assert.equal(s.rounds.length, 2);
+  assert.deepEqual(s.rounds[0].s0.numbers, [4]);
+});
+
+test("la fotografia segna chi e' stato congelato", () => {
+  let s = table(["Ada", "Bea", "Caio"], ["n2", "n3", "frz", "n6", "n5", "n4"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  s = hit(s, "s0");                        // Ada pesca Congela
+  s = chooseTarget(s, "s0", "s1");         // congela Bea
+  s = stay(s, s.turn); s = stay(s, s.turn);
+  assert.equal(s.status, "roundEnd");
+  assert.equal(s.rounds[0].s1.frozen, true);
+  assert.equal(s.rounds[0].s0.frozen, false);
+  assert.equal(s.rounds[0].s2.frozen, false);
+});
+
+test("il Flip 7 si legge dalle sette carte della fotografia", () => {
+  const d2 = ["n7", "n12", "n6", "n11", "n5", "n10", "n4", "n9", "n3", "n8", "n2", "n0", "n1"];
+  let s = table(["Anna", "Bruno"], d2);
+  while (s.status === "playing") s = hit(s, s.turn);
+  assert.equal(s.hands.s0.out, "flip7");
+  assert.equal(s.rounds[0].s0.numbers.length, 7);
+});

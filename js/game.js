@@ -45,6 +45,11 @@ export function shuffle(cards, rng = Math.random) {
 
 const emptyHand = () => ({ nums: [], plus: [], x2: false, sc: false, out: null, bustCard: null });
 
+/** Firebase puo' restituire un array come oggetto {0:..,1:..}: qui torna lista. */
+const toList = (v) => Array.isArray(v) ? v
+  : v && typeof v === "object" ? Object.keys(v).sort((a, b) => Number(a) - Number(b)).map((k) => v[k])
+  : [];
+
 /** Normalizza uno stato letto dal database (gli array vuoti spariscono). */
 export function normalizeGame(g) {
   if (!g) return null;
@@ -64,7 +69,8 @@ export function normalizeGame(g) {
   state.lastDraw = g.lastDraw || null;
   state.lastRound = g.lastRound || null;
   state.lastAction = g.lastAction || null;
-  state.trend = g.trend || [];
+  state.trend = toList(g.trend);
+  state.rounds = toList(g.rounds);
   return state;
 }
 
@@ -76,7 +82,7 @@ export function createLobby(target = 200) {
 /** Avvia la partita (deckOverride serve ai test). */
 export function startGame(state, rng = Math.random, deckOverride = null) {
   if (state.order.length < 2) throw new Error("Servono almeno 2 giocatori seduti");
-  const s = { ...state, status: "playing", round: 1, discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [] };
+  const s = { ...state, status: "playing", round: 1, startedAt: Date.now(), discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [], rounds: [] };
   s.deck = deckOverride ? [...deckOverride] : shuffle(fullDeck(), rng);
   s.hands = {};
   for (const sid of s.order) s.hands[sid] = emptyHand();
@@ -114,17 +120,34 @@ export function handPoints(h) {
   return base + h.plus.reduce((a, b) => a + b, 0) + (h.out === "flip7" ? 15 : 0);
 }
 
+/**
+ * La mano nel formato del segnapunti dal vivo (js/scoring.js): numeri, +,
+ * x2, sballo e congelata. Serve ad archiviare la partita online round per
+ * round, cosi' vale nelle statistiche quanto una segnata a mano.
+ */
+export function handEntry(h) {
+  return {
+    numbers: [...h.nums],
+    plus: [...h.plus],
+    doubled: Boolean(h.x2),
+    busted: h.out === "bust",
+    frozen: h.out === "frozen"
+  };
+}
+
 function endRound(s) {
   // niente carte perse: le azioni rimaste appese (accantonate da un Pesca Tre
   // o in attesa di bersaglio) tornano negli scarti, pronte per il rimescolo
   if (s.flip3 && s.flip3.deferred && s.flip3.deferred.length) s.discard = [...s.discard, ...s.flip3.deferred];
   if (s.pending) s.discard = [...s.discard, s.pending.type];
   s.lastRound = {};
+  const played = {}; // la fotografia delle mani di questo round, per lo storico
   for (const sid of s.order) {
     const h = s.hands[sid];
     if (!h.out) h.out = "stay"; // il round e' finito: chi era in gioco incassa
     const pts = h.out === "bust" ? 0 : handPoints(h);
     s.lastRound[sid] = pts;
+    played[sid] = handEntry(h);
     s.seats[sid] = { ...s.seats[sid], total: (s.seats[sid].total || 0) + pts };
     // le carte usate vanno negli scarti
     s.discard = [...s.discard, ...h.nums.map((n) => "n" + n), ...h.plus.map((p) => "p" + p)];
@@ -133,6 +156,9 @@ function endRound(s) {
   }
   s.pending = null;
   s.flip3 = null;
+  // le mani giocate, una fotografia per round: da qui nascono sballi,
+  // congelate e Flip 7 della partita archiviata
+  s.rounds = [...(s.rounds || []), played];
   // storia dei totali round per round (per il grafico di andamento)
   s.trend = [...(s.trend || []), Object.fromEntries(s.order.map((sid) => [sid, s.seats[sid].total || 0]))];
   const someoneWon = s.order.some((sid) => (s.seats[sid].total || 0) >= s.target);

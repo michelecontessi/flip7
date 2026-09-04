@@ -231,6 +231,15 @@ Si apre un tavolo, ci si siede (ognuno è il **suo** giocatore, grazie al colleg
 account→giocatore), e a fine partita **la vittoria vale una Crown** nello storico, come
 le partite dal vivo. Possono giocare solo i membri approvati.
 
+**Vale come una partita segnata a mano.** Alla fine di ogni mano il tavolo ne conserva la
+fotografia — numeri, `+`, `×2`, sballo e congelata — e a partita finita la archivia round
+per round, con le stesse righe del segnapunti. Quindi una partita online conta nelle
+statistiche esattamente come una dal vivo: **Flip 7**, **sballi**, **congelate**, mani
+lunghe, `×2` pescati, punteggio della singola mano e rimonte finiscono in classifica e
+nei **Record**, e nello Storico la partita ha la sua **tabella dei round**. Chi lascia il
+tavolo a metà non entra nello storico, e delle partite iniziate prima di questo
+aggiornamento restano i soli totali (meglio nessun dettaglio che uno a metà).
+
 **Il tavolo sta in una schermata**, anche sul telefono, senza andare su e giù: in cima la
 striscia che dice sempre chi deve fare cosa (*Tocca a te: pesca o fermati*, *Bot Ada
 pesca ancora 2 carte*, *Round 3 chiuso*) col numero del round accanto, sotto i due

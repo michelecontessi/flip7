@@ -579,26 +579,57 @@ export function commitGame(state) {
   return commit({ game: state === null ? null : JSON.parse(JSON.stringify(state)) });
 }
 
-/** Archivia una partita online conclusa e libera il tavolo. */
+/**
+ * Archivia una partita online conclusa e libera il tavolo.
+ * Le mani fotografate dal motore (`state.rounds`) diventano le stesse righe
+ * del segnapunti dal vivo: sballi, congelate, Flip 7, ×2 e rimonte contano
+ * nelle statistiche esattamente come in una partita segnata a mano.
+ */
 export function saveOnlineGame(state) {
+  const keyOf = (sid) => (state.seats[sid] && state.seats[sid].playerId) || sid;
+  // Le mani ci sono solo dalle partite avviate da quando il tavolo le fotografa
+  // (`startedAt`): di una cominciata prima si archiviano i soli totali, meglio
+  // che un dettaglio a meta' che falserebbe medie e record.
+  const rounds = {};
+  if (state.startedAt) {
+    (state.rounds || []).forEach((played, i) => {
+      for (const [sid, entry] of Object.entries(played || {})) {
+        if (!state.seats[sid]) continue; // chi ha abbandonato non finisce nello storico
+        const key = keyOf(sid);
+        rounds[key] = { ...(rounds[key] || {}), [roundKey(i)]: entry };
+      }
+    });
+  }
+  const tracked = Object.keys(rounds).length > 0;
   const results = {};
   for (const sid of state.order) {
     const seat = state.seats[sid];
-    const key = seat.playerId || sid;
-    results[key] = { name: seat.name, total: Number(seat.total) || 0 };
+    const key = keyOf(sid);
+    const rows = Object.values(rounds[key] || {});
+    results[key] = {
+      name: seat.name,
+      total: Number(seat.total) || 0,
+      ...(tracked ? {
+        flip7s: rows.filter((e) => computeRound(e).flip7).length,
+        busts: rows.filter((e) => e && e.busted).length,
+        freezes: rows.filter((e) => e && e.frozen && !e.busted).length
+      } : {})
+    };
   }
   const top = Math.max(...Object.values(results).map((r) => r.total));
   const winnerIds = Object.fromEntries(Object.entries(results).filter(([, r]) => r.total === top).map(([id]) => [id, true]));
   const gameId = newId();
+  const now = Date.now();
   return commit({
     [`history/${gameId}`]: {
-      playedAt: Date.now(),
+      playedAt: state.startedAt || now,
+      finishedAt: now,
       targetScore: state.target || 200,
       source: "online",
       results,
       winnerIds,
-      rounds: null,
-      createdAt: Date.now()
+      rounds: tracked ? rounds : null,
+      createdAt: now
     },
     game: null
   }).then(() => gameId);
