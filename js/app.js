@@ -9,6 +9,7 @@ import { leaderboardView } from "./views/leaderboard.js";
 import { historyView } from "./views/history.js";
 import { setupView } from "./views/setup.js";
 import { tableView } from "./views/table.js";
+import { openNewRoomPage } from "./views/rooms.js";
 import { morph } from "./morph.js";
 import { DEFAULTS } from "./config.js";
 import { icon, wordmark, fanArt, googleG } from "./icons.js";
@@ -49,12 +50,16 @@ function renderTopbar(c) {
   const meName = me && room.players[me] ? room.players[me].name : null;
   const dot = status.mode === "firebase" ? (status.online ? "on" : "off") : "local";
   const live = room.live && room.live.status === "playing";
+  // il nome della stanza sta sempre in vista: con piu' stanze si deve sapere
+  // a colpo d'occhio dove si e', e da li' si cambia
+  const waiting = store.isOwner() ? store.knownRooms().reduce((n, r) => n + (r.current ? 0 : r.requests), 0) : 0;
   return `
     <div class="brand">
       ${wordmark("brand-mark")}
-      <div class="brand-txt">
-        <div class="room-sub"><i class="dot-status ${dot}"></i>${status.mode === "firebase" ? (status.online ? "in diretta" : "riconnessione…") : "solo locale"}${live ? " · partita in corso" : ""}</div>
-      </div>
+      <button class="brand-txt" data-action="rooms-menu" aria-label="Le tue stanze">
+        <span class="room-name"><b>${esc(room.meta.name || "Stanza")}</b>${icon("chevron", "tiny")}${waiting ? `<i class="room-badge">${waiting}</i>` : ""}</span>
+        <span class="room-sub"><i class="dot-status ${dot}"></i>${status.mode === "firebase" ? (status.online ? "in diretta" : "riconnessione…") : "solo locale"}${live ? " · partita in corso" : ""}</span>
+      </button>
     </div>
     <div class="top-actions">
       ${store.isOwner() ? `<button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>` : ""}
@@ -289,8 +294,7 @@ document.addEventListener("click", (ev) => {
   if (name === "share-top") { ev.preventDefault(); shareRoom(); return; }
   if (name === "create-room") {
     ev.preventDefault();
-    askText("Come si chiama il gruppo?", { value: "Ufficio", message: "Diventa il nome della stanza. Il codice segreto lo genero io.", confirmLabel: "Crea" })
-      .then((name) => { if (name) store.createRoom(name); });
+    openNewRoomPage();
     return;
   }
   if (name === "join-room" || name === "gate-switch") {
@@ -355,14 +359,8 @@ document.addEventListener("submit", (ev) => {
   const form = ev.target.closest("[data-submit]");
   if (!form) return;
   ev.preventDefault();
-  const name = form.dataset.submit;
-  if (name === "add-player") {
-    const input = form.querySelector('input[name="name"]');
-    const value = input.value.trim();
-    if (!value) return;
-    input.value = "";
-    store.addPlayer(value).then(() => { toast(value + " aggiunto"); render(); });
-  }
+  const fn = lookup("submits", form.dataset.submit);
+  if (fn) run(fn, form, ev);
 });
 
 window.addEventListener("hashchange", () => {

@@ -32,6 +32,8 @@ const PATHS = {
   download: `<path d="M12 3.4v11.8M7.2 10.8 12 15.6l4.8-4.8"/><path d="M4.2 20.2h15.6"/>`,
   upload: `<path d="M12 20.4V8.6M7.2 13 12 8.2l4.8 4.8"/><path d="M4.2 3.8h15.6"/>`,
   user: `<circle cx="12" cy="8.2" r="3.6"/><path d="M4.6 20.2a7.4 7.4 0 0 1 14.8 0"/>`,
+  users: `<circle cx="9.2" cy="8.4" r="3.3"/><path d="M3 20a6.2 6.2 0 0 1 12.4 0"/><path d="M15.2 5.4a3.3 3.3 0 0 1 0 6.2"/><path d="M17 14.3a6.2 6.2 0 0 1 4 5.7"/>`,
+  door: `<path d="M5.2 20.6V5.4A1.8 1.8 0 0 1 7 3.6h10a1.8 1.8 0 0 1 1.8 1.8v15.2"/><path d="M2.8 20.6h18.4"/><path d="M8.6 20.6V8.2l6.6-1.8v14.2"/><circle cx="13.1" cy="13.6" r="1" fill="currentColor" stroke="none"/>`,
   pen: `<path d="M3.6 20.4h4L19.4 8.6l-4-4L3.6 16.4Z"/><path d="M14.4 9.6 12 7.2"/>`,
   flag: `<path d="M5.4 21V3.6"/><path d="M5.4 4.6h11.8l-2.1 3.7 2.1 3.7H5.4"/>`,
   chevron: `<path d="m6.6 9.4 5.4 5.2 5.4-5.2"/>`,

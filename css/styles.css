@@ -1767,3 +1767,51 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- stanze ---------- */
+/* il nome della stanza in alto e' un bottone: apre l'elenco delle stanze */
+.brand-txt {
+  background: none; border: 0; padding: 0; margin: 0; text-align: left;
+  color: inherit; font: inherit; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+}
+.room-name { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.room-name b { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.room-name .ico { width: 14px; height: 14px; flex: none; color: var(--dim); }
+.room-badge {
+  flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--red); color: #fff; font-style: normal; font-size: 11px; font-weight: 750;
+  display: inline-grid; place-items: center; line-height: 1;
+}
+.room-list { display: flex; flex-direction: column; gap: 8px; }
+.room-row { display: flex; align-items: center; gap: 8px; }
+.room-go {
+  flex: 1; min-width: 0; min-height: 56px; padding: 8px 12px 8px 10px;
+  border: 0; border-radius: 14px; background: var(--surface-2); color: inherit; font: inherit;
+  display: flex; align-items: center; gap: 11px; text-align: left;
+}
+.room-row.on .room-go { background: var(--holo-soft); box-shadow: inset 0 0 0 1.5px var(--gold-line); }
+.room-go[disabled] { opacity: 1; }
+.room-ico { width: 36px; height: 36px; border-radius: 11px; flex: none; display: grid; place-items: center; background: var(--surface); color: var(--muted); }
+.room-row.on .room-ico { color: var(--gold); }
+.room-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.room-txt b { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-txt small { font-size: 12px; color: var(--muted); }
+/* partecipanti della stanza nuova */
+.chip-x { background: none; border: 0; padding: 0; margin-left: 2px; display: grid; place-items: center; color: var(--muted); }
+.chip-x .ico { width: 14px; height: 14px; }
+.pick-row {
+  flex: 1; min-width: 0; min-height: 44px; padding: 2px 0;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left;
+  display: flex; align-items: center; gap: 10px;
+}
+.pick-check {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.pick-row.on .pick-check { background: var(--green); color: #fff; box-shadow: none; }
+.chev .ico { transition: transform .18s ease; color: var(--dim); }
+.chev.open .ico { transform: rotate(180deg); }
+.sk-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; }
+.sk-inline.you { color: var(--green); }
+.sk-inline.none { color: var(--dim); }

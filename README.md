@@ -59,6 +59,8 @@ quello che consuma questa app.
    segnapunti in carica, più i **propri punti** della mano in corso per chi è legato a
    un giocatore; le partite già chiuse nello storico le può **correggere o
    eliminare solo il proprietario**, e ognuno può cambiare **solo il proprio avatar**.
+   Il nodo `users/<uid>/rooms` è l'**elenco delle stanze di ogni account** (lo legge e
+   scrive solo l'interessato, più il proprietario quando invita qualcuno in una stanza).
 
    > Hai già pubblicato le regole in passato? Ogni volta che il file cambia va
    > reincollato e ripubblicato dalla console, altrimenti il database continua a
@@ -114,22 +116,40 @@ Per aggiornarla in futuro basta un `git push`: Pages ripubblica da solo.
 
 **Prima volta (chi organizza)**
 
-1. Apri l'app: ti accoglie la schermata **Crea la stanza**. La stanza si crea
-   **una volta sola**: il codice è segreto, generato a caso, e resta salvato sul
-   tuo dispositivo — da lì in poi l'app si apre sempre lì. Non va ricreata a ogni
-   partita.
-2. Tab **Setup** → aggiungi i nomi dei giocatori.
-3. Torna su **Partita**: in cima trovi il riquadro *Chi segna i punti?* → premi
+1. Apri l'app: ti accoglie la schermata **Crea la stanza**. Si apre la maschera
+   **Nuova stanza**: un **nome** (es. *Ufficio*) e i **partecipanti**, un nome alla
+   volta. Il codice della stanza è segreto, generato a caso, e resta salvato sul
+   tuo dispositivo: la stanza si crea **una volta sola**, non a ogni partita.
+2. Atterri in **Setup**, con la stanza e i partecipanti già pronti: premi
+   **Condividi il link** e mandalo nella chat dell'ufficio. I colleghi non creano
+   niente: aprono il link, chiedono di entrare dicendo chi sono, tu li approvi da
+   **Setup → Partecipanti** ed è fatta, per sempre.
+3. Su **Partita**: in cima trovi il riquadro *Chi segna i punti?* → premi
    **Segno io i punti**.
-4. Premi **Condividi stanza** (o l'icona 🔗 in alto) e manda il link nella chat
-   dell'ufficio. I colleghi non creano niente: aprono il link, chiedono di entrare,
-   tu li approvi da **Setup → Membri** ed è fatta, per sempre.
 
-**Ogni collega**, aperto il link: accede con Google → chiede di entrare → tu lo
-approvi. Alla prima visita sceglie **chi è** fra i giocatori (o si crea): da quel
-momento il suo account resta **collegato per sempre a quel giocatore**, su qualunque
-dispositivo — e il collegamento può cambiarlo solo il proprietario, da
-**Setup → Membri** (matita accanto al nome).
+**Ogni collega**, aperto il link: accede con Google → sceglie **chi è** fra i
+giocatori (o dice il suo nome) → chiede di entrare → tu lo approvi. Da quel momento
+il suo account resta **collegato per sempre a quel giocatore**, su qualunque
+dispositivo — e il collegamento può cambiarlo solo il proprietario, dal menu **⋯**
+accanto al nome in **Setup → Partecipanti**.
+
+**Un gruppo, una stanza.** Se giochi anche con altri (gli amici del giovedì, la
+famiglia…) fai una **stanza per ogni gruppo**: ognuna ha giocatori, classifica,
+record, storico e tavoli online **tutti suoi**, e niente si mescola. Il nome della
+stanza sta sempre in alto a sinistra: toccalo per aprire **Le tue stanze**, passare
+da una all'altra o crearne una nuova. Nella maschera **Nuova stanza**, sotto ai
+nomi, trovi anche **Già nell'app**: le persone che sono già in una tua stanza. Chi
+spunti **entra senza chiedere**, col suo giocatore già collegato, e la stanza gli
+compare nell'elenco da sola (lo stesso si fa dopo, da *Setup → Partecipanti →
+Da un'altra stanza*). Tutti gli altri passano dal link e dalla tua approvazione:
+**decidi tu chi entra, e dove**. Dall'elenco vedi anche quante **richieste in
+attesa** ci sono nelle altre stanze, senza doverci entrare.
+
+**Il Setup è del proprietario.** Chi non gestisce la stanza ci trova soltanto il
+proprio **profilo** (l'avatar), il tema e l'account: giocatori, richieste, codice e
+backup li vede e li tocca solo chi ha creato la stanza. Le cose più tecniche
+(segnapunti, obiettivo punti, codice stanza, ID del dispositivo, backup) stanno
+sotto **Avanzate**, chiuse finché non servono.
 
 > **Ognuno può segnare i propri punti.** Chi non è segnapunti vede nel suo riquadro il
 > pulsante **Segna i miei punti** (e la casella del round sulla sua riga del tabellone):
@@ -410,7 +430,7 @@ js/avatar.js             avatar: simboli e colori predefiniti, foto ridotte, dis
 js/theme.js              tema chiaro/scuro
 js/game.js               motore del gioco online (regole ufficiali, logica pura)
 js/morph.js              ridisegno incrementale del tavolo (aggiorna solo cio' che cambia)
-js/views/                partita · tavolo · classifica · storico · setup
+js/views/                partita · tavolo · classifica · storico · setup · stanze
 database.rules.json      regole di sicurezza del database
 sw.js, manifest.webmanifest, icon.svg    supporto PWA
 server.mjs               server di sviluppo locale (npm start)
@@ -433,8 +453,16 @@ Firebase non scade e non chiede metodi di pagamento. Una partita muove qualche d
 **Serve internet?** Per la sincronia sì. L'app si apre comunque offline (è una PWA) e
 in mancanza di rete Firebase riallinea tutto appena torna il segnale.
 
-**Più tavoli in contemporanea?** Sì: Setup → *Cambia stanza* e scegli un codice diverso
-(es. `sala-riunioni`). Ogni stanza ha giocatori, partita e storico separati.
+**Gioco con più gruppi: si mescolano?** No. Ogni **stanza** è un mondo chiuso: giocatori,
+classifica, record, storico, partita in corso e tavoli online sono suoi e basta. Fai una
+stanza per l'ufficio e una per gli amici; il nome in alto a sinistra apre **Le tue
+stanze** per passare dall'una all'altra. Chi entra in una stanza non vede le altre, a
+meno che non lo faccia entrare tu anche lì.
+
+**Un collega è anche un amico: deve rifare tutto?** No. Quando crei la stanza (o dopo,
+da *Setup → Partecipanti → Da un'altra stanza*) lo spunti fra quelli **Già nell'app**:
+entra senza chiedere, col suo giocatore già collegato, e la stanza gli compare
+nell'elenco. Il suo avatar lo porta con sé, la classifica no: ogni stanza parte da zero.
 
 **Chiaro o scuro?** L'app segue il tema del telefono. Se preferisci forzarne uno:
 Setup → *Aspetto* → Chiaro / Scuro / Come il telefono.
@@ -448,7 +476,8 @@ segreto e non sta nel repository; il tuo ID di proprietario è scolpito nelle re
 che si cambiano solo dalla console Firebase con il tuo account Google. Dentro la
 stanza, il tabellone live resta scrivibile dal solo segnapunti in carica, le partite
 chiuse le corregge o elimina solo il proprietario, e l'avatar lo cambia solo il
-diretto interessato (o il proprietario).
+diretto interessato (o il proprietario). Solo il proprietario può **creare stanze**
+e **approvare** chi entra: gli altri, nel Setup, vedono soltanto il proprio profilo.
 
 **E se cambio telefono, rete o cancello i dati del browser?** Nessun problema:
 l'identità è l'**account Google**, non il dispositivo. Stesso account = stesso accesso

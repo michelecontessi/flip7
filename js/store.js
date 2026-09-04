@@ -13,7 +13,10 @@ const listeners = new Set();
 
 let roomId = DEFAULTS.roomId;
 let room = emptyRoom();
-let status = { mode: "local", ready: false, online: false, uid: deviceId(), access: "ok", error: null };
+// `rooms`: le stanze che questo account conosce (da users/<uid>/rooms, su Firebase);
+// `peek`: per il proprietario, uno sguardo alle ALTRE sue stanze (nome, richieste
+// in attesa, membri) senza doverci entrare.
+let status = { mode: "local", ready: false, online: false, uid: deviceId(), access: "ok", error: null, rooms: {}, peek: {} };
 let fb = null; // { db, ref, update, onValue, roomRef }
 
 export function emptyRoom() {
@@ -92,6 +95,9 @@ function localSave() {
 function localLoad() {
   try { return normalize(JSON.parse(localStorage.getItem(lsKey()))); } catch { return emptyRoom(); }
 }
+function localExists() {
+  try { return localStorage.getItem(lsKey()) !== null; } catch { return false; }
+}
 
 /** Applica un update multi-path (stessa semantica di firebase update()). */
 async function commit(updates) {
@@ -126,7 +132,7 @@ export async function init(id) {
   // ?local=1 forza la modalita' locale: utile per rileggere i dati salvati su
   // QUESTO dispositivo prima del collegamento a Firebase (e per recuperarli
   // con Setup -> Esporta, da reimportare poi nella stanza online).
-  const forceLocal = new URLSearchParams(location.search).get("local") === "1";
+  const forceLocal = typeof location !== "undefined" && new URLSearchParams(location.search).get("local") === "1";
   if (isFirebaseConfigured && !forceLocal) {
     try {
       await initFirebase();
@@ -136,14 +142,17 @@ export async function init(id) {
       status.error = "Firebase non raggiungibile (" + err.message + "). Dati salvati solo su questo dispositivo.";
     }
   }
-  initLocal();
+  await initLocal();
 }
 
-function initLocal() {
+async function initLocal() {
   status = { ...status, mode: "local", ready: true, online: false, uid: deviceId() };
+  const exists = localExists();
   room = localLoad();
   if (!room.meta.createdAt) room.meta.createdAt = Date.now();
   localSave();
+  await applyPendingRoom(exists);
+  rememberRoom();
   notify();
 }
 
@@ -185,6 +194,7 @@ async function initFirebase() {
     return;
   }
   adoptUser(user);
+  watchMyRooms();
   await attachRoom();
 }
 
@@ -205,6 +215,7 @@ export async function signIn() {
     adoptUser(cred.user);
     status.access = "checking";
     notify();
+    watchMyRooms();
     await attachRoom();
   } catch (err) {
     if (err && (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request")) return;
@@ -250,6 +261,7 @@ function attachRoom() {
       } else if (status.access !== "ok" && bootstrapTried) {
         status.access = "ok"; // lettura consentita: le regole non chiedono membership
       }
+      if (status.access === "ok") { rememberRoom(); syncPeeks(); }
       if (first) { first = false; resolve(); }
       notify();
     }, () => {
@@ -278,17 +290,33 @@ async function bootstrapOwner(roomExists) {
   }
   status.access = "ok";
   // battesimo della stanza: indipendente dalla registrazione fra i membri
-  if (!roomExists) {
-    try {
-      await commit({
-        "meta/name": prefs.get("pendingRoomName") || DEFAULTS.roomName,
-        "meta/targetScore": DEFAULTS.targetScore,
-        "meta/createdAt": Date.now()
-      });
-      prefs.set("pendingRoomName", null);
-    } catch { /* verra' ritentato al prossimo salvataggio di un'impostazione */ }
-  }
+  await applyPendingRoom(roomExists);
+  rememberRoom();
+  syncPeeks();
   notify();
+}
+
+/**
+ * Battesimo di una stanza appena creata: nome, obiettivo, i partecipanti
+ * indicati alla creazione e le persone gia' note che entrano senza chiedere.
+ * La "prenotazione" e' salvata sul dispositivo da prepareRoom(), perche' la
+ * creazione passa da un ricaricamento della pagina. Una stanza che esiste
+ * gia' non si tocca.
+ */
+async function applyPendingRoom(roomExists) {
+  const pending = prefs.get("pendingRoom");
+  const forThis = pending && pending.id === roomId ? pending : null;
+  if (forThis) prefs.set("pendingRoom", null);
+  if (roomExists) return;
+  const seed = seedRoom(forThis || { name: prefs.get("pendingRoomName") || DEFAULTS.roomName }, status.uid);
+  prefs.set("pendingRoomName", null);
+  try { await commit(seed.updates); }
+  catch { return; /* verra' ritentato al prossimo salvataggio di un'impostazione */ }
+  // agli invitati la stanza compare nel loro elenco senza bisogno del link
+  if (status.mode === "firebase" && fb) {
+    const entries = Object.fromEntries(Object.entries(seed.userRooms).map(([uid, v]) => [`${uid}/rooms/${roomId}`, v]));
+    if (Object.keys(entries).length) fb.update(fb.ref(fb.db, "users"), entries).catch(() => {});
+  }
 }
 
 /**
@@ -357,8 +385,200 @@ export function approveRequest(uid) {
 export function rejectRequest(uid) {
   return commit({ [`requests/${uid}`]: null });
 }
-export function revokeMember(uid) {
-  return commit({ [`members/${uid}`]: null, [`bindings/${uid}`]: null });
+export async function revokeMember(uid) {
+  await commit({ [`members/${uid}`]: null, [`bindings/${uid}`]: null });
+  // e la stanza sparisce dal suo elenco (scrittura concessa al proprietario)
+  if (status.mode === "firebase" && fb) fb.update(fb.ref(fb.db, `users/${uid}/rooms`), { [roomId]: null }).catch(() => {});
+}
+
+/**
+ * Fa entrare subito una persona gia' nota da un'altra stanza: membro, giocatore
+ * (col nome e l'avatar che ha di la', se c'e') e collegamento account -> giocatore,
+ * tutto in un colpo. Non deve chiedere ne' aspettare: apre l'app e la stanza c'e'.
+ */
+export async function inviteMember(person) {
+  if (!person || !person.uid) throw new Error("Persona non valida");
+  if (room.members && room.members[person.uid]) throw new Error("È già dentro");
+  const now = Date.now();
+  const label = String(person.playerName || person.name || "").trim().slice(0, 24) || "Membro";
+  const taken = new Set(Object.values(room.bindings || {}));
+  const free = Object.entries(room.players || {})
+    .find(([id, p]) => !p.archived && !taken.has(id) && p.name.toLowerCase() === label.toLowerCase());
+  const updates = { [`members/${person.uid}`]: { name: person.name || label, email: person.email || null, at: now, invited: true } };
+  let pid;
+  if (free) pid = free[0];
+  else {
+    pid = newId();
+    updates[`players/${pid}`] = { name: label, createdAt: now, archived: false, ...(person.avatar ? { avatar: person.avatar } : {}) };
+  }
+  updates[`bindings/${person.uid}`] = pid;
+  await commit(updates);
+  if (status.mode === "firebase" && fb) {
+    fb.update(fb.ref(fb.db, `users/${person.uid}/rooms`), { [roomId]: { name: room.meta.name || DEFAULTS.roomName, at: now } }).catch(() => {});
+  }
+  return pid;
+}
+
+// ---------------------------------------------------------------------------
+// Le mie stanze
+// ---------------------------------------------------------------------------
+/**
+ * Le stanze che questo account conosce, la corrente per prima: l'elenco vive
+ * in users/<uid>/rooms (segue l'account) e, come ripiego, sul dispositivo.
+ * Per il proprietario ogni voce porta anche le richieste in attesa la' dentro.
+ */
+export function knownRooms() {
+  const local = prefs.get("rooms", {}) || {};
+  const merged = { ...local, ...(status.mode === "firebase" ? status.rooms : {}) };
+  if (roomId && status.mode !== "none") merged[roomId] = { ...(merged[roomId] || {}), name: room.meta.name || (merged[roomId] || {}).name };
+  return Object.entries(merged)
+    .map(([id, r]) => {
+      const pk = status.peek[id] || {};
+      return { id, name: pk.name || (r && r.name) || id, at: (r && r.at) || 0, current: id === roomId, requests: pk.requests || 0 };
+    })
+    .sort((a, b) => (a.current ? -1 : b.current ? 1 : a.name.localeCompare(b.name, "it")));
+}
+
+let remembered = null;
+/** Segna la stanza corrente fra quelle conosciute (una volta per nome). */
+function rememberRoom() {
+  if (!roomId) return;
+  const name = room.meta.name || DEFAULTS.roomName;
+  const key = roomId + "|" + name;
+  if (remembered === key) return;
+  remembered = key;
+  const local = prefs.get("rooms", {}) || {};
+  local[roomId] = { name, at: (local[roomId] && local[roomId].at) || Date.now() };
+  prefs.set("rooms", local);
+  if (status.mode === "firebase" && fb && status.uid) {
+    const prev = status.rooms[roomId];
+    if (!prev || prev.name !== name) {
+      fb.update(fb.ref(fb.db, `users/${status.uid}/rooms`), { [roomId]: { name, at: (prev && prev.at) || Date.now() } }).catch(() => {});
+    }
+  }
+}
+
+/** Toglie una stanza dall'elenco (i dati della stanza restano dove sono). */
+export function forgetRoom(id) {
+  if (!id || id === roomId) return;
+  const local = prefs.get("rooms", {}) || {};
+  delete local[id];
+  prefs.set("rooms", local);
+  delete status.rooms[id];
+  delete status.peek[id];
+  const offs = peeks.get(id);
+  if (offs) { for (const off of offs) off(); peeks.delete(id); }
+  if (status.mode === "firebase" && fb && status.uid) {
+    fb.update(fb.ref(fb.db, `users/${status.uid}/rooms`), { [id]: null }).catch(() => {});
+  }
+  notify();
+}
+
+/** L'elenco delle stanze segue l'account: si aggiorna anche se il proprietario mi invita altrove. */
+function watchMyRooms() {
+  if (!fb || !status.uid) return;
+  fb.onValue(fb.ref(fb.db, `users/${status.uid}/rooms`), (snap) => {
+    status.rooms = snap.val() || {};
+    syncPeeks();
+    notify();
+  }, () => { /* regole senza `users`: resta l'elenco salvato sul dispositivo */ });
+}
+
+/**
+ * Il proprietario tiene d'occhio le altre sue stanze senza entrarci: nome,
+ * richieste in attesa e membri (per invitare qui chi e' gia' di la').
+ */
+const peeks = new Map(); // roomId -> [unsubscribe]
+function syncPeeks() {
+  if (!fb || status.access !== "ok" || !isOwner()) return;
+  for (const r of knownRooms()) {
+    if (r.current || peeks.has(r.id)) continue;
+    const info = (patch) => { status.peek[r.id] = { ...(status.peek[r.id] || {}), ...patch }; notify(); };
+    peeks.set(r.id, [
+      fb.onValue(fb.ref(fb.db, `rooms/${r.id}/meta/name`), (s) => info({ name: s.val() || r.name }), () => {}),
+      fb.onValue(fb.ref(fb.db, `rooms/${r.id}/requests`), (s) => info({ requests: Object.keys(s.val() || {}).length }), () => {}),
+      fb.onValue(fb.ref(fb.db, `rooms/${r.id}/members`), (s) => info({ members: s.val() || {} }), () => {})
+    ]);
+  }
+}
+
+/**
+ * Le persone gia' entrate in una delle mie stanze (io escluso): con il nome
+ * del giocatore e l'avatar, se in questa stanza sono collegate a uno.
+ * Servono a far entrare qualcuno in una stanza nuova senza passare dal link.
+ */
+export function knownPeople() {
+  const people = {};
+  const add = (uid, m, where) => {
+    if (!uid || uid === status.uid || !m) return;
+    const p = people[uid] || (people[uid] = { uid, name: m.name || "Membro", email: m.email || "", rooms: [] });
+    if (m.email && !p.email) p.email = m.email;
+    if (!p.rooms.includes(where)) p.rooms.push(where);
+  };
+  for (const [uid, m] of Object.entries(room.members || {})) add(uid, m, room.meta.name || roomId);
+  for (const [rid, pk] of Object.entries(status.peek || {})) for (const [uid, m] of Object.entries(pk.members || {})) add(uid, m, pk.name || rid);
+  for (const [uid, pid] of Object.entries(room.bindings || {})) {
+    const p = people[uid];
+    const pl = room.players[pid];
+    if (p && pl) { p.playerName = pl.name; if (pl.avatar) p.avatar = pl.avatar; }
+  }
+  return Object.values(people).sort((a, b) => (a.playerName || a.name).localeCompare(b.playerName || b.name, "it"));
+}
+
+/**
+ * Prepara i dati di una stanza nuova: nome, obiettivo, i giocatori dai nomi
+ * indicati e, per le persone gia' note (`invites`), giocatore + membro +
+ * collegamento, cosi' entrano senza chiedere. Logica pura: restituisce
+ * l'update relativo alla stanza e le voci per l'elenco stanze degli invitati.
+ */
+export function seedRoom(spec, ownerUid) {
+  const now = Date.now();
+  const name = String((spec && spec.name) || "").trim().slice(0, 40) || DEFAULTS.roomName;
+  const target = Math.max(10, Math.min(2000, Math.round(Number(spec && spec.targetScore) || DEFAULTS.targetScore)));
+  const updates = { "meta/name": name, "meta/targetScore": target, "meta/createdAt": now };
+  const seen = new Set();
+  const addPlayer = (label, extra = {}) => {
+    const clean = String(label || "").trim().slice(0, 24);
+    if (!clean || seen.has(clean.toLowerCase())) return null;
+    seen.add(clean.toLowerCase());
+    const id = newId();
+    updates[`players/${id}`] = { name: clean, createdAt: now, archived: false, ...extra };
+    return id;
+  };
+  const userRooms = {};
+  // prima gli invitati: se lo stesso nome e' anche fra quelli scritti a mano, vince il collegamento
+  for (const inv of (spec && spec.invites) || []) {
+    if (!inv || !inv.uid || inv.uid === ownerUid) continue;
+    const pid = addPlayer(inv.playerName || inv.name, inv.avatar ? { avatar: inv.avatar } : {});
+    updates[`members/${inv.uid}`] = { name: inv.name || inv.playerName || "Membro", email: inv.email || null, at: now, invited: true };
+    if (pid) updates[`bindings/${inv.uid}`] = pid;
+    userRooms[inv.uid] = { name, at: now };
+  }
+  for (const n of (spec && spec.players) || []) addPlayer(n);
+  return { name, updates, userRooms };
+}
+
+/** Sceglie il codice segreto della stanza nuova e mette da parte i dati per il battesimo. */
+export function prepareRoom(spec) {
+  const clean = String((spec && spec.name) || "").trim();
+  const slug = (clean || "stanza").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "stanza";
+  let rand = "";
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  for (const b of bytes) rand += alphabet[b % alphabet.length];
+  const id = `${slug}-${rand}`;
+  prefs.set("pendingRoom", { ...(spec || {}), name: clean || DEFAULTS.roomName, id });
+  return id;
+}
+
+/**
+ * Crea una stanza nuova e la apre (atterrando in Setup, dove si condivide il link).
+ * `spec`: { name, players: [nomi], invites: [persone da knownPeople()], targetScore }.
+ */
+export function createRoom(spec) {
+  if (typeof spec === "string") spec = { name: spec };
+  switchRoom(prepareRoom(spec || {}), "#setup");
 }
 
 /**
@@ -390,26 +610,14 @@ export function isOwner() {
   return Boolean(first && first[0] === status.uid);
 }
 
-/** Crea una stanza nuova con codice segreto e la apre. */
-export function createRoom(name) {
-  const clean = String(name || "").trim();
-  const slug = (clean || "stanza").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "stanza";
-  let rand = "";
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = new Uint8Array(8);
-  crypto.getRandomValues(bytes);
-  for (const b of bytes) rand += alphabet[b % alphabet.length];
-  if (clean) prefs.set("pendingRoomName", clean);
-  switchRoom(`${slug}-${rand}`);
-}
-
 /** Cambia stanza a caldo (ricarica la pagina: e' il modo piu' semplice e sicuro). */
-export function switchRoom(id) {
+export function switchRoom(id, hash = null) {
   const clean = String(id || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
   if (!clean) return;
   prefs.set("roomId", clean);
   const url = new URL(location.href);
   url.searchParams.set("room", clean);
+  if (hash !== null) url.hash = hash;
   location.href = url.toString();
 }
 

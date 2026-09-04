@@ -1,5 +1,17 @@
 {
   "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "rooms": {
+          "$roomId": {
+            ".write": "auth != null && (auth.uid === $uid || auth.uid === 'OWNER_UID')",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length <= 40)"
+          }
+        }
+      }
+    },
     "rooms": {
       "$roomId": {
         ".read": "auth != null && (auth.uid === 'OWNER_UID' || root.child('rooms/' + $roomId + '/members/' + auth.uid).exists())",
