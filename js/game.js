@@ -13,6 +13,8 @@
 //     chi era ancora in gioco incassa comunque le proprie carte
 //   - punteggio: (somma numeri, x2 se hai il x2) + modificatori + eventuale 15
 //   - il mazzo continua fra i round; finito, si rimescolano gli scarti
+//   - pareggio al traguardo: manche di SPAREGGIO fra i soli pari merito
+//     (gli altri restano fuori), ripetuta finche' resta un vincitore solo
 // ---------------------------------------------------------------------------
 
 export const CARD = {
@@ -71,6 +73,7 @@ export function normalizeGame(g) {
   state.lastAction = g.lastAction || null;
   state.trend = toList(g.trend);
   state.rounds = toList(g.rounds);
+  state.tiebreak = toList(g.tiebreak);
   return state;
 }
 
@@ -85,14 +88,14 @@ export function createLobby(target = 200, meta = {}) {
     id: meta.id || null,
     owner: meta.owner || null,
     createdAt: Date.now(),
-    status: "lobby", target, round: 0, seats: {}, order: [], deck: [], discard: [], hands: {}, log: []
+    status: "lobby", target, round: 0, seats: {}, order: [], deck: [], discard: [], hands: {}, log: [], tiebreak: null
   };
 }
 
 /** Avvia la partita (deckOverride serve ai test). */
 export function startGame(state, rng = Math.random, deckOverride = null) {
   if (state.order.length < 2) throw new Error("Servono almeno 2 giocatori seduti");
-  const s = { ...state, status: "playing", round: 1, startedAt: Date.now(), discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [], rounds: [] };
+  const s = { ...state, status: "playing", round: 1, startedAt: Date.now(), discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [], rounds: [], tiebreak: null };
   s.deck = deckOverride ? [...deckOverride] : shuffle(fullDeck(), rng);
   s.hands = {};
   for (const sid of s.order) s.hands[sid] = emptyHand();
@@ -154,6 +157,7 @@ function endRound(s) {
   const played = {}; // la fotografia delle mani di questo round, per lo storico
   for (const sid of s.order) {
     const h = s.hands[sid];
+    if (h.out === "excluded") continue; // spareggio: non ha giocato, niente mano ne' punti
     if (!h.out) h.out = "stay"; // il round e' finito: chi era in gioco incassa
     const pts = h.out === "bust" ? 0 : handPoints(h);
     s.lastRound[sid] = pts;
@@ -171,18 +175,34 @@ function endRound(s) {
   s.rounds = [...(s.rounds || []), played];
   // storia dei totali round per round (per il grafico di andamento)
   s.trend = [...(s.trend || []), Object.fromEntries(s.order.map((sid) => [sid, s.seats[sid].total || 0]))];
-  const someoneWon = s.order.some((sid) => (s.seats[sid].total || 0) >= s.target);
-  s.status = someoneWon ? "over" : "roundEnd";
+  // Fine partita: il traguardo tagliato basta solo se davanti c'e' UNA persona.
+  // A pari merito si gioca una manche di spareggio fra i soli pari (gli altri
+  // restano fuori), e si ripete finche' resta un vincitore solo.
+  const totalOf = (sid) => s.seats[sid].total || 0;
+  const top = Math.max(...s.order.map(totalOf));
+  const leaders = s.order.filter((sid) => totalOf(sid) === top);
+  const playoff = top >= s.target && leaders.length > 1;
+  s.tiebreak = playoff ? leaders : null;
+  s.status = top >= s.target && !playoff ? "over" : "roundEnd";
+  if (playoff) logIt(s, `Pareggio a ${top}: spareggio fra ${leaders.map((sid) => s.seats[sid].name).join(" e ")}`);
   return s;
 }
 
-/** Prepara il round successivo (l'ordine ruota: cambia chi parte). */
+/**
+ * Prepara il round successivo (l'ordine ruota: cambia chi parte).
+ * Se e' una manche di spareggio (`tiebreak`), chi non e' pari merito parte
+ * gia' fuori: resta seduto e guarda, senza carte e senza punti.
+ */
 export function nextRound(state) {
   const s = { ...state, status: "playing", round: state.round + 1, pending: null, flip3: null, lastDraw: null, lastRound: null, endReason: null };
   s.order = [...state.order.slice(1), state.order[0]];
+  const only = (state.tiebreak || []).length ? new Set(state.tiebreak) : null;
   s.hands = {};
-  for (const sid of s.order) s.hands[sid] = emptyHand();
-  s.turn = s.order[0];
+  for (const sid of s.order) {
+    s.hands[sid] = emptyHand();
+    if (only && !only.has(sid)) s.hands[sid].out = "excluded";
+  }
+  s.turn = s.order.find((sid) => !s.hands[sid].out) || s.order[0];
   return s;
 }
 
@@ -196,6 +216,7 @@ export function abandonGame(state, sid) {
   const s = structuredClone(state);
   s.status = "over";
   s.endReason = "left";
+  s.tiebreak = null;
   s.endedBy = s.seats[sid].name;
   s.pending = null;
   s.flip3 = null;

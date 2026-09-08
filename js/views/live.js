@@ -10,7 +10,7 @@ import { esc, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askCho
 import { avatar } from "../avatar.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card } from "../icons.js";
 import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry } from "../scoring.js";
-import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter } from "../stats.js";
+import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter, roundPlayers, tiebreakOf } from "../stats.js";
 
 const localState = { selected: null, target: null, showRounds: false, mode: "cards" };
 
@@ -26,9 +26,14 @@ const entryOf = (live, pid, r) => (live.scores && live.scores[pid] && live.score
 /** Ordine di inserimento: quello del tavolo, non della classifica. */
 const boardOrder = (live) => orderedPlayerIds(live);
 
+/** Chi gioca il round in corso: tutti, o i soli pari merito dello spareggio. */
+const playingNow = (live) => roundPlayers(live, live.round || 0);
+/** true se quel giocatore sta fuori dalla manche di spareggio in corso. */
+const isOut = (live, pid) => !playingNow(live).includes(pid);
+
 function missingIds(live) {
   const r = live.round || 0;
-  return boardOrder(live).filter((pid) => !entryOf(live, pid, r));
+  return playingNow(live).filter((pid) => !entryOf(live, pid, r));
 }
 
 /**
@@ -38,6 +43,7 @@ function missingIds(live) {
  */
 function canSelfScore(room, live, me) {
   if (!live || live.status !== "playing" || !me || !live.players || !live.players[me]) return false;
+  if (isOut(live, me)) return false; // fuori dallo spareggio: niente da segnare
   return store.getStatus().mode !== "firebase" || store.myPlayerId() === me;
 }
 
@@ -182,7 +188,9 @@ function renderYouCard(live, standings, me, selfId) {
       </div>
       ${selfId ? `
       <button class="btn primary big" data-action="calc-self">${icon("pen", "tiny")} ${cur ? "Correggi i miei punti" : `Segna i miei punti · round ${(live.round || 0) + 1}`}</button>
-      <p class="hint">Solo i tuoi, per fare prima: il resto lo segna il segnapunti.</p>` : ""}
+      <p class="hint">Solo i tuoi, per fare prima: il resto lo segna il segnapunti.</p>`
+      : live.status === "playing" && isOut(live, me)
+        ? `<p class="hint">Sei fuori dallo spareggio: questa manche la giocano solo i pari merito.</p>` : ""}
     </section>`;
 }
 
@@ -199,10 +207,29 @@ function roundCellContent(entry, editable) {
   return `<span class="rc-val">+${r.total}</span>`;
 }
 
+/**
+ * La striscia dello spareggio: si e' arrivati al traguardo in parita', quindi
+ * questa manche la giocano solo i pari merito e gli altri stanno fermi.
+ */
+function playoffStrip(live, standings) {
+  const only = tiebreakOf(live, live.round || 0);
+  if (!only) return "";
+  const tied = standings.filter((row) => only.includes(row.playerId));
+  const names = tied.map((row) => esc(row.name));
+  const at = tied.length ? tied[0].total : 0;
+  return `
+    <div class="playoff-strip">
+      ${icon("flag", "tiny")}
+      <span><b>Spareggio</b> · pareggio a ${at}: la manche la giocano
+        ${names.length === 2 ? names.join(" e ") : names.join(", ")}, gli altri stanno fuori.</span>
+    </div>`;
+}
+
 function renderBoard(room, live, standings, me, { editable, selfId = null }) {
   const r = live.round || 0;
   const target = live.targetScore || 200;
-  const ids = boardOrder(live);
+  const playing = playingNow(live);
+  const playoff = Boolean(tiebreakOf(live, r));
   const missing = missingIds(live);
   const finished = live.status === "finished";
   const starter = finished ? null : roundStarter(live);
@@ -214,20 +241,23 @@ function renderBoard(room, live, standings, me, { editable, selfId = null }) {
           <span class="round-word">Round</span>
           ${roundCard(r + 1)}
         </span>
+        ${playoff && !finished ? `<span class="playoff-pill">${icon("flag", "tiny")}spareggio</span>` : ""}
         ${!editable && !finished ? `<span class="live-pill"><i></i>LIVE</span>` : ""}
         <span class="round-meta ml-auto">${finished
           ? `<b>partita chiusa</b>`
           : missing.length
-            ? `<b>${ids.length - missing.length} di ${ids.length} segnati</b><span>si vince a ${target}</span>`
+            ? `<b>${playing.length - missing.length} di ${playing.length} segnati</b><span>si vince a ${target}</span>`
             : `<b class="done-note">round completo</b><span>si vince a ${target}</span>`}</span>
       </div>
+
+      ${finished ? "" : playoffStrip(live, standings)}
 
       ${starter ? `
       <div class="opens-strip">
         ${icon("cardFan", "tiny")}
         <span>Apre la mano <b>${esc(nameOf(room, live, starter))}</b></span>
         <span class="opens-seq" title="ordine del giro, come siete seduti">
-          ${(() => { const i = ids.indexOf(starter); return [...ids.slice(i), ...ids.slice(0, i)]; })()
+          ${(() => { const i = playing.indexOf(starter); return [...playing.slice(i), ...playing.slice(0, i)]; })()
             .map((pid, i) => `${i ? '<i class="sep">›</i>' : ""}${avatar(pid, nameOf(room, live, pid), "xs")}`).join("")}
         </span>
       </div>` : ""}
@@ -237,23 +267,27 @@ function renderBoard(room, live, standings, me, { editable, selfId = null }) {
       <ol class="board-rows">
         ${standings.map((row) => {
           const entry = entryOf(live, row.playerId, r);
+          const out = !finished && !playing.includes(row.playerId);
           const left = Math.max(0, target - row.total);
           const pct = Math.max(1, Math.min(100, (row.total / target) * 100));
           const self = !editable && !finished && row.playerId === selfId;
-          const inner = roundCellContent(entry, (editable || self) && !finished);
-          const cell = editable && !finished
+          const inner = roundCellContent(entry, (editable || self) && !finished && !out);
+          const cell = out
+            ? `<span class="round-cell static out"><span class="rc-out">fuori</span></span>`
+            : editable && !finished
             ? `<button class="round-cell ${entry ? "filled" : "todo"}" data-action="calc-open" data-id="${row.playerId}">${inner}</button>`
             : self
               ? `<button class="round-cell self ${entry ? "filled" : "todo"}" data-action="calc-self" aria-label="Segna i tuoi punti">${inner}</button>`
               : `<span class="round-cell static ${entry ? "filled" : ""}">${inner}</span>`;
           const notes = [];
+          if (out) notes.push('<i class="sidelined">fuori dallo spareggio</i>');
           if (row.playerId === starter) notes.push('<i class="opens">apre</i>');
           if (row.playerId === me) notes.push('<i class="you">tu</i>');
           if (row.flip7s) notes.push(row.flip7s + "× flip 7");
           if (row.busts) notes.push(row.busts + "× sballo");
           if (row.freezes) notes.push(row.freezes + "× congelato");
           return `
-            <li class="brow ${row.playerId === me ? "me" : ""} ${row.rank === 1 ? "leader" : ""}">
+            <li class="brow ${row.playerId === me ? "me" : ""} ${row.rank === 1 ? "leader" : ""} ${out ? "sidelined" : ""}">
               <span class="rank r${row.rank}">${row.rank === 1 && row.total > 0 ? crownEmblem("rank-crown") : row.rank}</span>
               <span class="bname">
                 ${avatar(row.playerId, row.name, "sm")}
@@ -272,9 +306,11 @@ function renderBoard(room, live, standings, me, { editable, selfId = null }) {
       ${editable && !finished ? `
         <div class="board-cta">
           ${missing.length
-            ? `<button class="btn primary big" data-action="score-next">Segna i punti · ${ids.length - missing.length}/${ids.length}</button>`
+            ? `<button class="btn primary big" data-action="score-next">Segna i punti · ${playing.length - missing.length}/${playing.length}</button>`
             : `
-            <div class="round-done">${icon("check", "tiny")} Tutti i punteggi del round ${r + 1} sono segnati</div>
+            <div class="round-done">${icon("check", "tiny")} ${playoff
+              ? `Lo spareggio del round ${r + 1} è segnato`
+              : `Tutti i punteggi del round ${r + 1} sono segnati`}</div>
             <button class="btn go big pulse" data-action="round-close">Chiudi round ${r + 1} — via al round ${r + 2} →</button>`}
         </div>
         <div class="board-links">
@@ -298,14 +334,17 @@ function renderRoundsTable(room, live) {
       ${localState.showRounds ? `
       <div class="table-scroll">
         <table class="rounds">
-          <thead><tr><th>Giocatore</th>${Array.from({ length: n }, (_, i) => `<th>R${i + 1}</th>`).join("")}<th>Tot</th></tr></thead>
+          <thead><tr><th>Giocatore</th>${Array.from({ length: n }, (_, i) => tiebreakOf(live, i)
+            ? `<th class="sp" title="manche di spareggio">R${i + 1}<i>sp</i></th>`
+            : `<th>R${i + 1}</th>`).join("")}<th>Tot</th></tr></thead>
           <tbody>
             ${ids.map((pid) => {
               const rows = (live.scores && live.scores[pid]) || {};
               let sum = 0;
               const cells = Array.from({ length: n }, (_, i) => {
                 const e = rows[roundKey(i)];
-                if (!e) return `<td class="dim">·</td>`;
+                // in una manche di spareggio chi era fuori non ha mano: non e' un buco
+                if (!e) return tiebreakOf(live, i) ? `<td class="dim" title="fuori dallo spareggio">–</td>` : `<td class="dim">·</td>`;
                 const c = computeRound(e);
                 sum += c.total;
                 return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${c.doubled ? " x2" : ""}">${c.doubled ? `<span class="x2-val">${c.total}<i class="x2-flag">×2</i></span>` : c.total}</td>`;
@@ -356,7 +395,7 @@ function renderFinished(room, live, standings, me) {
 // Pannello di inserimento punti
 // ---------------------------------------------------------------------------
 function openScoreSheet(room, live, startPid) {
-  const order = boardOrder(live);
+  const order = playingNow(live);
   const r = live.round || 0;
   const pid = startPid || missingIds(live)[0] || order[0];
   openSheet(buildSheetState(room, live, order, r, pid), renderScoreSheet, patchCalcSheet, { full: true });

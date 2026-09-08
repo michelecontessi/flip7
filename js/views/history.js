@@ -5,7 +5,7 @@
 import * as store from "../store.js";
 import { esc, initials, colorOf, fmtDate, fmtDateTime, inputDate, openSheet, closeSheet, askText, askConfirm, askChoice, toast, sheet, captureSheetInputs, openPage, closePage, page, capturePageInputs } from "../ui.js";
 import { icon, crownEmblem } from "../icons.js";
-import { historyList, roundCount, reviseGame, roundKey, playerTotal } from "../stats.js";
+import { historyList, roundCount, reviseGame, roundKey, playerTotal, tiebreakOf } from "../stats.js";
 import { computeRound, isBlankEntry } from "../scoring.js";
 import { avatar, avatarHtml, playerAvatar } from "../avatar.js";
 import { renderScoreSheet, patchCalcSheet, makeCalcState, normalizeEntry } from "./live.js";
@@ -314,13 +314,16 @@ function renderGameSheet(s) {
         <div class="calc-label"><span>Round</span></div>
         <div class="table-scroll">
           <table class="rounds">
-            <thead><tr><th>Giocatore</th>${Array.from({ length: nRounds }, (_, i) => `<th>R${i + 1}</th>`).join("")}</tr></thead>
+            <thead><tr><th>Giocatore</th>${Array.from({ length: nRounds }, (_, i) => tiebreakOf(g, i)
+              ? `<th class="sp" title="manche di spareggio">R${i + 1}<i>sp</i></th>`
+              : `<th>R${i + 1}</th>`).join("")}</tr></thead>
             <tbody>
               ${rows.map(([id, r]) => `
                 <tr class="${hl.pid === id ? "hl-row" : ""}"><th>${esc(r.name)}</th>${Array.from({ length: nRounds }, (_, i) => {
                   const e = g.rounds[id] && g.rounds[id][roundKey(i)];
                   const mark = hl.pid === id && hl.round === i ? " hl" : "";
-                  if (!e) return `<td class="dim${mark}">·</td>`;
+                  // in uno spareggio chi era fuori non ha mano: non e' un buco
+                  if (!e) return tiebreakOf(g, i) ? `<td class="dim${mark}" title="fuori dallo spareggio">–</td>` : `<td class="dim${mark}">·</td>`;
                   const c = computeRound(e);
                   return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${mark}${c.doubled ? " x2" : ""}">${c.doubled ? `<span class="x2-val">${c.total}<i class="x2-flag">×2</i></span>` : c.total}</td>`;
                 }).join("")}</tr>`).join("")}

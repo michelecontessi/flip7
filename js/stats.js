@@ -61,15 +61,40 @@ export function orderedPlayerIds(live) {
 }
 
 /**
+ * I pari merito di una manche di SPAREGGIO, o null se quel round lo giocano
+ * tutti. Nasce dal pareggio al traguardo: `live.tiebreaks` tiene un elenco di
+ * giocatori per ogni round che e' uno spareggio (r3, r4...).
+ */
+export function tiebreakOf(live, roundIndex) {
+  const raw = live && live.tiebreaks && live.tiebreaks[roundKey(roundIndex)];
+  const ids = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.values(raw) : null;
+  return ids && ids.length ? ids.filter(Boolean) : null;
+}
+
+/** Chi gioca il round indicato: tutti, o i soli pari merito dello spareggio. */
+export function roundPlayers(live, roundIndex) {
+  const only = tiebreakOf(live, roundIndex);
+  const ids = orderedPlayerIds(live);
+  return only ? ids.filter((pid) => only.includes(pid)) : ids;
+}
+
+/**
  * Chi apre la mano corrente: il sorteggiato (`firstIdx`) nel primo round,
- * poi si ruota di un posto a ogni round. Null sulle partite vecchie
+ * poi si ruota di un posto a ogni round. In una manche di spareggio la
+ * rotazione salta chi e' rimasto fuori. Null sulle partite vecchie
  * cominciate senza sorteggio.
  */
 export function roundStarter(live) {
   if (!live || live.firstIdx === undefined || live.firstIdx === null) return null;
   const ids = orderedPlayerIds(live);
   if (!ids.length) return null;
-  return ids[((Number(live.firstIdx) || 0) + (live.round || 0)) % ids.length];
+  const from = ((Number(live.firstIdx) || 0) + (live.round || 0)) % ids.length;
+  const playing = roundPlayers(live, live.round || 0);
+  for (let i = 0; i < ids.length; i++) {
+    const pid = ids[(from + i) % ids.length];
+    if (playing.includes(pid)) return pid;
+  }
+  return ids[from];
 }
 
 function lastRoundOf(live, pid) {
@@ -534,6 +559,15 @@ export function reviseGame(game, draft) {
       kept.forEach((from, to) => { if (src[roundKey(from)]) dst[roundKey(to)] = src[roundKey(from)]; });
       if (Object.keys(dst).length) rounds[pid] = dst;
     }
+    // i round si rinumerano: le manche di spareggio seguono lo stesso spostamento
+    if (base.tiebreaks) {
+      const moved = {};
+      kept.forEach((from, to) => {
+        const only = base.tiebreaks[roundKey(from)];
+        if (only) moved[roundKey(to)] = (Array.isArray(only) ? only : Object.values(only)).filter((pid) => ids.includes(pid));
+      });
+      base.tiebreaks = Object.keys(moved).length ? moved : null;
+    }
   }
 
   const results = {};
@@ -567,6 +601,8 @@ export function reviseGame(game, draft) {
     results,
     winnerIds: Object.fromEntries(winners.map((pid) => [pid, true])),
     rounds,
+    // senza le mani non ha piu' senso ricordare quali round erano spareggi
+    tiebreaks: rounds ? base.tiebreaks || null : null,
     editedAt: Date.now()
   };
   // la fine della partita segue lo spostamento della data

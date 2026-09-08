@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import { firebaseConfig, FIREBASE_SDK_VERSION, isFirebaseConfigured, DEFAULTS } from "./config.js";
 import { prefs, deviceId } from "./prefs.js";
-import { roundKey, playerTotal, liveStandings, winnersOf, orderedPlayerIds } from "./stats.js";
+import { roundKey, liveStandings, winnersOf, roundPlayers } from "./stats.js";
 import { computeRound } from "./scoring.js";
 
 const listeners = new Set();
@@ -701,13 +701,18 @@ export function clearRoundEntry(playerId, roundIndex) {
   return commit({ [`live/scores/${playerId}/${roundKey(roundIndex)}`]: null });
 }
 
-/** Chiude il round corrente: i giocatori senza entry prendono 0. */
+/**
+ * Chiude il round corrente: chi lo giocava e non ha entry prende 0.
+ * Se al traguardo si arriva in parita', la partita NON finisce: si apre una
+ * manche di SPAREGGIO fra i soli pari merito (segnata in `live/tiebreaks`),
+ * e si ripete finche' resta un vincitore solo.
+ */
 export function closeRound() {
   const live = room.live;
   if (!live || live.status !== "playing") return Promise.resolve();
   const r = live.round || 0;
   const updates = {};
-  for (const pid of orderedPlayerIds(live)) {
+  for (const pid of roundPlayers(live, r)) {
     const cur = live.scores && live.scores[pid] && live.scores[pid][roundKey(r)];
     if (!cur) updates[`live/scores/${pid}/${roundKey(r)}`] = { numbers: [], plus: [], doubled: false, busted: false, skipped: true };
   }
@@ -719,12 +724,18 @@ export function closeRound() {
     setAt({ live: simulated }, path, value);
   }
   const target = live.targetScore || DEFAULTS.targetScore;
-  const anyReached = orderedPlayerIds(simulated).some((pid) => playerTotal(simulated, pid) >= target);
-  if (anyReached) {
-    const standings = liveStandings(simulated, room.players);
-    updates["live/status"] = "finished";
-    updates["live/finishedAt"] = Date.now();
-    updates["live/winnerIds"] = Object.fromEntries(winnersOf(standings).map((id) => [id, true]));
+  const standings = liveStandings(simulated, room.players);
+  const top = standings.length ? standings[0].total : 0;
+  if (top >= target) {
+    const leaders = winnersOf(standings);
+    if (leaders.length > 1) {
+      // pareggio in testa: il round dopo lo giocano solo loro
+      updates[`live/tiebreaks/${roundKey(r + 1)}`] = leaders;
+    } else {
+      updates["live/status"] = "finished";
+      updates["live/finishedAt"] = Date.now();
+      updates["live/winnerIds"] = Object.fromEntries(leaders.map((id) => [id, true]));
+    }
   }
   return commit(updates);
 }
@@ -732,8 +743,13 @@ export function closeRound() {
 export function reopenRound() {
   const live = room.live;
   if (!live) return Promise.resolve();
-  const r = Math.max(0, (live.round || 0) - 1);
-  return commit({ "live/round": r, "live/status": "playing", "live/winnerIds": null, "live/finishedAt": null });
+  const cur = live.round || 0;
+  const r = Math.max(0, cur - 1);
+  return commit({
+    "live/round": r, "live/status": "playing", "live/winnerIds": null, "live/finishedAt": null,
+    // il round che si riapre non e' piu' uno spareggio: si ricalcola alla prossima chiusura
+    [`live/tiebreaks/${roundKey(cur)}`]: null
+  });
 }
 
 /** Termina la partita subito, senza aspettare il target. */
@@ -780,6 +796,7 @@ export function saveGameToHistory() {
     results,
     winnerIds,
     rounds: live.scores || null,
+    tiebreaks: live.tiebreaks || null,
     createdAt: Date.now()
   };
   const gameId = live.gameId || newId();
@@ -831,6 +848,15 @@ export function saveOnlineGame(state) {
       }
     });
   }
+  // le manche di SPAREGGIO: round giocati non da tutti, ma dai soli pari
+  // merito. Nello storico servono a spiegare le caselle vuote di quel round.
+  const tiebreaks = {};
+  if (state.startedAt) {
+    (state.rounds || []).forEach((played, i) => {
+      const sids = Object.keys(played || {}).filter((sid) => state.seats[sid]);
+      if (sids.length && sids.length < state.order.length) tiebreaks[roundKey(i)] = sids.map(keyOf);
+    });
+  }
   const tracked = Object.keys(rounds).length > 0;
   const results = {};
   for (const sid of state.order) {
@@ -860,6 +886,7 @@ export function saveOnlineGame(state) {
       results,
       winnerIds,
       rounds: tracked ? rounds : null,
+      tiebreaks: Object.keys(tiebreaks).length ? tiebreaks : null,
       createdAt: now
     }
   };

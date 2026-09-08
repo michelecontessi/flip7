@@ -190,6 +190,17 @@ sotto **Avanzate**, chiuse finché non servono.
    **Salva e inizia nuova partita** per rigiocare subito con gli stessi,
    oppure **Salva e basta**. Il vincitore incassa la sua Crown.
 
+**Pareggio al traguardo? Si spareggia.** Se al traguardo si arriva **in parità**
+la partita non finisce: si gioca una **manche di spareggio** fra i soli pari
+merito, e **gli altri restano fuori**. Il tabellone lo dice a chiare lettere
+(*Spareggio · pareggio a 210: la manche la giocano Anna e Luca, gli altri stanno
+fuori*), la pastiglia **spareggio** compare accanto al numero del round, chi è
+fuori ha la riga spenta con la sua casella segnata *fuori* — e a nessuno viene
+messo uno zero d'ufficio. Si segna solo per chi gioca (*Segna i punti · 0/2*), e
+se la manche finisce ancora pari se ne gioca un'altra, finché uno resta davanti.
+Nella tabella dei round le manche di spareggio hanno la loro colonna marcata
+**sp**, così anche nello Storico si capisce perché lì mancano dei punteggi.
+
 Il pannello dei punti si **chiude appena salvi**: capita spesso di segnare al volo la
 mano di uno solo, e ritrovarsi dentro il giocatore dopo faceva perdere il filo. Per
 passare da un giocatore all'altro senza uscire ci sono le frecce in cima al pannello.
@@ -245,7 +256,9 @@ regole ufficiali del gioco:
   si mettono da parte e si risolvono dopo (perse se sballa);
 - **FLIP 7**: sette numeri diversi → +15 e il round si chiude all'istante per tutti
   (chi era ancora in gioco incassa comunque le proprie carte);
-- punteggio: somma dei numeri, ×2 se hai il ×2, poi i +, come da regolamento.
+- punteggio: somma dei numeri, ×2 se hai il ×2, poi i +, come da regolamento;
+- **pareggio al traguardo → spareggio**: la partita non finisce, si gioca una manche
+  extra fra i soli pari merito e si ripete finché resta un vincitore solo.
 
 Si apre un tavolo, ci si siede (ognuno è il **suo** giocatore, grazie al collegamento
 account→giocatore), e a fine partita **la vittoria vale una Crown** nello storico, come
@@ -290,10 +303,20 @@ fila (qualunque cosa sia: numero, modificatore o azione), i punti del round e la
 restano fermi al valore di prima, e chip, note e riga spenta aspettano il verdetto. Solo
 quando la carta è atterrata scivola al suo posto in ordine, e i punti si aggiornano.
 
-**Il giro si legge dall'alto in basso**: il proprio posto resta sempre in cima, sotto ci
-sono gli altri nell'ordine in cui giocano nel round, a partire da chi apre (etichetta
-*apre* e numero sull'avatar: 1 è chi apre, 2 chi viene dopo…). A round chiuso la lista
-si riordina già sul giro successivo, e la striscia dice chi aprirà.
+**Il giro si legge dall'alto in basso, turno per turno**: in cima c'è sempre **chi deve
+giocare adesso**, sotto chi viene dopo, e così via nel giro (numero sull'avatar: 1 è chi
+apre, 2 chi viene dopo…). A ogni turno la lista **ruota di un posto**, con le righe che
+scivolano al posto nuovo invece di saltarci. Il **tuo** posto non viene spostato in cima:
+si riconosce ovunque finisca dal filo dorato e dall'etichetta **tu**, così vedi il giro
+com'è davvero e resti comunque riconoscibile. A round chiuso la lista si riordina già sul
+giro successivo, e la striscia dice chi aprirà.
+
+**Lo spareggio, al tavolo**: se il traguardo viene tagliato in parità la striscia annuncia
+*Pareggio a 210 · spareggio fra Anna e Luca: gli altri restano fuori*, il pulsante diventa
+**Via allo spareggio** e la manche extra la giocano solo loro. Chi è fuori resta seduto,
+scende in fondo alla lista con l'etichetta *fuori*, non riceve carte e non prende punti;
+se anche lo spareggio finisce pari se ne gioca un altro. Nello storico quella manche resta
+segnata come tale, con la colonna **sp** nella tabella dei round.
 
 **La fine della partita si vede**: quando qualcuno supera l'obiettivo l'ultima mano resta
 sul tavolo, sballi e carte comprese, con la striscia che annuncia il vincitore. Il podio

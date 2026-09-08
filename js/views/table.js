@@ -7,7 +7,9 @@
 // Layout (pensato per il telefono, come un tavolo da gioco online): in cima
 // la striscia che dice sempre chi deve fare cosa, con i comandi sotto; il
 // banco (mazzo e carta girata) accanto; poi una riga per giocatore con nome,
-// stato, punti e TUTTE le sue carte in fila. Le carte si dimensionano
+// stato, punti e TUTTE le sue carte in fila. Le righe stanno nell'ordine in
+// cui si gioca: in cima chi ha il turno adesso, poi chi viene dopo; il proprio
+// posto e' segnato (bordo e "tu") ovunque si trovi. Le carte si dimensionano
 // sull'altezza dello schermo, cosi' il tabellone sta in una schermata sola.
 // Su desktop le stesse parti si dispongono su due colonne.
 // ---------------------------------------------------------------------------
@@ -19,7 +21,7 @@ import * as engine from "../game.js";
 
 // "stay" copre anche chi viene chiuso d'ufficio a fine round (flip7 altrui,
 // carte finite): "ha incassato" e' vero in entrambi i casi, "si e' fermato" no
-const OUT_LABEL = { stay: "ha incassato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7" };
+const OUT_LABEL = { stay: "ha incassato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7", excluded: "fuori" };
 // le carte azione hanno un riquadro tutto loro: nome, colore e cosa fare
 const ACTION_META = {
   frz: { name: "Congela", ico: "snow", ask: "Chi vuoi congelare?", doing: "sceglie chi congelare" },
@@ -429,6 +431,7 @@ function renderIntro(ctx) {
 function tableState(g) {
   if (g.status === "lobby") return "in attesa di giocatori";
   if (g.status === "over") return "partita finita";
+  if (isPlayoff(g)) return g.status === "roundEnd" ? "spareggio in arrivo" : `spareggio, round ${g.round}`;
   if (g.status === "roundEnd") return `round ${g.round} chiuso`;
   return `round ${g.round} in corso`;
 }
@@ -578,6 +581,13 @@ function statusStrip(g, ctx, me) {
     sub = g.endReason === "left"
       ? `${esc(g.endedBy || "qualcuno")} ha abbandonato: valgono i punteggi di adesso`
       : `partita finita con ${g.seats[w].total || 0} punti`;
+  } else if (g.status === "roundEnd" && isPlayoff(g)) {
+    // pareggio al traguardo: la partita non e' finita, si gioca una manche extra
+    const tied = g.tiebreak;
+    cls = "end";
+    title = `Pareggio a ${g.seats[tied[0]].total || 0}`;
+    sub = `spareggio fra ${tied.map(nm).join(" e ")}: gli altri restano fuori`;
+    veil = spoilerHold ? " spoiler-veil" : "";
   } else if (g.status === "roundEnd") {
     const buster = g.lastDraw && g.hands[g.lastDraw.seat] && g.hands[g.lastDraw.seat].out === "bust";
     cls = "end";
@@ -620,6 +630,7 @@ function statusStrip(g, ctx, me) {
   return `
     <div class="turn-strip ${cls}" data-flip="strip">
       <span class="ts-round" title="Round ${g.round}"><small>round</small>${roundCard(g.round)}</span>
+      ${isPlayoff(g) ? `<span class="ts-sp" title="manche di spareggio">${icon("flag", "tiny")}</span>` : ""}
       <div class="ts-txt${veil}"><b>${title}</b><small>${sub}</small></div>
       <button class="icon-btn ts-menu" data-action="tbl-menu" aria-label="Altre opzioni">${icon("dots")}</button>
     </div>`;
@@ -651,7 +662,7 @@ function bankRow(g) {
     </div>`;
 }
 
-function renderSeatRow(g, sid, ctx, max) {
+function renderSeatRow(g, sid, ctx, max, me) {
   const seat = g.seats[sid];
   const h = g.hands[sid];
   let isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
@@ -737,15 +748,17 @@ function renderSeatRow(g, sid, ctx, max) {
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   const total = seat.total || 0;
   const color = colorOf(seat.name);
-  // posizione nel giro (1 = chi apre) e chi apre il round
-  const order = turnOrder(g);
+  // posizione nel giro (1 = chi apre): chi e' fuori dallo spareggio non ne ha
+  const order = playingSeats(g);
   const pos = order.indexOf(sid) + 1;
   const opens = order[0] === sid && g.status !== "over";
+  const benched = pos === 0;
   return `
-    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""} ${sid === me ? "me" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
       <div class="seat-head">
-        <span class="seat-ava" title="${pos}º nel giro">${avatar(seat.playerId, seat.name, "sm")}<i class="seat-no ${pos === 1 ? "first" : ""}">${pos}</i></span>
+        <span class="seat-ava" title="${benched ? "fuori dallo spareggio" : pos + "º nel giro"}">${avatar(seat.playerId, seat.name, "sm")}${benched ? "" : `<i class="seat-no ${pos === 1 ? "first" : ""}">${pos}</i>`}</span>
         <b class="seat-name">${esc(seat.name)}</b>
+        ${sid === me ? `<i class="seat-you">tu</i>` : ""}
         ${opens ? `<i class="seat-opens">${g.status === "roundEnd" ? "apre il prossimo" : "apre"}</i>` : ""}
         ${state}
         <span class="seat-pts">
@@ -784,10 +797,14 @@ function renderControls(g, ctx, me) {
     return `<button class="btn primary big pulse" data-action="tbl-podium">Vai al podio ${icon("chevron", "tiny turn-r")}</button>`;
   }
   if (g.status === "roundEnd") {
+    const playoff = isPlayoff(g);
+    const label = playoff ? `Via allo spareggio · round ${g.round + 1} →` : `Via al round ${g.round + 1} →`;
     return me
-      ? `<button class="btn go big pulse" data-action="tbl-nextround">Via al round ${g.round + 1} →</button>
-         <p class="hint">Basta che uno lo prema: il round parte per tutti in diretta.</p>`
-      : `<p class="hint">Si aspetta che qualcuno apra il round ${g.round + 1}…</p>`;
+      ? `<button class="btn go big pulse" data-action="tbl-nextround">${label}</button>
+         <p class="hint">${playoff
+           ? "La manche la giocano solo i pari merito: chi è fuori guarda, e si ripete finché uno resta davanti."
+           : "Basta che uno lo prema: il round parte per tutti in diretta."}</p>`
+      : `<p class="hint">Si aspetta che qualcuno apra ${playoff ? "lo spareggio" : `il round ${g.round + 1}`}…</p>`;
   }
   const actor = actorOf(g);
   const iAct = mine(g, ctx, actor);
@@ -834,6 +851,10 @@ function renderControls(g, ctx, me) {
         <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${pts}</button>
       </div>`;
   }
+  // fuori dallo spareggio: niente comandi, si guarda e basta
+  if (me && g.hands[me] && g.hands[me].out === "excluded") {
+    return `<p class="hint">Sei fuori dallo spareggio: la manche la giocano i pari merito.</p>`;
+  }
   if (!me) return `<p class="hint">Stai guardando la partita.</p>`;
   return "";
 }
@@ -844,10 +865,31 @@ function renderControls(g, ctx, me) {
  * si vede subito chi aprira'.
  */
 const turnOrder = (g) => (g.status === "roundEnd" && g.order.length > 1 ? [...g.order.slice(1), g.order[0]] : g.order);
-/** Il mio posto sta SEMPRE in cima; sotto, gli altri nell'ordine in cui giocano. */
-const seatOrder = (g, me) => {
-  const o = turnOrder(g);
-  return me && o.includes(me) ? [me, ...o.filter((sid) => sid !== me)] : o;
+
+/**
+ * Chi gioca la mano in vista: tutti, oppure i soli pari merito quando e' in
+ * corso (o sta per cominciare) una manche di SPAREGGIO. Gli altri restano
+ * seduti a guardare, senza carte e senza punti.
+ */
+const playingSeats = (g) => {
+  const only = (g.tiebreak || []).length ? new Set(g.tiebreak) : null;
+  return only ? turnOrder(g).filter((sid) => only.has(sid)) : turnOrder(g);
+};
+/** true se la mano in vista e' una manche di spareggio. */
+const isPlayoff = (g) => Boolean((g.tiebreak || []).length) && g.status !== "over";
+
+/**
+ * L'ordine delle righe: si legge dall'alto in basso come si gioca. In cima
+ * chi ha il turno ADESSO, sotto chi viene dopo, e cosi' via nel giro; a round
+ * chiuso si parte gia' da chi aprira'. Chi e' fuori dallo spareggio finisce in
+ * fondo. Il proprio posto non viene spostato in cima: si riconosce dal bordo.
+ */
+const seatOrder = (g) => {
+  const line = playingSeats(g);
+  const bench = turnOrder(g).filter((sid) => !line.includes(sid));
+  const focus = g.status === "playing" ? (flightHold(g) || actorOf(g)) : null;
+  const i = focus ? line.indexOf(focus) : -1;
+  return (i > 0 ? [...line.slice(i), ...line.slice(0, i)] : line).concat(bench);
 };
 
 /**
@@ -888,7 +930,7 @@ function renderTable(g, ctx) {
       </section>
       <section class="card t-seats">
         <ul class="seats">
-          ${seatOrder(g, me).map((sid) => renderSeatRow(g, sid, ctx, max)).join("")}
+          ${seatOrder(g).map((sid) => renderSeatRow(g, sid, ctx, max, me)).join("")}
         </ul>
       </section>
     </div>`;

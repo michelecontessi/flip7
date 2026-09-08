@@ -498,6 +498,25 @@ select {
 .bname .txt small { display: block; font-size: 11.5px; color: var(--dim); font-weight: 500; }
 .bname .txt small .you { font-style: normal; font-weight: 700; color: var(--gold); }
 .bname .txt small .opens { font-style: normal; font-weight: 700; color: var(--c-blue); }
+.bname .txt small .sidelined { font-style: normal; font-weight: 700; color: var(--dim); }
+.brow.sidelined { opacity: .55; }
+
+/* spareggio: si arriva al traguardo in parita', la manche extra la giocano
+   solo i pari merito e gli altri stanno fermi */
+.playoff-strip {
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: 13px; color: var(--muted); line-height: 1.35;
+  padding: 8px 11px; margin: 4px 0 2px;
+  background: var(--gold-bg); border-radius: 10px;
+}
+.playoff-strip .ico { width: 15px; height: 15px; flex: none; margin-top: 1px; color: var(--c-gold); }
+.playoff-strip b { color: var(--c-gold); }
+.playoff-pill {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; background: var(--gold-bg); color: var(--c-gold);
+}
+.playoff-pill .ico { width: 12px; height: 12px; }
 
 /* chi apre la mano corrente (sorteggiato al via, poi si ruota) */
 .opens-strip {
@@ -532,6 +551,8 @@ select {
 .rc-val.flip7 { color: var(--gold); }
 .rc-val.zero { color: var(--muted); }
 .rc-empty { font-size: 17px; color: var(--dim); }
+.round-cell.static.out { background: transparent; }
+.rc-out { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
 .rc-tag { font-size: 9.5px; color: var(--red); font-weight: 650; }
 .rc-tag.flip7 { color: var(--gold); }
 .rc-val.frozen, .rc-tag.frozen { color: var(--c-blue); }
@@ -566,6 +587,9 @@ select {
 table.rounds { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 table.rounds th, table.rounds td { padding: 8px 9px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.rounds thead th { color: var(--dim); font-weight: 600; font-size: 12px; }
+/* colonna di una manche di spareggio: si distingue dai round normali */
+table.rounds thead th.sp { color: var(--c-gold); }
+table.rounds thead th.sp i { display: block; font-style: normal; font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 table.rounds tbody th { text-align: left; font-weight: 650; position: sticky; left: 0; background: var(--surface); }
 table.rounds td.bust { color: var(--red); }
 table.rounds td.flip7 { color: var(--gold); font-weight: 800; }
@@ -1210,6 +1234,9 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .ts-round { display: flex; flex-direction: column; align-items: center; line-height: 1; flex: none; min-width: 34px; }
 .ts-round small { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 1px; }
 .ts-round .round-num b { font-size: 26px; }
+/* manche di spareggio: una bandierina accanto al numero del round */
+.ts-sp { display: grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 8px; background: var(--gold-bg); color: var(--c-gold); }
+.ts-sp .ico { width: 14px; height: 14px; }
 .ts-txt { min-width: 0; flex: 1; }
 .ts-txt b { display: block; font-family: var(--font-display); font-size: 16.5px; font-weight: 600; line-height: 1.2; }
 .ts-txt small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; }
@@ -1257,9 +1284,20 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 }
 .seat:last-child { border-bottom: 0; }
 .seat.turn { background: var(--holo-soft); padding-left: 10px; padding-right: 8px; margin: 0 -6px; border-bottom-color: transparent; }
+/* il MIO posto: le righe si riordinano a ogni turno, quindi deve riconoscersi
+   ovunque finisca, anche quando non e' il suo turno */
+.seat.me { box-shadow: inset 3px 0 0 var(--gold); padding-left: 9px; }
+.seat.me .seat-name { font-weight: 850; }
+.seat-you {
+  font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--c-gold); flex: none;
+}
 /* turno chiuso (fermo, congelato, sballato): la riga si spegne in grigio */
 .seat.out-bust { opacity: .55; }
 .seat.out-stay, .seat.out-frozen { opacity: .62; }
+/* fuori dallo spareggio: seduto ma senza mano, resta in fondo e spento */
+.seat.out-excluded { opacity: .5; }
+.seat.out-excluded .cards-row { display: none; }
 .seat.out-stay .cards-row .fcard,
 .seat.out-frozen .cards-row .fcard,
 .seat.out-bust .cards-row .fcard { filter: grayscale(.55); }
@@ -1291,6 +1329,7 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .seat-state.s-flip7 { background: var(--holo); color: #3b2703; }
 .seat-state.s-flip3 { background: rgba(226,96,14,.14); color: #e2600e; }
 .seat-state.s-wait { background: rgba(130,90,220,.12); color: var(--c-violet); }
+.seat-state.s-excluded { background: var(--surface-3); color: var(--dim); }
 /* punteggi del posto: grande il totale partita, piccolo il bottino del round */
 .seat-pts { margin-left: auto; display: flex; align-items: baseline; gap: 5px; flex: none; line-height: 1; }
 .seat-pts b { font-family: var(--font-display); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
