@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fullDeck, createLobby, startGame, hit, stay, chooseTarget, nextRound, handPoints, normalizeGame, abandonGame } from "../js/game.js";
+import { fullDeck, createLobby, startGame, hit, stay, chooseTarget, nextRound, handPoints, normalizeGame, abandonGame, blockSeat, unblockSeat, voteBlock, unvoteBlock } from "../js/game.js";
 
 // tavolo di prova: 2-3 giocatori con un mazzo costruito a mano.
 // ATTENZIONE: si pesca dalla FINE dell'array (deck.pop()).
@@ -61,6 +61,28 @@ test("la Seconda Chance annulla il doppione", () => {
   assert.equal(s.hands.s0.sc, false);
   assert.equal(s.hands.s0.out, null);
   assert.deepEqual(s.hands.s0.nums, [8]);
+  // la vita resta contata anche dopo averla spesa: e' una statistica, non una carta in mano
+  assert.equal(s.hands.s0.scGot, 1);
+});
+
+test("le vite extra si contano: quella pescata e quella regalata", () => {
+  // pescate (dal fondo): Anna sc, Bruno 4, Anna sc di nuovo -> il secondo cuore
+  // va a Bruno, che e' l'unico senza
+  let s = table(["Anna", "Bruno"], ["sc", "n4", "sc"]);
+  s = hit(s, "s0");
+  s = hit(s, "s1");
+  s = hit(s, "s0");
+  assert.equal(s.hands.s0.scGot, 1);
+  assert.equal(s.hands.s1.sc, true);
+  assert.equal(s.hands.s1.scGot, 1);
+  s = stay(s, s.turn);
+  s = stay(s, s.turn);
+  assert.equal(s.status, "roundEnd");
+  assert.equal(s.rounds[0].s0.hearts, 1);
+  assert.equal(s.rounds[0].s1.hearts, 1);
+  // il round nuovo riparte da zero vite
+  s = nextRound(s);
+  assert.equal(s.hands.s0.scGot, 0);
 });
 
 test("FLIP 7 chiude il round per tutti e chi era in gioco incassa", () => {
@@ -260,8 +282,9 @@ test("ogni round finito lascia la fotografia delle mani (per lo storico)", () =>
   s = stay(s, "s1");
   assert.equal(s.status, "roundEnd");
   assert.equal(s.rounds.length, 1);
-  assert.deepEqual(s.rounds[0].s0, { numbers: [4], plus: [6], doubled: false, busted: true, frozen: false });
-  assert.deepEqual(s.rounds[0].s1, { numbers: [3], plus: [], doubled: true, busted: false, frozen: false });
+  // la mano ricorda anche con quale carta si e' sballato e chi si e' fermato da se'
+  assert.deepEqual(s.rounds[0].s0, { numbers: [4], plus: [6], doubled: false, busted: true, frozen: false, hearts: 0, bustCard: 4 });
+  assert.deepEqual(s.rounds[0].s1, { numbers: [3], plus: [], doubled: true, busted: false, frozen: false, hearts: 0, stayed: true });
   // il round dopo si aggiunge in coda, senza toccare il primo
   s = nextRound(s);
   s.deck = ["n2", "n7"];
@@ -288,4 +311,141 @@ test("il Flip 7 si legge dalle sette carte della fotografia", () => {
   while (s.status === "playing") s = hit(s, s.turn);
   assert.equal(s.hands.s0.out, "flip7");
   assert.equal(s.rounds[0].s0.numbers.length, 7);
+});
+
+// ---------------------------------------------------------------------------
+// Chi ha fatto cosa: la mano ricorda chi ha congelato, chi ha tirato il Pesca
+// Tre e chi ha regalato la Seconda Chance.
+// ---------------------------------------------------------------------------
+test("la fotografia dice CHI ha congelato e chi ha tirato il Pesca Tre", () => {
+  // pescate (dal fondo): Ada 2, Bea 3, Caio 4, Ada frz -> sceglie Bea; Caio 5, Ada 6, Caio fl3 -> a se stesso? no: sceglie Ada
+  let s = table(["Ada", "Bea", "Caio"], ["n1", "n9", "n8", "fl3", "n6", "n5", "frz", "n4", "n3", "n2"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  s = hit(s, "s0");                            // Ada pesca Congela
+  assert.equal(s.pending.type, "frz");
+  s = chooseTarget(s, "s0", "s1");             // congela Bea
+  assert.equal(s.hands.s1.out, "frozen");
+  assert.equal(s.hands.s1.frozenBy, "s0");
+  assert.equal(s.lastAction.by, "s0");
+  s = hit(s, "s2");                            // Caio 5
+  s = hit(s, "s0");                            // Ada 6
+  s = hit(s, "s2");                            // Caio pesca Pesca Tre
+  assert.equal(s.pending.type, "fl3");
+  s = chooseTarget(s, "s2", "s0");             // lo tira ad Ada
+  assert.deepEqual(s.hands.s0.fl3By, ["s2"]);
+  s = hit(s, "s0"); s = hit(s, "s0"); s = hit(s, "s0"); // 8, 9, 1
+  s = stay(s, s.turn); s = stay(s, s.turn);
+  assert.equal(s.status, "roundEnd");
+  assert.equal(s.rounds[0].s1.frozenBy, "s0");
+  assert.deepEqual(s.rounds[0].s0.fl3By, ["s2"]);
+  assert.equal(s.rounds[0].s1.fl3By, undefined, "chi non ha subito niente non ha il campo");
+});
+
+test("la fotografia dice chi ha regalato la Seconda Chance", () => {
+  // Ada pesca due cuori: il secondo va a Bea (unica senza) -> regalato da Ada
+  let s = table(["Ada", "Bea"], ["sc", "n4", "sc"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s0");
+  assert.deepEqual(s.hands.s1.scFrom, ["s0"]);
+  s = stay(s, s.turn); s = stay(s, s.turn);
+  assert.deepEqual(s.rounds[0].s1.scFrom, ["s0"]);
+  assert.equal(s.rounds[0].s0.scFrom, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Blocco di chi non risponde: la partita continua senza di lui
+// ---------------------------------------------------------------------------
+test("bloccare chi ha il turno: incassa la mano e il turno passa", () => {
+  // pescate (dal fondo): Ada 5, Bea 3, Caio 7, poi tocca ad Ada che sparisce
+  let s = table(["Ada", "Bea", "Caio"], ["n9", "n2", "n7", "n3", "n5"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  assert.equal(s.turn, "s0");
+  s = blockSeat(s, "s0");
+  assert.equal(s.seats.s0.blocked, true);
+  assert.equal(s.hands.s0.out, "stay");
+  assert.equal(s.turn, "s1", "il turno passa a chi viene dopo");
+  assert.equal(s.status, "playing", "la partita va avanti");
+  assert.equal(s.votes, null);
+  s = stay(s, "s1"); s = stay(s, "s2");
+  assert.equal(s.status, "roundEnd");
+  assert.equal(s.seats.s0.total, 5, "resta al punteggio che aveva in mano");
+  assert.equal(s.rounds[0].s0.blocked, true);
+  // dal round dopo sta fuori: niente carte, niente turno
+  s = nextRound(s);
+  assert.equal(s.hands.s0.out, "excluded");
+  assert.notEqual(s.turn, "s0");
+  // e nello storico quel round non e' uno spareggio
+  assert.deepEqual(s.playoffRounds, []);
+});
+
+test("bloccare chi deve scegliere un bersaglio: la carta azione va negli scarti", () => {
+  // pescate (dal fondo): Ada 2, Bea 3, Caio 4, Ada Congela
+  let s = table(["Ada", "Bea", "Caio"], ["frz", "n4", "n3", "n2"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  s = hit(s, "s0");                            // Ada pesca Congela e deve scegliere
+  assert.equal(s.pending.type, "frz");
+  s = blockSeat(s, "s0");
+  assert.equal(s.pending, null);
+  assert.ok(s.discard.includes("frz"));
+  assert.equal(s.turn, "s1");
+});
+
+test("il blocco a round chiuso vale dal round dopo; chi rientra gioca dal successivo", () => {
+  let s = table(["Ada", "Bea"], ["n6", "n5", "n4", "n3"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = stay(s, "s0"); s = stay(s, "s1");
+  assert.equal(s.status, "roundEnd");
+  s = blockSeat(s, "s1");
+  assert.equal(s.status, "roundEnd");
+  s = nextRound(s);
+  assert.equal(s.hands.s1.out, "excluded");
+  assert.equal(s.turn, "s0");
+  s = unblockSeat(s, "s1");
+  assert.equal(s.seats.s1.blocked, undefined);
+  assert.equal(s.hands.s1.out, "excluded", "questo round resta fuori");
+  s = hit(s, "s0"); s = stay(s, "s0");
+  s = nextRound(s);
+  assert.equal(s.hands.s1.out, null, "dal round dopo e' di nuovo in gioco");
+});
+
+test("se restano tutti bloccati la partita finisce", () => {
+  let s = table(["Ada", "Bea"], ["n6", "n5", "n4", "n3"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = stay(s, "s0"); s = stay(s, "s1");
+  s = blockSeat(s, "s0"); s = blockSeat(s, "s1");
+  s = nextRound(s);
+  assert.equal(s.status, "over");
+  assert.equal(s.endReason, "blocked");
+});
+
+test("a pari merito al traguardo chi e' bloccato perde lo spareggio", () => {
+  let s = table(["Ada", "Bea", "Caio"], ["n3", "n10", "n10"], 10);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  s = blockSeat(s, "s0");                      // Ada sparisce con il 10 in mano
+  s = stay(s, "s1"); s = stay(s, "s2");
+  assert.equal(s.status, "over", "niente spareggio: Bea vince da sola");
+  assert.deepEqual(s.winners, ["s1"]);
+  assert.equal(s.seats.s0.total, 10);
+});
+
+test("la votazione: scatta il blocco solo quando ci sono tutti, e una mossa la azzera", () => {
+  let s = table(["Ada", "Bea", "Caio"], ["n9", "n2", "n7", "n3", "n5"]);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s2");
+  const required = ["u1", "u2"];              // gli account di Bea e Caio
+  s = voteBlock(s, "s0", "u1", required);
+  assert.deepEqual(s.votes, { s0: { u1: true } });
+  assert.equal(s.seats.s0.blocked, undefined);
+  s = unvoteBlock(s, "s0", "u1");
+  assert.equal(s.votes, null);
+  s = voteBlock(s, "s0", "u1", required);
+  s = voteBlock(s, "s0", "u2", required);
+  assert.equal(s.seats.s0.blocked, true, "con tutti d'accordo il blocco scatta");
+  assert.equal(s.votes, null);
+  assert.equal(s.turn, "s1");
+});
+
+test("se chi era fermo si muove, i voti contro di lui spariscono", () => {
+  let s = table(["Ada", "Bea"], ["n9", "n2", "n5"]);
+  s = hit(s, "s0"); s = hit(s, "s1");
+  s = voteBlock(s, "s0", "u1", ["u1", "u9"]);
+  assert.ok(s.votes && s.votes.s0);
+  s = hit(s, "s0");
+  assert.equal(s.votes, null);
 });

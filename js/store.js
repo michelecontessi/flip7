@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import { firebaseConfig, FIREBASE_SDK_VERSION, isFirebaseConfigured, DEFAULTS } from "./config.js";
 import { prefs, deviceId } from "./prefs.js";
-import { roundKey, liveStandings, winnersOf, roundPlayers } from "./stats.js";
+import { roundKey, liveStandings, winnersOf, roundPlayers, orderedPlayerIds } from "./stats.js";
 import { computeRound } from "./scoring.js";
 
 const listeners = new Set();
@@ -133,16 +133,54 @@ export async function init(id) {
   // QUESTO dispositivo prima del collegamento a Firebase (e per recuperarli
   // con Setup -> Esporta, da reimportare poi nella stanza online).
   const forceLocal = typeof location !== "undefined" && new URLSearchParams(location.search).get("local") === "1";
+  forcedLocal = forceLocal;
   if (isFirebaseConfigured && !forceLocal) {
     try {
       await initFirebase();
       return;
     } catch (err) {
       console.error("[flip7] Firebase non disponibile, passo alla modalita' locale", err);
-      status.error = "Firebase non raggiungibile (" + err.message + "). Dati salvati solo su questo dispositivo.";
+      status.error = offlineMessage(err);
     }
   }
   await initLocal();
+}
+
+/** Il messaggio del ripiego locale: dice cos'e' successo e come uscirne. */
+function offlineMessage(err) {
+  return "Collegamento non riuscito: " + ((err && err.message) || err) + ". "
+    + "Per ora i punti restano su questo dispositivo: tocca Riprova.";
+}
+
+// ?local=1 e' una scelta, non un guasto: li' il collegamento non si ripropone
+let forcedLocal = false;
+
+/** true se l'app e' finita in modalita' locale pur avendo Firebase configurato. */
+export function canRetryOnline() {
+  return isFirebaseConfigured && !forcedLocal && status.mode === "local" && Boolean(roomId);
+}
+
+/**
+ * Riprova il collegamento dopo un avvio finito in modalita' solo locale (SDK
+ * arrivato monco, rete assente al primo colpo, sessione scaduta). Serve a
+ * ritrovare il pulsante di accesso senza dover chiudere e riaprire l'app.
+ */
+export async function retryOnline() {
+  if (!canRetryOnline()) return false;
+  status.error = null;
+  status.ready = false;
+  notify();
+  try {
+    fb = null;
+    bootstrapTried = false;
+    await initFirebase();
+    return true;
+  } catch (err) {
+    console.error("[flip7] collegamento non riuscito", err);
+    status.error = offlineMessage(err);
+    await initLocal();
+    return false;
+  }
 }
 
 async function initLocal() {
@@ -156,14 +194,53 @@ async function initLocal() {
   notify();
 }
 
+const SDK_BASE = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}`;
+
+/**
+ * Carica un pezzo dell'SDK dalla CDN e controlla che porti davvero le funzioni
+ * che ci servono. Puo' capitare che il file arrivi monco o vuoto - rete che
+ * cade a meta' download, proxy o blocco contenuti dell'ufficio, una copia
+ * rimasta in cache a meta': il browser lo importa senza protestare e poi le
+ * funzioni non ci sono ("getAuth is not a function"). In quel caso si riprova
+ * una volta sola con un indirizzo diverso, per saltare la copia in cache.
+ */
+async function loadSdk(file, needed, allowRetry = true) {
+  const urls = [`${SDK_BASE}/${file}`];
+  if (allowRetry) urls.push(`${SDK_BASE}/${file}?ricarica=${Date.now()}`);
+  let last = null;
+  for (const url of urls) {
+    let mod = null;
+    try {
+      mod = await import(url);
+    } catch (err) {
+      console.warn("[flip7] SDK non scaricato", url, err);
+      last = new Error(`${file} non è arrivato: rete assente, o un blocco contenuti`);
+      continue;
+    }
+    const missing = needed.find((k) => typeof mod[k] !== "function");
+    if (!missing) return mod;
+    console.warn("[flip7] SDK incompleto", url, Object.keys(mod));
+    last = new Error(`${file} è arrivato incompleto (manca ${missing})`);
+  }
+  throw last;
+}
+
+// la spia "in diretta" si aggancia una volta sola, anche dopo un Riprova
+let watchingConnection = false;
+
 async function initFirebase() {
-  const base = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}`;
-  const [appMod, authMod, dbMod] = await Promise.all([
-    import(`${base}/firebase-app.js`),
-    import(`${base}/firebase-auth.js`),
-    import(`${base}/firebase-database.js`)
+  // prima firebase-app.js da solo, poi gli altri due: auth e database lo
+  // importano a loro volta e vogliono trovarlo gia' pronto. Chiedendo i tre
+  // moduli tutti insieme qualche browser (iOS in testa) restituisce un modulo
+  // ancora vuoto, ed e' li' che nasceva "getAuth is not a function".
+  const appMod = await loadSdk("firebase-app.js", ["initializeApp"], false);
+  const [authMod, dbMod] = await Promise.all([
+    loadSdk("firebase-auth.js", ["getAuth", "onAuthStateChanged", "signInWithPopup", "signOut"]),
+    loadSdk("firebase-database.js", ["getDatabase", "ref", "onValue", "update"])
   ]);
 
+  // con le stesse opzioni initializeApp restituisce l'app gia' creata: dopo un
+  // Riprova non nascono due istanze che non si parlano
   const app = appMod.initializeApp(firebaseConfig);
   const auth = authMod.getAuth(app);
   const db = dbMod.getDatabase(app);
@@ -172,10 +249,13 @@ async function initFirebase() {
   fb = { db, roomRef, update: dbMod.update, ref: dbMod.ref, onValue: dbMod.onValue, auth, authMod };
   status = { ...status, mode: "firebase", ready: false, access: "checking", error: null };
 
-  dbMod.onValue(dbMod.ref(db, ".info/connected"), (snap) => {
-    status.online = Boolean(snap.val());
-    notify();
-  });
+  if (!watchingConnection) {
+    watchingConnection = true;
+    dbMod.onValue(dbMod.ref(db, ".info/connected"), (snap) => {
+      status.online = Boolean(snap.val());
+      notify();
+    });
+  }
 
   // login con Google: l'identita' e' l'account, non il browser, quindi
   // sopravvive a cambio rete, telefono nuovo e pulizia dei dati.
@@ -781,7 +861,8 @@ export function saveGameToHistory() {
       total: row.total,
       flip7s: Object.values(rows_).filter((e) => computeRound(e).flip7).length,
       busts: Object.values(rows_).filter((e) => e && e.busted).length,
-      freezes: Object.values(rows_).filter((e) => e && e.frozen && !e.busted).length
+      freezes: Object.values(rows_).filter((e) => e && e.frozen && !e.busted).length,
+      hearts: Object.values(rows_).reduce((a, e) => a + computeRound(e).hearts, 0)
     };
   }
   const winnerIds = live.winnerIds && Object.keys(live.winnerIds).length
@@ -797,6 +878,7 @@ export function saveGameToHistory() {
     winnerIds,
     rounds: live.scores || null,
     tiebreaks: live.tiebreaks || null,
+    order: orderedPlayerIds(live),
     createdAt: Date.now()
   };
   const gameId = live.gameId || newId();
@@ -828,6 +910,40 @@ export function closeTable(id) {
 }
 
 /**
+ * Ritocca UN pezzo del tavolo senza riscriverlo tutto (e senza toccare
+ * `updatedAt`, che misura le mosse): presenza, votazioni, reazioni.
+ * @param {string} id  tavolo
+ * @param {object} patch  path relativi al tavolo -> valore (null cancella)
+ */
+export function patchTable(id, patch) {
+  if (!id) return Promise.resolve();
+  const updates = {};
+  for (const [path, value] of Object.entries(patch)) updates[`game/${id}/${path}`] = value;
+  return commit(updates);
+}
+
+/**
+ * Battito di presenza: "sono qui, a questo tavolo, adesso". Chi legge
+ * considera collegato chi ha un battito recente; non serve la rete a dirlo
+ * (e uno stato sovrascritto da una mossa altrui si rimette a posto al battito
+ * successivo). Si scrive al piu' una volta ogni pochi secondi.
+ */
+let lastTouch = { id: null, at: 0 };
+export function touchTable(id, minGapMs = 20000) {
+  if (!id || !status.uid) return Promise.resolve();
+  const now = Date.now();
+  if (lastTouch.id === id && now - lastTouch.at < minGapMs) return Promise.resolve();
+  lastTouch = { id, at: now };
+  return patchTable(id, { [`seen/${status.uid}`]: now }).catch(() => {});
+}
+
+/** Una reazione al tavolo: sticker + istante, una per account (l'ultima vince). */
+export function reactAt(id, sticker) {
+  if (!id || !status.uid) return Promise.resolve();
+  return patchTable(id, { [`reactions/${status.uid}`]: { s: String(sticker).slice(0, 16), at: Date.now() } });
+}
+
+/**
  * Archivia una partita online conclusa e libera il tavolo.
  * Le mani fotografate dal motore (`state.rounds`) diventano le stesse righe
  * del segnapunti dal vivo: sballi, congelate, Flip 7, ×2 e rimonte contano
@@ -835,6 +951,20 @@ export function closeTable(id) {
  */
 export function saveOnlineGame(state) {
   const keyOf = (sid) => (state.seats[sid] && state.seats[sid].playerId) || sid;
+  // i riferimenti ad altri posti (chi ha congelato, chi ha regalato il cuore...)
+  // diventano id di giocatore, cosi' nello storico si leggono anche se il
+  // tavolo non c'e' piu'
+  const asPlayer = (sid) => (sid && state.seats[sid] ? keyOf(sid) : null);
+  const relink = (entry) => {
+    const e = { ...entry };
+    if (e.frozenBy) e.frozenBy = asPlayer(e.frozenBy) || null;
+    if (e.fl3By) e.fl3By = (Array.isArray(e.fl3By) ? e.fl3By : Object.values(e.fl3By)).map(asPlayer).filter(Boolean);
+    if (e.scFrom) e.scFrom = (Array.isArray(e.scFrom) ? e.scFrom : Object.values(e.scFrom)).map(asPlayer).filter(Boolean);
+    if (e.frozenBy === null) delete e.frozenBy;
+    if (e.fl3By && !e.fl3By.length) delete e.fl3By;
+    if (e.scFrom && !e.scFrom.length) delete e.scFrom;
+    return e;
+  };
   // Le mani ci sono solo dalle partite avviate da quando il tavolo le fotografa
   // (`startedAt`): di una cominciata prima si archiviano i soli totali, meglio
   // che un dettaglio a meta' che falserebbe medie e record.
@@ -844,17 +974,21 @@ export function saveOnlineGame(state) {
       for (const [sid, entry] of Object.entries(played || {})) {
         if (!state.seats[sid]) continue; // chi ha abbandonato non finisce nello storico
         const key = keyOf(sid);
-        rounds[key] = { ...(rounds[key] || {}), [roundKey(i)]: entry };
+        rounds[key] = { ...(rounds[key] || {}), [roundKey(i)]: relink(entry) };
       }
     });
   }
   // le manche di SPAREGGIO: round giocati non da tutti, ma dai soli pari
   // merito. Nello storico servono a spiegare le caselle vuote di quel round.
+  // I tavoli nuovi le segnano per numero (`playoffRounds`); per quelli
+  // aperti prima vale il vecchio indizio "non hanno giocato tutti".
   const tiebreaks = {};
+  const playoffs = state.playoffRounds === undefined ? null : new Set((state.playoffRounds || []).map(Number));
   if (state.startedAt) {
     (state.rounds || []).forEach((played, i) => {
       const sids = Object.keys(played || {}).filter((sid) => state.seats[sid]);
-      if (sids.length && sids.length < state.order.length) tiebreaks[roundKey(i)] = sids.map(keyOf);
+      const isPlayoff = playoffs ? playoffs.has(i + 1) : sids.length && sids.length < state.order.length;
+      if (isPlayoff && sids.length) tiebreaks[roundKey(i)] = sids.map(keyOf);
     });
   }
   const tracked = Object.keys(rounds).length > 0;
@@ -869,12 +1003,20 @@ export function saveOnlineGame(state) {
       ...(tracked ? {
         flip7s: rows.filter((e) => computeRound(e).flip7).length,
         busts: rows.filter((e) => e && e.busted).length,
-        freezes: rows.filter((e) => e && e.frozen && !e.busted).length
-      } : {})
+        freezes: rows.filter((e) => e && e.frozen && !e.busted).length,
+        hearts: rows.reduce((a, e) => a + computeRound(e).hearts, 0)
+      } : {}),
+      // bloccato perche' non rispondeva: da quel round in poi non ha giocato
+      ...(seat.blocked ? { blockedRound: Number(seat.blockedRound) || 0 } : {})
     };
   }
+  // il vincitore lo dice il motore (tiene conto di chi era bloccato); i
+  // tavoli piu' vecchi non lo scrivono: vale il totale piu' alto
+  const fromEngine = (state.winners || []).map(keyOf).filter((k) => results[k]);
   const top = Math.max(...Object.values(results).map((r) => r.total));
-  const winnerIds = Object.fromEntries(Object.entries(results).filter(([, r]) => r.total === top).map(([id]) => [id, true]));
+  const winnerIds = fromEngine.length
+    ? Object.fromEntries(fromEngine.map((k) => [k, true]))
+    : Object.fromEntries(Object.entries(results).filter(([, r]) => r.total === top).map(([id]) => [id, true]));
   const gameId = newId();
   const now = Date.now();
   const updates = {
@@ -887,6 +1029,9 @@ export function saveOnlineGame(state) {
       winnerIds,
       rounds: tracked ? rounds : null,
       tiebreaks: Object.keys(tiebreaks).length ? tiebreaks : null,
+      // com'era disposto il tavolo (ordine dei posti alla partenza) e com'e' finita
+      order: state.order.map(keyOf),
+      endReason: state.endReason || null,
       createdAt: now
     }
   };

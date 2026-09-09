@@ -10,6 +10,9 @@ e alimenta la **classifica perpetua**: ogni vittoria vale una **Crown** 👑.
 - 🧮 calcolatrice con le carte: numeri, `+2…+10`, `×2`, bonus **Flip 7** e sballo
 - 🕰️ inserimento di **partite vecchie**, giocate prima dell'app
 - 🔁 formazione libera: i giocatori possono cambiare da una partita all'altra
+- 🏅 **stagioni mensili**: chi guida la classifica del mese ne diventa il campione, con la sua coccarda
+- 🔔 al tavolo online l'app **avvisa quando tocca a te** (suono, vibrazione, notifica), e chi sparisce
+  si **blocca di comune accordo** senza chiudere la partita
 - 💸 **costo zero**: nessun dominio, nessun abbonamento
 
 ---
@@ -177,7 +180,13 @@ sotto **Avanzate**, chiuse finché non servono.
    - **Sballato** mette 0 al round
    - **Congelato** segna che quel giocatore è stato fermato da un *Congela*: i punti
      restano quelli delle carte, ma si capisce perché la mano è corta (e conta per il
-     record *Surgelato*)
+     record *Surgelato*). Sotto compare la fila **congelato da**: un tocco sull'avatar di
+     chi ha tirato la carta (facoltativo) e quella congelata va a credito suo, per il
+     record *Iceman* e per la *nemesi* nella scheda giocatore
+   - **Vita extra** conta le carte col **cuore** (la *Seconda Chance*) finite in mano
+     in quel round: **non danno punti**, si segnano solo per la statistica (il record
+     *Sette Vite*). Ogni tocco ne aggiunge una — *1 vita extra*, *2 vite extra* — e
+     dopo la terza si torna a zero
    - sotto il punteggio della mano c'è il **totale provvisorio**: *totale partita 123 → 157*,
      cioè dove arriverebbe il giocatore salvando questa mano, e quanti punti gli mancano
      al traguardo (o *traguardo tagliato*); si aggiorna a ogni carta toccata
@@ -188,7 +197,9 @@ sotto **Avanzate**, chiuse finché non servono.
    (*Round 4*), con accanto quanti punteggi mancano.
 4. Al superamento dei 200 punti la partita si chiude da sola: premi
    **Salva e inizia nuova partita** per rigiocare subito con gli stessi,
-   oppure **Salva e basta**. Il vincitore incassa la sua Crown.
+   oppure **Salva e basta**. Il vincitore incassa la sua Crown. **Condividi il podio**
+   prepara un'immagine (marchio, data, i primi tre sui gradini, tutti gli altri sotto)
+   e apre il foglio di condivisione del telefono: pronta per la chat dell'ufficio.
 
 **Pareggio al traguardo? Si spareggia.** Se al traguardo si arriva **in parità**
 la partita non finisce: si gioca una **manche di spareggio** fra i soli pari
@@ -227,13 +238,24 @@ la stessa cosa in grande nel proprio riquadro: **ti mancano 69 punti**.
 **Invitare qualcuno a partita in corso**: il pulsante **Invita** in cima al tabellone
 (o l'icona 🔗 nella barra in alto) apre la condivisione del link della stanza.
 
-**Lo Storico** raggruppa le partite per mese e di ognuna racconta com'è andata senza
-doverla aprire: il vincitore con la coroncina, quanti erano e quante mani sono servite,
-di **quanto ha vinto sul secondo** e una **mini classifica a colonnine** — una per
-giocatore, alta quanto i suoi punti rispetto al primo, con l'avatar sotto e in oro
-quella di chi ha vinto. A colpo d'occhio si vede se è stata una passeggiata o un testa
-a testa. Toccando la partita si apre il dettaglio, con la tabella dei round: le mani
-in cui è arrivata la carta **×2** hanno la loro targhetta arancione.
+**Lo Storico** raggruppa le partite per mese (con la coccarda del **campione del
+mese**, quando il mese è chiuso) e di ognuna racconta com'è andata senza doverla aprire:
+giorno e **ora**, quanto è **durata**, quanti erano e quante mani sono servite, di
+**quanto ha vinto sul secondo**, e sotto la **classifica della partita** riga per riga —
+posto con la medaglia per i primi tre, avatar, nome, la barra dei punti in proporzione
+al primo e il totale, in oro chi ha vinto. Toccando la partita si apre il dettaglio: la
+stessa classifica con le note di ognuno (Flip 7, sballi, congelate, cuori, chi si è
+fermato da sé), il **grafico del corso della partita** (una linea per giocatore, il
+totale dopo ogni round, con quante volte è cambiata la testa), la tabella dei round —
+le mani con il **×2** hanno la loro targhetta arancione — e tre pulsanti: **Rivedi**
+apre il replay, **Podio** condivide l'immagine, **Modifica** (solo proprietario) corregge.
+
+**Il replay** rivede la partita **mano per mano**: si scorre di round in round con le
+frecce o i puntini, e per ognuno si vedono le carte di ciascuno (numeri, modificatori,
+cuori, il doppione dello sballo cerchiato di rosso), i punti della mano, il totale che
+cresce e la rotaia verso il traguardo; chi era in testa ha la corona, e le note dicono
+chi ha congelato chi, chi ha tirato il Pesca Tre e chi si è fermato di sua volontà. Vale
+per le partite online e per quelle segnate carta per carta dal segnapunti.
 
 **Partite vecchie**: tab **Storico** → **Aggiungi partita passata** → data, giocatori e
 punteggi finali. Il vincitore è automatico (punteggio più alto) o lo scegli tu.
@@ -276,12 +298,55 @@ per tutti con i **punteggi di quel momento** (la mano in corso, non finita, non 
 Da lì si va al podio e si salva nello storico come qualsiasi altra partita: la Crown
 va a chi era davanti.
 
+**Chi sparisce, invece, si blocca — e la partita continua.** Ogni telefono seduto al
+tavolo lascia un battito di presenza ogni pochi secondi: il pallino verde accanto al
+nome dice chi è **collegato** adesso. Se chi deve giocare **non muove per un minuto**
+(telefono in tasca, app chiusa, rete andata), la striscia lo segna *fermo da 1:12* e
+sotto compare il riquadro del blocco: **solo i giocatori collegati** in quel momento
+possono decidere, **di comune accordo**, di bloccarlo. Ognuno tocca *Sono d'accordo*,
+si vede chi ha già votato (*2 di 3 d'accordo*), e all'ultimo voto il blocco scatta: il
+giocatore **incassa quello che ha in mano** e resta al suo punteggio, da lì in poi non
+riceve carte né punti, e il turno passa avanti. Il suo totale resta in classifica come
+quello di tutti (se era davanti al traguardo, vince lui; a pari merito però lo spareggio
+lo perde). Se poi torna, trova il riquadro *Sei stato bloccato* con **Rientro dal
+prossimo round**: dal round dopo è di nuovo in gioco. Una mossa di chi era fermo
+cancella i voti contro di lui. Nello storico la partita segna da quale round è stato
+bloccato, e quelle mani non contano nelle sue medie.
+
+**Quando tocca a te, l'app te lo dice.** Suono breve e vibrazione appena arriva il tuo
+turno (o devi scegliere il bersaglio di una carta azione), e — se l'app non è in vista —
+una **notifica di sistema** che riporta al tavolo con un tocco; lo stesso a fine round e
+a fine partita. Si attiva da **Setup → Avvisi del tavolo**: suono, vibrazione e
+notifica si accendono e spengono una per una (la notifica chiede il permesso al browser;
+su iPhone serve l'app aggiunta alla Home e iOS 16.4 o più recente). Niente server: è
+tutto sul telefono, dal service worker.
+
+**I bot hanno tre livelli.** In lobby, un tocco sul bot apre il menu: *facile* si ferma
+presto, *normale* rischia finché il bottino è magro, **conta-carte** calcola la
+probabilità di sballare dalle carte già uscite (scarti, mani in vista, carta
+parcheggiata) e pesca finché in media conviene — senza sbirciare il mazzo. In due, con
+un conta-carte, la partita regge.
+
+**Modalità allenamento** (dal menu **⋯** del tavolo o da Setup → Avvisi): al tuo turno,
+sotto *Pesca* e *Mi fermo*, vedi il **rischio di sballo** alla prossima carta e quanto
+vale in media pescare, con lo stesso conto del bot. Utile per imparare; per il brivido
+meglio spenta.
+
+**Reazioni.** Sotto le righe del tavolo ci sono sei sticker disegnati (risata, wow,
+pianto, occhiali da sole, fuoco, pollice): un tocco e lo sticker sbuca per qualche
+secondo sulla tua riga, visibile a tutti. Niente chat, solo la faccia giusta al momento
+giusto.
+
+**Il tavolo si racconta anche a chi non lo vede**: la striscia in cima ha una regione
+`aria-live`, quindi con VoiceOver o TalkBack ogni cambio di turno e ogni verdetto
+(*Anna ha sballato*, *Tocca a te*) viene letto ad alta voce.
+
 **Vale come una partita segnata a mano.** Alla fine di ogni mano il tavolo ne conserva la
-fotografia — numeri, `+`, `×2`, sballo e congelata — e a partita finita la archivia round
-per round, con le stesse righe del segnapunti. Quindi una partita online conta nelle
-statistiche esattamente come una dal vivo: **Flip 7**, **sballi**, **congelate**, mani
-lunghe, `×2` pescati, punteggio della singola mano e rimonte finiscono in classifica e
-nei **Record**, e nello Storico la partita ha la sua **tabella dei round**. Chi lascia il
+fotografia — numeri, `+`, `×2`, sballo, congelata e **vite extra ricevute** — e a partita
+finita la archivia round per round, con le stesse righe del segnapunti. Quindi una partita
+online conta nelle statistiche esattamente come una dal vivo: **Flip 7**, **sballi**,
+**congelate**, **cuori**, mani lunghe, `×2` pescati, punteggio della singola mano e
+rimonte finiscono in classifica e nei **Record**, e nello Storico la partita ha la sua **tabella dei round**. Chi lascia il
 tavolo a metà non entra nello storico, e delle partite iniziate prima di questo
 aggiornamento restano i soli totali (meglio nessun dettaglio che uno a metà).
 
@@ -362,6 +427,17 @@ uno dall'altro invece di una griglia tutta uguale:
   stringono al crescere dello storico, si scorre lateralmente e si apre già sull'ultima
   partita giocata. In oro le vittorie, la tratteggiata è l'obiettivo.
 
+**Le stagioni.** Un mese di calendario è una stagione: alla fine del mese, chi guida la
+classifica di quel mese (stessa formula: Crown, quota di vittorie, media) ne diventa il
+**campione** e si prende la **coccarda** — una rosetta dorata con il mese e l'anno
+(*AGO 26*), i nastri del colore dell'anno — disegnata apposta, che resta per sempre
+accanto al suo nome in classifica e nella **Bacheca** della sua scheda. Valgono le
+partite dal vivo e quelle online insieme; a parità assoluta il titolo si condivide. Il
+riquadro **Stagioni** in Classifica mostra il mese in corso (chi è in testa oggi, con
+la coccarda ancora in argento) e sotto l'**albo d'oro**; toccando un mese si apre la sua
+pagina: campione, classifica del mese, record del mese, le partite, e il pulsante per
+condividere l'immagine. Non c'è niente da chiudere a mano: si calcola dallo storico.
+
 Sotto il podio ci sono i **Record**, titoli scherzosi assegnati a chi primeggia in una
 statistica (a pari merito si condividono; toccandone uno si apre la classifica completa).
 Quelli nati da una partita sola, cioè Cannoniere, Colpo Grosso e Sculone, hanno il
@@ -387,6 +463,32 @@ cerchiata in oro; lo stesso vale per i riquadri corrispondenti nella scheda gioc
 - **Doppiogiochista**: chi si è visto arrivare più volte la carta **×2**. Conta solo le
   mani segnate carta per carta (col tastierino non si sa se il ×2 è arrivato), sballi
   compresi: la carta l'aveva in mano comunque
+- **Iceman**, **Bullo** e **Generoso**: chi tira più Congela, chi rifila più Pesca Tre,
+  chi regala più Seconde Chance. Sono i record "attivi": contano dalle partite online
+  giocate da quando il tavolo segna chi ha fatto cosa (`INTERACTIONS_SINCE` in
+  [js/stats.js](js/stats.js)) e da quelle dal vivo in cui il segnapunti ha indicato
+  *congelato da*
+
+Poi i **Primati della stanza**: non "chi è il migliore in X" ma "la partita più…" — la
+maratona (più mani), la partita lampo, il punteggio di sempre, la passeggiata (vittoria
+più larga) e il fotofinish (la più tirata), il tavolo pieno, la mano d'oro, la serata
+lunga. Ognuno si tocca e riapre quella partita.
+
+Il **Rating Elo** è un'altra lettura della classifica: tutti partono da 1000, ogni
+partita vale come uno scontro con ciascuno degli altri, e battere chi ha un rating più
+alto fa salire di più. Dà un ordine sensato anche a chi ha giocato poche partite, dove
+le Crown ancora non dicono nulla; nella scheda ci sono rating, posizione e picco.
+
+Nella scheda giocatore c'è anche il **Testa a testa**: contro ognuno degli altri, quante
+partite insieme, quante volte è finito **davanti**, pari o **dietro** (con la barra
+verde/grigia/rossa), le Crown incrociate e le medie. E dalle partite che lo sanno: la
+sua **nemesi** (chi lo congela di più), la sua vittima preferita, chi gli tira più Pesca
+Tre, quanti cuori ha regalato, quante volte si è fermato da sé.
+- **Sette Vite**: chi raccoglie più carte col **cuore** (la *Seconda Chance*). Le vite
+  extra non danno punti: si contano e basta, sia quelle pescate sia quelle **regalate**
+  da un altro giocatore, e valgono anche se poi vengono spese per annullare un doppione.
+  Contano solo le partite in cui i cuori sono stati segnati davvero: nelle partite
+  archiviate prima di questo aggiornamento il dato non esiste proprio, e non fa media
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;
@@ -451,11 +553,14 @@ js/icons.js              icone SVG, marchio FLIP 7 e facce delle carte
 js/ui.js                 helper: date, toast, bottom sheet, dialoghi, condivisione
 js/avatar.js             avatar: simboli e colori predefiniti, foto ridotte, disegno
 js/theme.js              tema chiaro/scuro
-js/game.js               motore del gioco online (regole ufficiali, logica pura)
+js/game.js               motore del gioco online (regole ufficiali, blocco, chi ha fatto cosa)
 js/morph.js              ridisegno incrementale del tavolo (aggiorna solo cio' che cambia)
+js/notify.js             avvisi: suono, vibrazione, notifica locale dal service worker
+js/share.js              l'immagine del podio (canvas) da condividere
 js/views/                partita · tavolo · classifica · storico · setup · stanze
 database.rules.json      regole di sicurezza del database
-sw.js, manifest.webmanifest, icon.svg    supporto PWA
+sw.js, manifest.webmanifest, icon.svg, icon-192/512.png    supporto PWA
+.github/workflows/test.yml   i test girano da soli a ogni push (GitHub Actions)
 server.mjs               server di sviluppo locale (npm start)
 test/                    test della logica di punteggio (npm test)
 ```
@@ -466,12 +571,28 @@ Niente build, niente `node_modules`: sono file statici che il browser esegue cos
 npm test
 ```
 
+**Versione e aggiornamenti.** Il numero di versione sta in `APP_VERSION`
+([js/config.js](js/config.js)) e si vede in fondo al Setup; a ogni pubblicazione va alzato
+insieme a `CACHE` in [sw.js](sw.js) (un test controlla che coincidano). Quando il service
+worker nuovo prende il controllo, in basso compare *C'è una versione nuova dell'app* con
+il pulsante **Ricarica**; *Controlla aggiornamenti* nel Setup forza il controllo.
+
 ---
 
 ## 9. Domande rapide
 
 **Quanto costa?** Zero. GitHub Pages è gratuito per i repo pubblici e il piano Spark di
 Firebase non scade e non chiede metodi di pagamento. Una partita muove qualche decina di KB.
+
+**Come funzionano gli avvisi senza un server?** Suono e vibrazione partono dal telefono;
+la notifica la mostra il service worker dell'app quando la pagina non è in vista, con il
+permesso che dai al browser. Non ci sono push da un server: se l'app non è aperta da
+nessuna parte (nemmeno in background) la notifica non arriva. È il compromesso per
+restare a costo zero.
+
+**Cosa succede a chi resta senza rete a metà partita online?** Gli altri lo vedono
+*fermo da…* e dopo un minuto possono bloccarlo di comune accordo: lui resta al suo
+punteggio, loro vanno avanti. Quando torna, rientra dal round dopo.
 
 **Serve internet?** Per la sincronia sì. L'app si apre comunque offline (è una PWA) e
 in mancanza di rete Firebase riallinea tutto appena torna il segnale.
@@ -505,6 +626,15 @@ e **approvare** chi entra: gli altri, nel Setup, vedono soltanto il proprio prof
 **E se cambio telefono, rete o cancello i dati del browser?** Nessun problema:
 l'identità è l'**account Google**, non il dispositivo. Stesso account = stesso accesso
 e stesso giocatore, ovunque. La rete non c'entra mai nulla.
+
+**Dice "solo locale" e non compare più l'accesso.** Vuol dire che l'app non è riuscita a
+scaricare Firebase: rete assente al momento giusto, un blocco contenuti, o il file
+arrivato a metà. I punti restano al sicuro **su quel dispositivo** e non si perde niente,
+ma la stanza online non si vede. In cima appare il tasto tondo con la **freccia circolare**
+(e in *Setup* il pulsante **Riprova il collegamento**): un tocco e, se la rete c'è, torna
+la schermata di accesso con **Continua con Google**. Se non basta, chiudi e riapri l'app.
+Attenzione anche al **codice stanza**: è quello **intero** del link, tipo
+`ufficio-k7m2x9qp`, non la sola prima parola.
 
 **E se il proprietario non c'è?** Chi è già stato approvato entra e fa tutto da solo
 (segnapunti compreso): il proprietario serve soltanto per approvare le persone **nuove**

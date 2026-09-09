@@ -12,12 +12,21 @@
 // posto e' segnato (bordo e "tu") ovunque si trovi. Le carte si dimensionano
 // sull'altezza dello schermo, cosi' il tabellone sta in una schermata sola.
 // Su desktop le stesse parti si dispongono su due colonne.
+//
+// Presenza: ogni dispositivo seduto lascia un battito (`seen`) ogni pochi
+// secondi; chi ha un battito recente e' "collegato". Se chi deve giocare non
+// muove per un minuto, gli altri collegati possono bloccarlo di comune
+// accordo: incassa quello che ha e la partita continua. Avvisi (suono,
+// vibrazione, notifica) quando tocca a te. Reazioni con gli sticker.
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
-import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime } from "../ui.js";
+import { prefs } from "../prefs.js";
+import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime, fmtDate } from "../ui.js";
 import { avatar } from "../avatar.js";
-import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card } from "../icons.js";
+import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card, sticker, STICKERS } from "../icons.js";
 import * as engine from "../game.js";
+import { alertUser, pushLocal } from "../notify.js";
+import { sharePodium } from "../share.js";
 
 // "stay" copre anche chi viene chiuso d'ufficio a fine round (flip7 altrui,
 // carte finite): "ha incassato" e' vero in entrambi i casi, "si e' fermato" no
@@ -29,7 +38,20 @@ const ACTION_META = {
   sc:  { name: "Seconda Chance", ico: "heartFill", ask: "A chi regali la Seconda Chance?", doing: "sceglie a chi regalare la Seconda Chance" }
 };
 const BOT_NAMES = ["Bot Ada", "Bot Bruno", "Bot Carla", "Bot Dina"];
+// i livelli dei bot: da chi si ferma presto a chi conta le carte uscite
+const BOT_LEVELS = {
+  facile: { label: "facile", desc: "si ferma presto, rischia poco" },
+  normale: { label: "normale", desc: "rischia finché il bottino è magro" },
+  contacarte: { label: "conta-carte", desc: "calcola il rischio dalle carte uscite" }
+};
 let botTimer = null;
+
+// chi non muove per un minuto puo' essere bloccato dagli altri
+const STALL_MS = 60e3;
+// un battito piu' vecchio di cosi' vuol dire "non collegato"
+const ONLINE_MS = 45e3;
+// la reazione resta sulla riga per qualche secondo
+const REACTION_MS = 4000;
 
 /** Tutti i tavoli aperti, dal piu' vecchio al piu' nuovo. */
 const tablesOf = (ctx) => Object.values(ctx.room.game || {})
@@ -72,6 +94,8 @@ function syncTable(g) {
   parkedCard = null;
   resolveTargetSid = null;
   podiumKey = null;
+  wasMyTurn = null;
+  lastAlertKey = null;
 }
 
 /** Il tavolo lo chiude solo chi l'ha aperto (i tavoli vecchi non hanno padrone). */
@@ -97,27 +121,119 @@ const controls = (g, ctx, sid) => Boolean(g.seats[sid] && g.seats[sid].uid === c
 /** Posto umano e mio: e' a me che tocca fare qualcosa. */
 const mine = (g, ctx, sid) => Boolean(sid && controls(g, ctx, sid) && !g.seats[sid].bot);
 
-/** Chi ha vinto (a partita finita): il totale piu' alto. */
-const winnerOf = (g) => [...g.order].sort((a, b) => (g.seats[b].total || 0) - (g.seats[a].total || 0))[0];
+/** Chi ha vinto (a partita finita): lo dice il motore, altrimenti il totale piu' alto. */
+const winnerOf = (g) => (g.winners && g.winners[0] && g.seats[g.winners[0]]) ? g.winners[0]
+  : [...g.order].sort((a, b) => (g.seats[b].total || 0) - (g.seats[a].total || 0))[0];
 
-// --- bot di prova ------------------------------------------------------------
-/** Strategia elementare: rischia finche' il bottino del round e' magro. */
-function botMove(g, sid) {
-  if (g.pending && g.pending.chooser === sid) {
-    const others = g.pending.options.filter((x) => x !== sid);
-    const pool = others.length ? others : g.pending.options;
-    // Congela e Pesca Tre vanno al piu' ricco; la Seconda Chance al primo
-    const target = g.pending.type === "sc" ? pool[0]
-      : pool.slice().sort((a, b) =>
-          ((g.seats[b].total || 0) + engine.handPoints(g.hands[b])) -
-          ((g.seats[a].total || 0) + engine.handPoints(g.hands[a])))[0];
-    return engine.chooseTarget(g, sid, target);
+// --- presenza ----------------------------------------------------------------
+/** true se quell'account ha lasciato un battito di recente (io sono sempre qui). */
+const isOnline = (g, uid, myUid) => uid === myUid || (Number((g.seen || {})[uid]) || 0) > Date.now() - ONLINE_MS;
+/** Posti umani con l'account collegato adesso. */
+const onlineSeats = (g, ctx) => g.order.filter((sid) => g.seats[sid] && !g.seats[sid].bot && isOnline(g, g.seats[sid].uid, ctx.status.uid));
+/**
+ * Gli account il cui consenso serve per bloccare `target`: tutti i giocatori
+ * umani collegati, tranne l'interessato (se e' umano) e chi e' gia' bloccato.
+ */
+function voterUids(g, ctx, target) {
+  const t = g.seats[target];
+  const out = new Set();
+  for (const sid of onlineSeats(g, ctx)) {
+    const s = g.seats[sid];
+    if (s.blocked) continue;
+    if (t && !t.bot && s.uid === t.uid) continue;
+    out.add(s.uid);
   }
+  return [...out];
+}
+/** Da quanto chi deve giocare non muove (ms). */
+const stalledFor = (g) => (g.status === "playing" && g.updatedAt ? Date.now() - g.updatedAt : 0);
+const isStalled = (g) => stalledFor(g) >= STALL_MS;
+const fmtStall = (ms) => { const s = Math.floor(ms / 1000); return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+// --- rischio di sballo: dalle carte uscite -----------------------------------
+/**
+ * Le carte che nessuno ha ancora visto (= quelle nel mazzo), contate per
+ * tipo: mazzo intero meno scarti, mani, carta parcheggiata e azioni
+ * accantonate. Non si guarda l'ordine del mazzo: sarebbe barare.
+ */
+function unseenCounts(g) {
+  const counts = {};
+  for (const c of engine.fullDeck()) counts[c] = (counts[c] || 0) + 1;
+  const take = (c) => { if (counts[c] > 0) counts[c] -= 1; };
+  for (const c of g.discard) take(c);
+  for (const sid of g.order) {
+    const h = g.hands[sid];
+    if (!h) continue;
+    for (const n of h.nums) take("n" + n);
+    for (const p of h.plus) take("p" + p);
+    if (h.x2) take("x2");
+    if (h.sc) take("sc");
+  }
+  if (g.pending) {
+    take(g.pending.type);
+    for (const c of ((g.pending.thenDeferred && g.pending.thenDeferred.cards) || [])) take(c);
+  }
+  if (g.flip3) for (const c of g.flip3.deferred) take(c);
+  return counts;
+}
+
+/**
+ * Per una mano: probabilita' di sballare alla prossima pescata, punti attesi
+ * da una pescata sicura e valore atteso del pescare (guadagno atteso meno
+ * quello che si rischia di perdere). Con la Seconda Chance in mano il
+ * doppione non fa sballare.
+ */
+export function drawOdds(g, sid) {
+  const h = g.hands[sid];
+  const counts = unseenCounts(g);
+  let total = 0, dup = 0, gain = 0;
+  const mult = h.x2 ? 2 : 1;
+  const base = h.nums.reduce((a, b) => a + b, 0);
+  for (const [c, n] of Object.entries(counts)) {
+    if (!n) continue;
+    total += n;
+    if (engine.CARD.isNum(c)) {
+      const v = engine.CARD.num(c);
+      if (h.nums.includes(v)) { dup += n; continue; }
+      gain += n * (v * mult + (h.nums.length === 6 ? 15 : 0));
+    } else if (engine.CARD.isPlus(c)) gain += n * engine.CARD.plus(c);
+    else if (engine.CARD.isX2(c)) gain += n * base;
+  }
+  const pBust = total ? (h.sc ? 0 : dup / total) : 0;
+  const pDup = total ? dup / total : 0;
+  const now = engine.handPoints(h);
+  const safeGain = total - dup ? gain / (total - dup) : 0;
+  const ev = (1 - pBust) * safeGain - pBust * now;
+  return { pBust, pDup, ev, unseen: total, now, protectedBySc: Boolean(h.sc) };
+}
+
+// --- bot -----------------------------------------------------------------------
+/** Il bersaglio dei bot: Congela e Pesca Tre al piu' ricco, il cuore al primo libero. */
+function botTarget(g, sid) {
+  const others = g.pending.options.filter((x) => x !== sid);
+  const pool = others.length ? others : g.pending.options;
+  return g.pending.type === "sc" ? pool[0]
+    : pool.slice().sort((a, b) =>
+        ((g.seats[b].total || 0) + engine.handPoints(g.hands[b])) -
+        ((g.seats[a].total || 0) + engine.handPoints(g.hands[a])))[0];
+}
+
+/** Il bot decide: pesca o si ferma, secondo il suo livello. */
+function botMove(g, sid) {
+  if (g.pending && g.pending.chooser === sid) return engine.chooseTarget(g, sid, botTarget(g, sid));
   if (g.flip3 && g.flip3.target === sid) return engine.hit(g, sid);
   if (g.turn === sid && !g.hands[sid].out) {
     const h = g.hands[sid];
-    if (engine.handPoints(h) >= 21 || h.nums.length >= 5) return engine.stay(g, sid);
-    return engine.hit(g, sid);
+    const level = (g.seats[sid] && g.seats[sid].level) || "normale";
+    const pts = engine.handPoints(h);
+    let stop;
+    if (level === "facile") stop = pts >= 14 || h.nums.length >= 4;
+    else if (level === "contacarte") {
+      const odds = drawOdds(g, sid);
+      // rischia finche' conviene in media; con sette carte in vista tenta il Flip 7
+      stop = h.nums.length < 7 && odds.ev <= 0 && !(h.nums.length === 6 && odds.pBust < 0.35);
+    } else stop = pts >= 21 || h.nums.length >= 5;
+    return stop ? engine.stay(g, sid) : engine.hit(g, sid);
   }
   return g;
 }
@@ -159,6 +275,63 @@ function scheduleAuto(g, ctx) {
     // mossa a vuoto (stato incoerente?): meglio ritentare che restare fermi
     else setTimeout(() => scheduleAuto(current(), { room: store.getRoom(), status: store.getStatus(), me: null }), 2500);
   }, AUTO_MS);
+}
+
+// --- battito, orologio e avvisi ----------------------------------------------
+// un timer solo: ogni pochi secondi ridisegna (contatori di attesa, pallini
+// di presenza, reazioni che svaniscono) e lascia il battito di presenza
+let tickTimer = null;
+function keepTicking(g, ctx) {
+  const wanted = Boolean(g && g.status !== "over" && (mySeat(g, ctx) || g.status === "playing"));
+  if (!wanted) { if (tickTimer) { clearInterval(tickTimer); tickTimer = null; } return; }
+  if (g && mySeat(g, ctx)) store.touchTable(g.id);
+  if (tickTimer) return;
+  tickTimer = setInterval(() => {
+    const now = current();
+    if (!now || now.status === "over") { clearInterval(tickTimer); tickTimer = null; return; }
+    const c = { room: store.getRoom(), status: store.getStatus(), me: null };
+    if (mySeat(now, c)) store.touchTable(now.id);
+    store.refresh();
+  }, 5000);
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    const g = current();
+    if (g) store.touchTable(g.id, 0);
+    store.refresh();
+  });
+}
+
+// "tocca a te" si avvisa una volta per turno: si guarda il passaggio da
+// "non tocca a me" a "tocca a me", cosi' la prima carta automatica non
+// suona due volte
+let wasMyTurn = null;
+let lastAlertKey = null;
+function alertOnChanges(g, ctx) {
+  const me = mySeat(g, ctx);
+  if (!me) { wasMyTurn = null; return; }
+  const actor = g.status === "playing" ? actorOf(g) : null;
+  const hold = flightHold(g);
+  const myTurn = Boolean(actor && mine(g, ctx, actor) && !(hold && hold !== actor));
+  const first = wasMyTurn === null;
+  if (myTurn && wasMyTurn === false) {
+    const what = g.pending && g.pending.chooser === actor ? `hai pescato ${ACTION_META[g.pending.type].name}: scegli il bersaglio`
+      : g.flip3 && g.flip3.target === actor ? "Pesca Tre: le carte arrivano" : "pesca o fermati";
+    alertUser("turn", "Tocca a te!", `${g.owner && g.owner.name ? `Tavolo di ${g.owner.name} · ` : ""}${what}`, { tag: "flip7-turn" });
+  }
+  wasMyTurn = myTurn;
+  if (first) return; // il primo disegno fotografa e basta
+  // fine round / fine partita: solo la notifica, se l'app e' in secondo piano
+  const key = `${g.status}:${g.round}`;
+  if (key === lastAlertKey) return;
+  lastAlertKey = key;
+  if (g.status === "over") {
+    const w = winnerOf(g);
+    alertUser("over", "Partita finita", `Vince ${g.seats[w] ? g.seats[w].name : "?"} con ${g.seats[w] ? g.seats[w].total || 0 : 0} punti`, { tag: "flip7-over" });
+  } else if (g.status === "roundEnd") {
+    pushLocal(`Round ${g.round} chiuso`, "Apri il prossimo quando vuoi", { tag: "flip7-round" });
+  }
 }
 
 /** Una carta in mano o nel banco. `key` la identifica nel ridisegno
@@ -452,6 +625,7 @@ function renderTables(list, ctx) {
           const meIn = Boolean(mySeat(g, ctx));
           const busy = !meIn && list.some((t) => t.id !== g.id && mySeat(t, ctx));
           const go = meIn ? "sei qui" : g.status === "lobby" && !busy ? "siediti" : "guarda";
+          const on = onlineSeats(g, ctx).length;
           return `
           <li>
             <button class="tl-row" data-action="tbl-watch" data-id="${g.id}">
@@ -459,7 +633,7 @@ function renderTables(list, ctx) {
                 ${seats.length > 4 ? `<i class="tl-more">+${seats.length - 4}</i>` : ""}</span>
               <span class="tl-txt">
                 <b>${g.owner && g.owner.name ? `Tavolo di ${esc(g.owner.name)}` : "Tavolo aperto"}</b>
-                <small>${seats.length} ${seats.length === 1 ? "seduto" : "seduti"} · ${tableState(g)} · traguardo ${g.target}</small>
+                <small>${seats.length} ${seats.length === 1 ? "seduto" : "seduti"}${on ? ` · <i class="dot-on"></i>${on} ${on === 1 ? "collegato" : "collegati"}` : ""} · ${tableState(g)} · traguardo ${g.target}</small>
               </span>
               <span class="tl-go ${meIn ? "here" : ""}">${go}${icon("arrowLeft", "flip tiny")}</span>
             </button>
@@ -491,14 +665,16 @@ function renderLobby(g, ctx) {
       <div class="pgrid">
         ${g.order.map((sid) => {
           const seat = g.seats[sid];
+          const on = !seat.bot && isOnline(g, seat.uid, ctx.status.uid);
           const tile = `
               <span class="pg-ava" style="--pc:${colorOf(seat.name)}">
                 ${avatar(seat.playerId, seat.name, "lg")}
-                <i class="pg-check">${icon(seat.bot ? "close" : "check", "tiny")}</i>
+                <i class="pg-check">${icon(seat.bot ? "sliders" : "check", "tiny")}</i>
+                ${seat.bot ? "" : `<i class="pg-presence ${on ? "on" : ""}" title="${on ? "collegato" : "non collegato"}"></i>`}
               </span>
-              <span class="pg-name">${esc(seat.name)}${seat.bot ? '<small class="bot-note">tocca per togliere</small>' : ""}</span>`;
+              <span class="pg-name">${esc(seat.name)}${seat.bot ? `<small class="bot-note">${BOT_LEVELS[seat.level || "normale"].label} · tocca</small>` : ""}</span>`;
           return seat.bot
-            ? `<button class="pg on" data-action="tbl-unbot" data-id="${sid}">${tile}</button>`
+            ? `<button class="pg on" data-action="tbl-bot-menu" data-id="${sid}">${tile}</button>`
             : `<span class="pg on">${tile}</span>`;
         }).join("")}
         ${!seated || ctx.status.mode !== "firebase" ? `
@@ -511,7 +687,7 @@ function renderLobby(g, ctx) {
         <button class="btn primary big" data-action="tbl-start" ${g.order.length < 2 ? "disabled" : ""}>
           ${g.order.length < 2 ? "Aspetta almeno un altro giocatore" : "Dai le carte"}
         </button>
-        <button class="btn ghost small" data-action="tbl-bot">${icon("plus", "tiny")} Aggiungi un bot di prova</button>` : `
+        <button class="btn ghost small" data-action="tbl-bot">${icon("plus", "tiny")} Aggiungi un bot</button>` : `
         <p class="hint">Stai guardando: siediti per giocare, oppure apri un tavolo tuo.</p>`}
       <div class="board-links">
         ${seated ? `<button class="ghost-btn" data-action="tbl-stand">${icon("close", "tiny")} Mi alzo</button>` : ""}
@@ -580,6 +756,7 @@ function statusStrip(g, ctx, me) {
     title = `Vince ${nm(w)}`;
     sub = g.endReason === "left"
       ? `${esc(g.endedBy || "qualcuno")} ha abbandonato: valgono i punteggi di adesso`
+      : g.endReason === "blocked" ? "erano tutti bloccati: valgono i punteggi di adesso"
       : `partita finita con ${g.seats[w].total || 0} punti`;
   } else if (g.status === "roundEnd" && isPlayoff(g)) {
     // pareggio al traguardo: la partita non e' finita, si gioca una manche extra
@@ -624,15 +801,20 @@ function statusStrip(g, ctx, me) {
       } else {
         title = `Tocca a ${nm(actor)}`;
         sub = first ? "la prima carta arriva da sola…" : "deve pescare o fermarsi";
+        // fermo da un po': lo dice la striscia, prima ancora del riquadro del blocco
+        const ms = stalledFor(g);
+        if (ms >= 20e3) { sub = `fermo da ${fmtStall(ms)}`; cls = ms >= STALL_MS ? "stalled" : cls; }
       }
     }
   }
+  const spoken = `${title}. ${sub}`.replace(/<[^>]+>/g, "");
   return `
     <div class="turn-strip ${cls}" data-flip="strip">
       <span class="ts-round" title="Round ${g.round}"><small>round</small>${roundCard(g.round)}</span>
       ${isPlayoff(g) ? `<span class="ts-sp" title="manche di spareggio">${icon("flag", "tiny")}</span>` : ""}
       <div class="ts-txt${veil}"><b>${title}</b><small>${sub}</small></div>
       <button class="icon-btn ts-menu" data-action="tbl-menu" aria-label="Altre opzioni">${icon("dots")}</button>
+      <p class="sr-only" aria-live="polite" data-key="announce">${esc(spoken)}</p>
     </div>`;
 }
 
@@ -660,6 +842,18 @@ function bankRow(g) {
       </div>
       <small class="bank-note ${noteCls}">${note}</small>
     </div>`;
+}
+
+/** La reazione fresca di un account (se c'e'), per la riga del suo posto. */
+function reactionOf(g, seat) {
+  if (!seat || seat.bot) return null;
+  const r = (g.reactions || {})[seat.uid];
+  if (!r || !STICKERS[r.s]) return null;
+  const age = Date.now() - (Number(r.at) || 0);
+  if (age < 0 || age > REACTION_MS) return null;
+  // sparisce da sola: un ridisegno appena scaduta
+  setTimeout(() => store.refresh(), REACTION_MS - age + 50);
+  return r;
 }
 
 function renderSeatRow(g, sid, ctx, max, me) {
@@ -741,7 +935,10 @@ function renderSeatRow(g, sid, ctx, max, me) {
   // la carta azione sta ancora volando verso questo posto: il verdetto
   // (es. "congelato") e la riga spenta aspettano che atterri
   const outShown = h.out && !resolvedHere;
-  const state = outShown ? `<i class="seat-state s-${h.out}${bustSpoiler ? " spoiler-veil" : ""}">${OUT_LABEL[h.out]}</i>`
+  const stalled = isStalled(g) && actorOf(g) === sid && !seat.blocked;
+  const state = seat.blocked ? `<i class="seat-state s-blocked">bloccato</i>`
+    : stalled ? `<i class="seat-state s-stalled">fermo da ${fmtStall(stalledFor(g))}</i>`
+    : outShown ? `<i class="seat-state s-${h.out}${bustSpoiler ? " spoiler-veil" : ""}">${OUT_LABEL[h.out]}</i>`
     : isChoosing ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "scegli tu" : "sta scegliendo"}</i>`
     : isFlip3 ? `<i class="seat-state s-flip3">pesca ancora ${g.flip3.left}</i>`
     : isTurn ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>`
@@ -753,13 +950,22 @@ function renderSeatRow(g, sid, ctx, max, me) {
   const pos = order.indexOf(sid) + 1;
   const opens = order[0] === sid && g.status !== "over";
   const benched = pos === 0;
+  // presenza: il pallino accanto al nome (i bot seguono chi li ha messi)
+  const on = isOnline(g, seat.uid, ctx.status.uid);
+  const rx = reactionOf(g, seat);
+  // chi ha congelato / tirato il Pesca Tre a questa mano, in una nota
+  const byName = (x) => (g.seats[x] ? esc(shortName(g.seats[x])) : null);
+  const notes = [];
+  if (h.out === "frozen" && h.frozenBy && byName(h.frozenBy) && !resolvedHere) notes.push(`${icon("snow", "tiny")} da ${byName(h.frozenBy)}`);
+  if (h.fl3By && h.fl3By.length && byName(h.fl3By[h.fl3By.length - 1])) notes.push(`${icon("cardFan", "tiny")} Pesca Tre da ${byName(h.fl3By[h.fl3By.length - 1])}`);
   return `
-    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${bustSpoiler ? "spoiler-hold" : ""} ${sid === me ? "me" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${seat.blocked ? "blocked" : ""} ${stalled ? "stalled" : ""} ${bustSpoiler ? "spoiler-hold" : ""} ${sid === me ? "me" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
       <div class="seat-head">
-        <span class="seat-ava" title="${benched ? "fuori dallo spareggio" : pos + "º nel giro"}">${avatar(seat.playerId, seat.name, "sm")}${benched ? "" : `<i class="seat-no ${pos === 1 ? "first" : ""}">${pos}</i>`}</span>
+        <span class="seat-ava" title="${benched ? "fuori dal giro" : pos + "º nel giro"}">${avatar(seat.playerId, seat.name, "sm")}${benched ? "" : `<i class="seat-no ${pos === 1 ? "first" : ""}">${pos}</i>`}</span>
         <b class="seat-name">${esc(seat.name)}</b>
+        ${seat.bot ? "" : `<i class="presence ${on ? "on" : "off"}" title="${on ? "collegato" : "non collegato"}"></i>`}
         ${sid === me ? `<i class="seat-you">tu</i>` : ""}
-        ${opens ? `<i class="seat-opens">${g.status === "roundEnd" ? "apre il prossimo" : "apre"}</i>` : ""}
+        ${opens && !seat.blocked ? `<i class="seat-opens">${g.status === "roundEnd" ? "apre il prossimo" : "apre"}</i>` : ""}
         ${state}
         <span class="seat-pts">
           <b>${total}</b>
@@ -771,7 +977,9 @@ function renderSeatRow(g, sid, ctx, max, me) {
       </span>
       <div class="cards-row">${cards || '<span class="hand-empty">nessuna carta in mano</span>'}${h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined
           ? `<span class="dup-note${bustSpoiler ? " spoiler-veil" : ""}">${icon("bomb", "tiny")} doppio ${h.bustCard}: il round vale 0</span>` : ""}${savedHere
-          ? `<span class="dup-note saved${spoilerHold ? " spoiler-veil" : ""}">${icon("heartFill", "tiny")} doppio ${engine.CARD.num(last.card)}: salvo, Seconda Chance bruciata</span>` : ""}</div>
+          ? `<span class="dup-note saved${spoilerHold ? " spoiler-veil" : ""}">${icon("heartFill", "tiny")} doppio ${engine.CARD.num(last.card)}: salvo, Seconda Chance bruciata</span>` : ""}${notes.length
+          ? `<span class="by-note">${notes.join(" · ")}</span>` : ""}</div>
+      ${rx ? `<span class="reaction-bubble" data-key="rx-${rx.at}">${sticker(rx.s)}</span>` : ""}
     </li>`;
 }
 
@@ -792,6 +1000,89 @@ function actionBox(g, type, sub, body = "") {
     </div>`;
 }
 
+/**
+ * Il riquadro del blocco: chi deve giocare non muove da un minuto. Gli altri
+ * collegati votano; con tutti d'accordo il blocco scatta. Chi non e' fra i
+ * votanti vede come sta andando.
+ */
+function stallBox(g, ctx, me) {
+  if (g.status !== "playing" || !isStalled(g)) return "";
+  const target = actorOf(g);
+  const seat = target && g.seats[target];
+  if (!seat || seat.blocked || mine(g, ctx, target)) return "";
+  const required = voterUids(g, ctx, target);
+  const votes = Object.keys((g.votes && g.votes[target]) || {});
+  const iCan = Boolean(me) && required.includes(ctx.status.uid) && !g.seats[me].blocked;
+  const iVoted = votes.includes(ctx.status.uid);
+  const have = required.filter((u) => votes.includes(u)).length;
+  const need = required.length;
+  const done = need > 0 && have >= need;
+  const on = !seat.bot && isOnline(g, seat.uid, ctx.status.uid);
+  const nm = esc(shortName(seat));
+  return `
+    <div class="stall-box" data-key="stall">
+      <div class="sb-head">
+        <span class="sb-ico">${icon("clock")}</span>
+        <div class="sb-txt">
+          <b>${nm} non muove da ${fmtStall(stalledFor(g))}</b>
+          <small>${on ? "è collegato ma fermo" : "sembra non collegato"}. ${need
+            ? `Chi è al tavolo può bloccarlo di comune accordo: incassa quello che ha in mano, resta a ${(seat.total || 0) + roundPts(g, target)} punti e la partita va avanti. Se torna, rientra dal round dopo.`
+            : "Nessun altro giocatore collegato per decidere."}</small>
+        </div>
+      </div>
+      ${need ? `
+      <div class="sb-votes">
+        <span class="sb-count"><b>${have}</b> di ${need} d'accordo</span>
+        <span class="sb-avas">${required.map((u) => {
+          const sid = g.order.find((x) => g.seats[x].uid === u && !g.seats[x].bot);
+          const s = sid ? g.seats[sid] : null;
+          return s ? `<span class="sb-ava ${votes.includes(u) ? "yes" : ""}" title="${esc(s.name)}${votes.includes(u) ? " · d'accordo" : ""}">${avatar(s.playerId, s.name, "xs")}</span>` : "";
+        }).join("")}</span>
+      </div>
+      ${iCan
+        ? done
+          ? `<button class="btn danger big" data-action="tbl-block-confirm" data-id="${target}">${icon("pause", "tiny")} Blocca ${nm} a ${(seat.total || 0) + roundPts(g, target)} e vai avanti</button>`
+          : iVoted
+            ? `<button class="btn ghost" data-action="tbl-unvote" data-id="${target}">Ritiro il voto · aspettiamo gli altri</button>`
+            : `<button class="btn danger big" data-action="tbl-vote" data-id="${target}">${icon("pause", "tiny")} Sono d'accordo: blocca ${nm}</button>`
+        : `<p class="hint">Decidono i giocatori collegati al tavolo.</p>`}` : ""}
+    </div>`;
+}
+
+/** Se sono io a essere stato bloccato: la via per rientrare. */
+function blockedBox(g, ctx, me) {
+  if (!me || !g.seats[me] || !g.seats[me].blocked || g.status === "over") return "";
+  return `
+    <div class="stall-box mine" data-key="blocked">
+      <div class="sb-head">
+        <span class="sb-ico">${icon("pause")}</span>
+        <div class="sb-txt"><b>Sei stato bloccato</b><small>Non rispondevi: gli altri sono andati avanti, tu resti a ${g.seats[me].total || 0} punti. Se vuoi tornare in gioco, rientri dal prossimo round.</small></div>
+      </div>
+      <button class="btn primary big" data-action="tbl-unblock">${icon("play", "tiny")} Rientro dal prossimo round</button>
+    </div>`;
+}
+
+/** Il rischio di sballare alla prossima carta (modalita' allenamento). */
+function riskLine(g, sid) {
+  if (!prefs.get("training", false)) return "";
+  const o = drawOdds(g, sid);
+  const pct = Math.round(o.pBust * 100);
+  const tone = o.protectedBySc ? "safe" : pct >= 35 ? "hot" : pct >= 18 ? "warm" : "safe";
+  const txt = o.protectedBySc
+    ? `doppione coperto dalla Seconda Chance (${Math.round(o.pDup * 100)}% che arrivi)`
+    : `rischio di sballo <b>${pct}%</b> · in media ${o.ev >= 0 ? "+" : ""}${o.ev.toFixed(1)} a pescare`;
+  return `<p class="risk ${tone}" data-key="risk">${icon("target", "tiny")} ${txt} <small>· ${o.unseen} carte coperte</small></p>`;
+}
+
+/** La riga degli sticker: una reazione, sulla propria riga, per pochi secondi. */
+function reactionBar(g, me) {
+  if (!me || g.status === "lobby") return "";
+  return `
+    <div class="react-bar" data-key="react-bar" aria-label="Reazioni">
+      ${Object.keys(STICKERS).map((k) => `<button class="react-btn" data-action="tbl-react" data-s="${k}" aria-label="${esc(STICKERS[k].label)}" title="${esc(STICKERS[k].label)}">${sticker(k)}</button>`).join("")}
+    </div>`;
+}
+
 function renderControls(g, ctx, me) {
   if (g.status === "over") {
     return `<button class="btn primary big pulse" data-action="tbl-podium">Vai al podio ${icon("chevron", "tiny turn-r")}</button>`;
@@ -799,12 +1090,12 @@ function renderControls(g, ctx, me) {
   if (g.status === "roundEnd") {
     const playoff = isPlayoff(g);
     const label = playoff ? `Via allo spareggio · round ${g.round + 1} →` : `Via al round ${g.round + 1} →`;
-    return me
+    return blockedBox(g, ctx, me) + (me
       ? `<button class="btn go big pulse" data-action="tbl-nextround">${label}</button>
          <p class="hint">${playoff
            ? "La manche la giocano solo i pari merito: chi è fuori guarda, e si ripete finché uno resta davanti."
            : "Basta che uno lo prema: il round parte per tutti in diretta."}</p>`
-      : `<p class="hint">Si aspetta che qualcuno apra ${playoff ? "lo spareggio" : `il round ${g.round + 1}`}…</p>`;
+      : `<p class="hint">Si aspetta che qualcuno apra ${playoff ? "lo spareggio" : `il round ${g.round + 1}`}…</p>`);
   }
   const actor = actorOf(g);
   const iAct = mine(g, ctx, actor);
@@ -830,7 +1121,7 @@ function renderControls(g, ctx, me) {
             </button>`).join("")}
         </div>`);
     }
-    return actionBox(g, p.type, `${esc(shortName(g.seats[p.chooser]))} ${ACTION_META[p.type].doing}…`);
+    return actionBox(g, p.type, `${esc(shortName(g.seats[p.chooser]))} ${ACTION_META[p.type].doing}…`) + stallBox(g, ctx, me);
   }
 
   if (g.flip3) {
@@ -838,7 +1129,7 @@ function renderControls(g, ctx, me) {
     const left = g.flip3.left === 1 ? "ancora 1 carta" : `ancora ${g.flip3.left} carte`;
     return actionBox(g, "fl3", mine(g, ctx, t)
       ? `Peschi ${left}: arrivano da sole…`
-      : `${esc(shortName(g.seats[t]))} pesca ${left}: arrivano da sole…`);
+      : `${esc(shortName(g.seats[t]))} pesca ${left}: arrivano da sole…`) + stallBox(g, ctx, me);
   }
 
   if (iAct && !g.hands[actor].out && !emptyHand(g.hands[actor])) {
@@ -849,14 +1140,15 @@ function renderControls(g, ctx, me) {
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit">Pesca</button>
         <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${pts}</button>
-      </div>`;
+      </div>${flying ? "" : riskLine(g, actor)}`;
   }
   // fuori dallo spareggio: niente comandi, si guarda e basta
+  if (me && g.seats[me] && g.seats[me].blocked) return blockedBox(g, ctx, me) + stallBox(g, ctx, me);
   if (me && g.hands[me] && g.hands[me].out === "excluded") {
-    return `<p class="hint">Sei fuori dallo spareggio: la manche la giocano i pari merito.</p>`;
+    return `<p class="hint">Sei fuori dallo spareggio: la manche la giocano i pari merito.</p>` + stallBox(g, ctx, me);
   }
-  if (!me) return `<p class="hint">Stai guardando la partita.</p>`;
-  return "";
+  if (!me) return `<p class="hint">Stai guardando la partita.</p>` + stallBox(g, ctx, me);
+  return stallBox(g, ctx, me);
 }
 
 /**
@@ -869,11 +1161,11 @@ const turnOrder = (g) => (g.status === "roundEnd" && g.order.length > 1 ? [...g.
 /**
  * Chi gioca la mano in vista: tutti, oppure i soli pari merito quando e' in
  * corso (o sta per cominciare) una manche di SPAREGGIO. Gli altri restano
- * seduti a guardare, senza carte e senza punti.
+ * seduti a guardare, senza carte e senza punti. Chi e' bloccato sta fuori.
  */
 const playingSeats = (g) => {
   const only = (g.tiebreak || []).length ? new Set(g.tiebreak) : null;
-  return only ? turnOrder(g).filter((sid) => only.has(sid)) : turnOrder(g);
+  return turnOrder(g).filter((sid) => (!only || only.has(sid)) && !(g.seats[sid] && g.seats[sid].blocked));
 };
 /** true se la mano in vista e' una manche di spareggio. */
 const isPlayoff = (g) => Boolean((g.tiebreak || []).length) && g.status !== "over";
@@ -932,6 +1224,7 @@ function renderTable(g, ctx) {
         <ul class="seats">
           ${seatOrder(g).map((sid) => renderSeatRow(g, sid, ctx, max, me)).join("")}
         </ul>
+        ${reactionBar(g, me)}
       </section>
     </div>`;
 }
@@ -942,8 +1235,9 @@ const overKey = (g) => `${g.id}:${g.round}:${g.updatedAt || 0}`;
 
 function renderOver(g, ctx) {
   const me = mySeat(g, ctx);
-  const rows = g.order.map((sid) => g.seats[sid]).sort((a, b) => (b.total || 0) - (a.total || 0));
-  const winner = rows[0];
+  const winners = new Set(g.winners && g.winners.length ? g.winners : [winnerOf(g)]);
+  const rows = g.order.map((sid) => ({ sid, ...g.seats[sid] })).sort((a, b) => (b.total || 0) - (a.total || 0) || (winners.has(a.sid) ? -1 : 1));
+  const winner = rows.find((r) => winners.has(r.sid)) || rows[0];
   return `
     <section class="winner-banner holo">
       <span class="holo-sweep" aria-hidden="true"></span>
@@ -955,14 +1249,22 @@ function renderOver(g, ctx) {
       <div class="wb-mark">${wordmark()}</div>
     </section>
     <section class="card">
-      <ul class="mini-list">
-        ${rows.map((seat) => `<li><span class="mini-name">${seat === winner ? crownEmblem("mini") : '<i class="dot-empty"></i>'}${esc(seat.name)}</span><b>${seat.total || 0}</b></li>`).join("")}
-      </ul>
+      <ol class="rank-list">
+        ${rows.map((seat, i) => `
+          <li class="${winners.has(seat.sid) ? "win" : ""}">
+            <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
+            ${avatar(seat.playerId, seat.name, "sm")}
+            <span class="rl-name">${esc(seat.name)}${seat.blocked ? `<small>bloccato al round ${seat.blockedRound || "?"}</small>` : ""}</span>
+            ${winners.has(seat.sid) ? crownEmblem("mini") : ""}
+            <b>${seat.total || 0}</b>
+          </li>`).join("")}
+      </ol>
       ${g.endReason === "left" ? `<p class="hint">Partita chiusa da <b>${esc(g.endedBy || "un giocatore")}</b>:
         valgono i punteggi di quel momento, la mano in corso non conta.</p>` : ""}
       ${me ? `
         <button class="btn primary big" data-action="tbl-save">Salva nello storico (vale una Crown)</button>` : ""}
       <div class="board-links">
+        <button class="ghost-btn" data-action="tbl-share">${icon("share", "tiny")} Condividi il podio</button>
         <button class="ghost-btn" data-action="tbl-lasthand">${icon("arrowLeft", "tiny")} Rivedi l'ultima mano</button>
         <button class="ghost-btn" data-action="tbl-list">${icon("cardFan", "tiny")} Tavoli aperti</button>
         ${isTableOwner(g, ctx) ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi senza salvare</button>` : ""}
@@ -987,17 +1289,24 @@ function staleNotice(g) {
     </section>`;
 }
 
+/** Il tavolo con la mossa applicata, se e' cambiato qualcosa. */
+function apply(next, g) {
+  if (next !== g) return store.commitGame(next);
+}
+
 // --- export ------------------------------------------------------------------
 export const tableView = {
   render(ctx) {
     const list = tablesOf(ctx);
     const g = pickTable(ctx);
     syncTable(g);
+    keepTicking(g, ctx);
     if (!g) return list.length ? renderTables(list, ctx) : renderIntro(ctx);
     if (g.status === "playing") scheduleAuto(g, ctx);
     // anche l'ultima pescata della partita si anima: la fine si vede, non si intuisce
     if (g.status !== "lobby") scheduleDrawAnim(g);
     checkPendingFlight(g);
+    if (g.status !== "lobby") alertOnChanges(g, ctx);
     // con piu' tavoli aperti serve sapere dove si e' e come si torna indietro
     const head = (list.length > 1 ? tableBar(g, list) : "") + staleNotice(g);
     if (g.status === "lobby") return head + renderLobby(g, ctx);
@@ -1043,7 +1352,8 @@ export const tableView = {
         s2.seats[sid] = { uid: ctx.status.uid, name: nm, playerId: bound, total: 0 };
         if (!s2.order.includes(sid)) s2.order = [...s2.order, sid];
         if (s2.owner && s2.owner.uid === ctx.status.uid && !s2.owner.name) s2.owner = { ...s2.owner, name: nm };
-        return store.commitGame(s2);
+        await store.commitGame(s2);
+        return store.touchTable(g.id, 0);
       }
       const roster = Object.entries(ctx.room.players || {}).filter(([, p]) => !p.archived);
       const takenPlayers = new Set(g.order.map((sid) => g.seats[sid].playerId));
@@ -1065,7 +1375,8 @@ export const tableView = {
       if (!s2.order.includes(sid)) s2.order = [...s2.order, sid];
       // il tavolo prende il nome di chi l'ha aperto appena si siede
       if (s2.owner && s2.owner.uid === ctx.status.uid && !s2.owner.name) s2.owner = { ...s2.owner, name };
-      return store.commitGame(s2);
+      await store.commitGame(s2);
+      return store.touchTable(g.id, 0);
     },
     "tbl-bot"(ctx) {
       const g = pickTable(ctx);
@@ -1075,17 +1386,28 @@ export const tableView = {
       if (!name) return toast(`Massimo ${BOT_NAMES.length} bot`, "warn");
       const sid = "b" + store.newId();
       const s2 = structuredClone(g);
-      s2.seats[sid] = { uid: ctx.status.uid, name, playerId: null, bot: true, total: 0 };
+      s2.seats[sid] = { uid: ctx.status.uid, name, playerId: null, bot: true, level: "normale", total: 0 };
       s2.order = [...s2.order, sid];
       return store.commitGame(s2);
     },
-    "tbl-unbot"(ctx, el) {
+    /** Tocco su un bot in lobby: cambia livello o toglilo. */
+    async "tbl-bot-menu"(ctx, el) {
       const g = pickTable(ctx);
       const sid = el.dataset.id;
       if (!g || g.status !== "lobby" || !g.seats[sid] || !g.seats[sid].bot) return;
-      const s2 = structuredClone(g);
-      delete s2.seats[sid];
-      s2.order = s2.order.filter((x) => x !== sid);
+      const cur = g.seats[sid].level || "normale";
+      const pick = await askChoice(g.seats[sid].name, [
+        ...Object.entries(BOT_LEVELS).map(([k, v]) => ({ id: k, label: `${k === cur ? "✓ " : ""}${v.label} — ${v.desc}` })),
+        { id: "__remove", label: "Togli dal tavolo" }
+      ], { message: "Il bot conta-carte guarda solo le carte già uscite, come farebbe una persona: il mazzo non lo sbircia." });
+      if (!pick) return;
+      const g2 = pickTable(ctx);
+      if (!g2 || !g2.seats[sid]) return;
+      const s2 = structuredClone(g2);
+      if (pick === "__remove") {
+        delete s2.seats[sid];
+        s2.order = s2.order.filter((x) => x !== sid);
+      } else s2.seats[sid] = { ...s2.seats[sid], level: pick };
       return store.commitGame(s2);
     },
     /** Il menu della striscia: abbandonare o annullare, senza occupare spazio sul tavolo. */
@@ -1096,13 +1418,15 @@ export const tableView = {
       const choices = [];
       if (me && g.status !== "over" && g.status !== "lobby") choices.push({ id: "leave", label: "Abbandono la partita" });
       if (isTableOwner(g, ctx) || isStale(g)) choices.push({ id: "close", label: "Annulla il tavolo" });
+      choices.push({ id: "training", label: `${prefs.get("training", false) ? "✓ " : ""}Modalità allenamento (rischio di sballo)` });
       choices.push({ id: "list", label: "Tavoli aperti (aprine un altro)" });
       const pick = await askChoice("Tavolo", choices, {
         message: me && g.status !== "over" && g.status !== "lobby"
-          ? "Chi abbandona chiude la partita per tutti, coi punteggi di adesso. Lo storico non si tocca."
+          ? "Chi abbandona chiude la partita per tutti, coi punteggi di adesso. Se invece qualcuno non risponde, si può bloccare solo lui e andare avanti. Lo storico non si tocca."
           : "Lo storico non si tocca in nessun caso."
       });
       if (pick === "list") { viewingId = null; browsing = true; return; }
+      if (pick === "training") { prefs.set("training", !prefs.get("training", false)); toast(prefs.get("training") ? "Allenamento: vedi il rischio di sballo al tuo turno" : "Allenamento disattivato"); return; }
       if (pick === "leave") return tableView.actions["tbl-leave"](ctx);
       if (pick === "close") return tableView.actions["tbl-close"](ctx);
     },
@@ -1139,28 +1463,65 @@ export const tableView = {
       if (!g) return;
       const actor = actorOf(g);
       if (!controls(g, ctx, actor)) return;
-      const next = engine.hit(g, actor);
-      if (next !== g) return store.commitGame(next);
+      return apply(engine.hit(g, actor), g);
     },
     "tbl-stay"(ctx) {
       const g = pickTable(ctx);
       if (!g) return;
       const actor = actorOf(g);
       if (!controls(g, ctx, actor)) return;
-      const next = engine.stay(g, actor);
-      if (next !== g) return store.commitGame(next);
+      return apply(engine.stay(g, actor), g);
     },
     "tbl-target"(ctx, el) {
       const g = pickTable(ctx);
       if (!g || !g.pending) return;
       if (!controls(g, ctx, g.pending.chooser)) return;
-      const next = engine.chooseTarget(g, g.pending.chooser, el.dataset.id);
-      if (next !== g) return store.commitGame(next);
+      return apply(engine.chooseTarget(g, g.pending.chooser, el.dataset.id), g);
     },
     "tbl-nextround"(ctx) {
       const g = pickTable(ctx);
       if (!g || g.status !== "roundEnd") return;
       return store.commitGame(engine.nextRound(g));
+    },
+    // --- blocco di chi non risponde ---
+    "tbl-vote"(ctx, el) {
+      const g = pickTable(ctx);
+      const target = el.dataset.id;
+      if (!g || !isStalled(g) || actorOf(g) !== target) return toast("Non è più fermo", "warn");
+      const required = voterUids(g, ctx, target);
+      if (!required.includes(ctx.status.uid)) return toast("Decidono i giocatori collegati al tavolo", "warn");
+      const next = engine.voteBlock(g, target, ctx.status.uid, required);
+      if (next.seats[target].blocked) toast(`${g.seats[target].name} bloccato: la partita continua`);
+      return apply(next, g);
+    },
+    "tbl-unvote"(ctx, el) {
+      const g = pickTable(ctx);
+      if (!g) return;
+      return apply(engine.unvoteBlock(g, el.dataset.id, ctx.status.uid), g);
+    },
+    /** I voti bastano (es. qualcuno si e' scollegato nel frattempo): si conferma. */
+    "tbl-block-confirm"(ctx, el) {
+      const g = pickTable(ctx);
+      const target = el.dataset.id;
+      if (!g || !isStalled(g) || actorOf(g) !== target) return toast("Non è più fermo", "warn");
+      const required = voterUids(g, ctx, target);
+      const votes = (g.votes && g.votes[target]) || {};
+      if (!required.length || !required.every((u) => votes[u])) return toast("Non sono ancora tutti d'accordo", "warn");
+      toast(`${g.seats[target].name} bloccato: la partita continua`);
+      return apply(engine.blockSeat(g, target), g);
+    },
+    "tbl-unblock"(ctx) {
+      const g = pickTable(ctx);
+      const me = g && mySeat(g, ctx);
+      if (!g || !me) return;
+      toast("Bentornato: rientri dal prossimo round");
+      return apply(engine.unblockSeat(g, me), g);
+    },
+    // --- reazioni ---
+    "tbl-react"(ctx, el) {
+      const g = pickTable(ctx);
+      if (!g || !mySeat(g, ctx)) return;
+      return store.reactAt(g.id, el.dataset.s);
     },
     /** Dall'ultima mano al podio (scelta locale: ognuno quando vuole). */
     "tbl-podium"(ctx) {
@@ -1171,6 +1532,16 @@ export const tableView = {
     },
     "tbl-lasthand"() {
       podiumKey = null;
+    },
+    async "tbl-share"(ctx) {
+      const g = pickTable(ctx);
+      if (!g || g.status !== "over") return;
+      const winners = new Set(g.winners && g.winners.length ? g.winners : [winnerOf(g)]);
+      const rows = g.order.map((sid) => ({ sid, playerId: g.seats[sid].playerId, name: g.seats[sid].name, total: g.seats[sid].total || 0 }))
+        .sort((a, b) => b.total - a.total);
+      const winIds = new Set(rows.filter((r) => winners.has(r.sid)).map((r) => r.playerId || r.sid));
+      await sharePodium(rows.map((r) => ({ ...r, playerId: r.playerId || r.sid })), winIds,
+        { title: "Vince al tavolo online", room: ctx.room.meta.name || "", dateLabel: fmtDate(Date.now()), target: g.target, subtitle: `${rows[0].total} punti · ${g.round} ${g.round === 1 ? "mano" : "mani"}`, text: `Flip 7 · vince ${rows[0].name} con ${rows[0].total} punti` });
     },
     async "tbl-save"(ctx) {
       const g = pickTable(ctx);

@@ -15,6 +15,8 @@ import { DEFAULTS } from "./config.js";
 import { icon, wordmark, fanArt, googleG } from "./icons.js";
 import { avatar } from "./avatar.js";
 import { applyTheme, watchSystemTheme } from "./theme.js";
+import { APP_VERSION } from "./config.js";
+import "./notify.js"; // sblocca l'audio al primo tocco
 
 const VIEWS = {
   partita:    { title: "Partita",    ico: "cards",   view: liveView },
@@ -62,6 +64,7 @@ function renderTopbar(c) {
       </button>
     </div>
     <div class="top-actions">
+      ${store.canRetryOnline() ? `<button class="top-btn warn" data-action="retry-online" aria-label="Riprova il collegamento">${icon("refresh")}</button>` : ""}
       ${store.isOwner() ? `<button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>` : ""}
       <button class="me-btn" data-action="go-setup" aria-label="Chi sono">
       ${meName
@@ -304,6 +307,16 @@ document.addEventListener("click", (ev) => {
     return;
   }
   if (name === "google-signin") { ev.preventDefault(); store.signIn().then(() => render()); return; }
+  if (name === "retry-online") {
+    ev.preventDefault();
+    toast("Riprovo il collegamento…");
+    store.retryOnline().then((ok) => {
+      if (ok) toast("Collegato: ora puoi accedere", "ok");
+      else toast("Ancora niente: controlla la rete e riprova", "warn");
+      render();
+    });
+    return;
+  }
   if (name === "request-access") {
     ev.preventDefault();
     (async () => {
@@ -390,8 +403,28 @@ async function boot() {
   render();
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    // quando un service worker nuovo prende il controllo c'e' una versione
+    // nuova dei file: lo si dice, e un tocco ricarica
+    let hadController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController) { hadController = true; return; } // prima installazione
+      showUpdateToast();
+    });
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
   }
 }
+
+function showUpdateToast() {
+  const root = document.getElementById("toast-root");
+  if (!root || root.querySelector(".toast-update")) return;
+  const node = document.createElement("div");
+  node.className = "toast toast-update show";
+  node.innerHTML = `<span>C'è una versione nuova dell'app</span><button class="btn small" data-action="reload-app">Ricarica</button>`;
+  root.appendChild(node);
+}
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest('[data-action="reload-app"]')) location.reload();
+});
+console.info("[flip7] versione", APP_VERSION);
 
 boot();

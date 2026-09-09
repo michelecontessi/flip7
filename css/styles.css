@@ -246,6 +246,8 @@ h1, h2, h3 { margin: 0; font-weight: 700; }
   border: 0; background: var(--surface-2); color: var(--muted);
   display: grid; place-items: center;
 }
+/* solo locale: il tasto per riprovare il collegamento si fa notare */
+.top-btn.warn { background: var(--gold-bg); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold-line); }
 .me-btn { background: none; border: 0; padding: 0; display: flex; }
 
 /* ---------- impaginazione ---------- */
@@ -768,7 +770,7 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .hg-id { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .hg-win { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .hg-win b { font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hg-meta { display: flex; align-items: center; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; }
+.hg-meta { display: flex; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--dim); line-height: 1.3; }
 .hg-meta .tag { background: var(--surface-3); }
 .hg-top { text-align: right; line-height: 1.05; }
 .hg-top b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -958,6 +960,10 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .quick.on.gold { background: var(--holo); color: #2a1c02; }
 .quick.on.red { background: var(--red); color: #fff; }
 .quick.on.ice { background: #2f8fd8; color: #fff; }
+/* vite extra: non fanno punti, quindi il tasto resta piu' quieto degli altri
+   (e non si confonde con il rosso dello Sballo) */
+.quick.heart { color: var(--c-rose); }
+.quick.on.rose { background: rgba(220,70,130,.14); color: var(--c-rose); box-shadow: inset 0 0 0 1.5px var(--c-rose); }
 .quick-row .quick { min-width: 0; padding: 0 6px; font-size: 13.5px; }
 
 .calc-section { display: flex; flex-direction: column; gap: 8px; }
@@ -1854,3 +1860,250 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
 .sk-inline { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; }
 .sk-inline.you { color: var(--green); }
 .sk-inline.none { color: var(--dim); }
+
+/* ==========================================================================
+   Presenza, blocco di chi non risponde, avvisi, reazioni e allenamento
+   (tavolo online) · stagioni, albo d'oro, testa a testa, primati, Elo
+   (classifica) · storico ridisegnato, grafico della partita e replay.
+   ========================================================================== */
+
+/* testo per le sole tecnologie assistive (annunci del tavolo) */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---- presenza: il pallino accanto al nome ---- */
+.presence { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); opacity: .45; }
+.presence.on { background: var(--green); opacity: 1; box-shadow: 0 0 0 3px rgba(28,122,86,.16); }
+.pg-presence { position: absolute; left: -2px; bottom: 1px; width: 11px; height: 11px; border-radius: 50%; background: var(--dim); border: 2px solid var(--surface); opacity: .5; }
+.pg-presence.on { background: var(--green); opacity: 1; }
+.dot-on { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 3px; vertical-align: 1px; }
+
+/* ---- chi non risponde, chi e' bloccato ---- */
+.seat-state.s-stalled { background: rgba(197,59,48,.12); color: var(--red); animation: pulse 1.6s infinite; }
+.seat-state.s-blocked { background: var(--surface-3); color: var(--dim); }
+.seat.blocked { opacity: .5; }
+.seat.blocked .cards-row { display: none; }
+.turn-strip.stalled { background: rgba(197,59,48,.10); }
+.turn-strip.stalled .ts-txt small { color: var(--red); font-weight: 650; }
+.stall-box {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 13px; border-radius: 14px;
+  background: rgba(197,59,48,.08); box-shadow: inset 0 0 0 2px rgba(197,59,48,.35);
+}
+.stall-box.mine { background: var(--gold-bg); box-shadow: inset 0 0 0 2px var(--gold-line); }
+.sb-head { display: flex; align-items: flex-start; gap: 10px; }
+.sb-ico { width: 38px; height: 38px; flex: none; border-radius: 11px; display: grid; place-items: center; background: rgba(197,59,48,.14); color: var(--red); }
+.stall-box.mine .sb-ico { background: rgba(184,134,15,.16); color: var(--gold); }
+.sb-ico .ico { width: 22px; height: 22px; }
+.sb-txt { min-width: 0; }
+.sb-txt b { display: block; font-family: var(--font-display); font-size: 16px; font-weight: 600; line-height: 1.2; }
+.sb-txt small { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+.sb-votes { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sb-count { font-size: 13px; color: var(--muted); }
+.sb-count b { font-family: var(--font-display); font-size: 18px; color: var(--text); }
+.sb-avas { display: flex; align-items: center; }
+.sb-ava { display: inline-flex; border-radius: 50%; margin-left: -6px; opacity: .45; filter: grayscale(.6); box-shadow: 0 0 0 2px var(--surface); }
+.sb-ava.yes { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--green); }
+
+/* ---- rischio di sballo (allenamento) ---- */
+.risk { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0; font-size: 12.5px; color: var(--muted); padding: 6px 10px; border-radius: 10px; background: var(--surface-2); }
+.risk b { font-family: var(--font-display); font-size: 15px; }
+.risk.hot { background: rgba(197,59,48,.10); color: var(--red); }
+.risk.warm { background: var(--gold-bg); color: var(--gold); }
+.risk.safe { background: rgba(28,122,86,.10); color: var(--green); }
+.risk small { color: var(--dim); }
+
+/* ---- reazioni con gli sticker ---- */
+.react-bar { display: flex; justify-content: center; gap: 6px; padding: 8px 0 6px; border-top: 1px solid var(--line); margin-top: 4px; }
+.react-btn { width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); border: 0; padding: 5px; transition: transform .12s ease; }
+.react-btn:active { transform: scale(.88); }
+.sticker { width: 100%; height: 100%; display: block; }
+.seat { position: relative; }
+.reaction-bubble {
+  position: absolute; left: 6px; top: -14px; width: 44px; height: 44px; padding: 5px;
+  border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-2);
+  animation: rx-pop .35s cubic-bezier(.2,1.4,.4,1), rx-fade .6s ease 3.3s forwards;
+  pointer-events: none; z-index: 3;
+}
+@keyframes rx-pop { from { transform: scale(.3) rotate(-12deg); opacity: 0; } }
+@keyframes rx-fade { to { transform: translateY(-14px) scale(.7); opacity: 0; } }
+.by-note { display: inline-flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; margin-left: 4px; font-size: 11px; font-weight: 650; color: var(--c-blue); line-height: 1.2; }
+.by-note .ico { width: 12px; height: 12px; flex: none; }
+
+/* ---- classifica di una partita (podio online, dettaglio storico) ---- */
+.rank-list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.rank-list li { display: grid; grid-template-columns: 24px 30px 1fr auto auto; align-items: center; gap: 9px; padding: 9px 6px; border-bottom: 1px solid var(--line); }
+.rank-list li:last-child { border-bottom: 0; }
+.rank-list li.win { background: var(--gold-bg); border-radius: 12px; border-bottom-color: transparent; }
+.rank-list li.hl-row .rl-name { font-weight: 800; }
+.rl-name { min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-name small { display: block; font-size: 11px; color: var(--dim); font-weight: 500; white-space: normal; line-height: 1.3; }
+.rank-list li > b { font-family: var(--font-display); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+.rank-list .crown-emblem.mini { width: 18px; height: 17px; }
+
+/* ---- storico: classifica in chiaro dentro ogni partita ---- */
+.hg-rows { display: flex; flex-direction: column; gap: 3px; list-style: none; margin: 0; padding: 2px 0 0; }
+.hg-row { display: grid; grid-template-columns: 20px 20px minmax(0, 1fr) 1fr 36px; align-items: center; gap: 7px; font-size: 13px; }
+.hg-row .rank { font-size: 11.5px; }
+.hg-row .rank.medal { width: 20px; height: 20px; font-size: 10.5px; }
+.hg-row .avatar.xs { width: 20px; height: 20px; font-size: 8px; }
+.hg-name { display: flex; align-items: center; gap: 4px; min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-name .crown-emblem.mini { width: 15px; height: 14px; flex: none; }
+.hg-name .tag { font-size: 9px; padding: 1px 5px; }
+.hg-bar { display: flex; height: 7px; border-radius: 99px; background: var(--line); overflow: hidden; min-width: 40px; }
+.hg-bar i { display: block; height: 100%; border-radius: 99px; background: var(--surface-3); opacity: .75; }
+.hg-row.win .hg-bar i { opacity: 1; background: linear-gradient(90deg, #ffe1a0, #e2a416); }
+.hg-row.win .hg-name { font-weight: 800; }
+.hg-row > b { font-family: var(--font-display); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.hg-row.win > b { color: var(--c-gold); }
+.hg-more { font-size: 11.5px; color: var(--dim); padding-left: 54px; }
+.hg-meta .tag { margin-left: 6px; }
+.sheet-time { font-weight: 600; color: var(--muted); }
+.month-champ { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 9px 2px 3px; border-radius: 999px; background: var(--gold-bg); border: 1px solid var(--gold-line); font-size: 11.5px; font-weight: 750; color: var(--c-gold); max-width: 50%; }
+.month-champ span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.month-live { margin-left: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+
+/* ---- grafico del corso di una partita ---- */
+.progress-svg { display: block; font-family: var(--font-body); }
+.progress-svg .grid { stroke: var(--line-strong); stroke-width: 1; }
+.progress-svg .grid.goal { stroke: var(--gold); stroke-dasharray: 4 4; }
+.progress-svg text { font-size: 10px; fill: var(--dim); text-anchor: end; }
+.progress-svg text.rx { text-anchor: middle; }
+.progress-svg polyline { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
+.progress-svg polyline.win { stroke-width: 3.2; opacity: 1; }
+.progress-svg .sel-line { stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
+
+/* ---- replay mano per mano ---- */
+.page-sub { margin-left: auto; font-size: 12px; color: var(--muted); }
+.replay-nav { display: flex; align-items: center; gap: 8px; }
+.replay-dots { flex: 1; display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+.rdot { width: 12px; height: 12px; border-radius: 50%; border: 0; padding: 0; background: var(--surface-3); }
+.rdot.on { background: var(--primary); transform: scale(1.25); }
+.rdot.sp { box-shadow: 0 0 0 2px var(--gold-line); }
+.rp-list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.rp-row { display: flex; flex-direction: column; gap: 5px; padding: 8px 4px 9px; border-bottom: 1px solid var(--line); border-radius: 12px; }
+.rp-row:last-child { border-bottom: 0; }
+.rp-row.lead { background: var(--holo-soft); padding-left: 10px; padding-right: 8px; margin: 0 -6px; }
+.rp-row.bust .rp-cards .fcard { filter: grayscale(.55); }
+.rp-row.bust .rp-cards .fcard.dup { filter: none; }
+.rp-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rp-head .avatar.sm { width: 26px; height: 26px; font-size: 10px; }
+.rp-name { font-size: 15px; font-weight: 750; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-cards { min-height: 0; flex-wrap: wrap; gap: 4px; }
+.rp-cards .fcard.mini { width: 34px; flex: none; }
+.rp-typed { font-size: 12.5px; color: var(--muted); }
+.rp-row .by-note { margin-left: 0; font-size: 11.5px; }
+
+/* ---- coccarde di stagione ---- */
+.season-badge { display: inline-block; width: 30px; height: 34px; vertical-align: middle; flex: none; filter: drop-shadow(0 2px 4px rgba(120,80,10,.28)); }
+.season-badge.xs { width: 19px; height: 22px; filter: drop-shadow(0 1px 2px rgba(120,80,10,.25)); }
+.season-badge.sm { width: 26px; height: 30px; }
+.season-badge.md { width: 38px; height: 44px; }
+.season-badge.big { width: 64px; height: 73px; filter: drop-shadow(0 5px 10px rgba(120,80,10,.3)); }
+.season-badge.hero { width: 96px; height: 110px; filter: drop-shadow(0 8px 16px rgba(120,80,10,.32)); animation: badge-sway 4s ease-in-out infinite; }
+.season-badge.muted { filter: drop-shadow(0 2px 4px rgba(60,70,80,.2)); }
+@keyframes badge-sway { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+.badge-row { display: inline-flex; align-items: center; gap: 1px; margin-left: 5px; vertical-align: middle; }
+.badge-more { font-style: normal; font-size: 10px; font-weight: 800; color: var(--c-gold); margin-left: 2px; }
+.lbname .txt .badge-row { vertical-align: -5px; }
+.profile-badges { display: flex; justify-content: center; }
+.profile-badges .badge-row { margin: 2px 0 0; gap: 4px; }
+
+/* stagioni in classifica */
+.season-live { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 6px; border: 0; border-radius: 12px; background: var(--surface-2); }
+.sl-txt { min-width: 0; flex: 1; }
+.sl-txt b { display: block; font-size: 14px; font-weight: 750; }
+.sl-txt small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; }
+.sl-txt small b { display: inline; font-size: inherit; }
+.season-list { display: flex; flex-direction: column; list-style: none; margin: 8px 0 0; padding: 0; }
+.season-list li { border-bottom: 1px solid var(--line); }
+.season-list li:last-child { border-bottom: 0; }
+.season-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 9px 4px; border: 0; background: none; min-width: 0; }
+.sr-avas { display: flex; align-items: center; flex: none; }
+.sr-avas .avatar { margin-right: -8px; box-shadow: 0 0 0 2px var(--surface); }
+.sr-avas .avatar:last-child { margin-right: 0; }
+.sr-txt { min-width: 0; flex: 1; }
+.sr-txt b { display: block; font-size: 15px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-txt small { display: block; font-size: 12px; color: var(--muted); line-height: 1.3; }
+.season-row .ico, .season-live .ico { color: var(--dim); flex: none; }
+
+/* pagina della stagione */
+.season-hero { position: relative; overflow: hidden; display: grid; justify-items: center; gap: 6px; text-align: center; padding: 22px 16px 20px; border-radius: var(--radius); background: var(--surface-2); }
+.season-hero.holo { background: var(--holo-soft); }
+.sh-label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--c-gold); margin-top: 4px; }
+.season-hero:not(.holo) .sh-label { color: var(--muted); }
+.sh-avas { display: flex; gap: 8px; }
+.sh-name { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.sh-sub { font-size: 13px; color: var(--muted); }
+.titles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 4px; }
+.title-tile { display: grid; justify-items: center; gap: 3px; padding: 12px 6px 10px; border: 0; border-radius: 14px; background: var(--gold-bg); text-align: center; }
+.title-tile b { font-size: 13px; font-weight: 750; }
+.title-tile small { font-size: 10.5px; color: var(--muted); line-height: 1.25; }
+.aw-list.compact li { grid-template-columns: 34px 1fr auto; }
+.aw-list.compact .award-emblem.small { width: 34px; height: 32px; margin: 0; }
+.aw-list.compact .award-title { font-size: 15px; }
+.aw-list.compact b { font-size: 12.5px; color: var(--muted); }
+
+/* primati della stanza */
+.rec-list { display: flex; flex-direction: column; list-style: none; margin: 4px 0 0; padding: 0; }
+.rec-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.rec-row:last-child { border-bottom: 0; }
+.rec-ico { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); color: var(--c-blue); }
+.rec-ico .ico { width: 19px; height: 19px; }
+.rec-txt { min-width: 0; flex: 1; }
+.rec-txt > b { display: block; font-size: 14.5px; font-weight: 750; }
+.rec-txt small { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.rec-txt small b { color: var(--text); }
+.rec-val { flex: none; font-size: 12px; font-weight: 750; padding: 4px 10px; border-radius: 999px; background: rgba(60,140,220,.14); color: var(--c-blue); white-space: nowrap; }
+
+/* rating Elo */
+.elo-list { display: flex; flex-direction: column; list-style: none; margin: 4px 0 0; padding: 0; }
+.elo-list li { display: grid; grid-template-columns: 24px 30px 1fr auto; align-items: center; gap: 9px; padding: 8px 6px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.elo-list li:last-child { border-bottom: 0; }
+.elo-list li.me { box-shadow: inset 3px 0 0 var(--gold); }
+.elo-name { min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.elo-name small { display: block; font-size: 11px; color: var(--dim); font-weight: 500; }
+.elo-list li > b { font-family: var(--font-display); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.elo-list li > b.up { color: var(--green); }
+.elo-list li > b.down { color: var(--red); }
+
+/* testa a testa */
+.h2h-list { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.h2h-list li { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.h2h-list li:last-child { border-bottom: 0; }
+.h2h-txt { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.h2h-txt b { font-size: 14.5px; font-weight: 750; }
+.h2h-txt small { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.h2h-bar { display: flex; height: 6px; border-radius: 99px; overflow: hidden; background: var(--line); }
+.h2h-bar i { display: block; height: 100%; }
+.h2h-bar .a { background: var(--green); }
+.h2h-bar .e { background: var(--dim); }
+.h2h-bar .b { background: var(--red); }
+.h2h-score { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-family: var(--font-display); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.h2h-score i { font-style: normal; font-size: 12px; color: var(--dim); }
+.h2h-score b:first-child { color: var(--green); }
+.h2h-score b:last-child { color: var(--red); }
+.h2h-score.up b:first-child { font-size: 20px; }
+.h2h-score.down b:last-child { font-size: 20px; }
+
+/* ---- setup: interruttori ---- */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; font-weight: 600; }
+.switch-row:last-of-type { border-bottom: 0; }
+.switch-row > span { display: inline-flex; align-items: center; gap: 7px; }
+.switch-row input[type="checkbox"] { appearance: none; width: 42px; height: 24px; border-radius: 999px; background: var(--surface-3); position: relative; margin: 0; cursor: pointer; transition: background .2s ease; }
+.switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s ease; }
+.switch-row input[type="checkbox"]:checked { background: var(--green); }
+.switch-row input[type="checkbox"]:checked::after { transform: translateX(18px); }
+.switch-row input[type="checkbox"]:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---- "congelato da" nel pannello punti ---- */
+.frozen-by { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px 2px 0; }
+.fb-label { font-size: 12px; color: var(--muted); font-weight: 650; margin-right: 2px; }
+.fb-pick { border: 0; background: none; padding: 2px; border-radius: 50%; opacity: .45; transition: opacity .15s ease, transform .15s ease; }
+.fb-pick.on { opacity: 1; transform: scale(1.1); box-shadow: 0 0 0 2.5px var(--c-blue); }
+
+/* ---- avviso di aggiornamento ---- */
+.toast.toast-update { display: flex; align-items: center; gap: 12px; background: var(--primary); color: var(--primary-ink); }
+.toast.toast-update .btn { background: var(--primary-ink); color: var(--primary); }
+.mini-list li.tap { cursor: pointer; }
+.mini-list li.tap:active { background: var(--tint); }
+.hl.tone-silver { background: rgba(120,140,165,.12); }

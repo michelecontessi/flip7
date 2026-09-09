@@ -76,6 +76,23 @@ test("sballi, congelate e Flip 7 online entrano in classifica come dal vivo", as
   assert.equal(ada.bestHand, 43);
 });
 
+test("le vite extra del tavolo online arrivano fino al trofeo Sette Vite", async () => {
+  // Ada pesca il cuore, poi ne pesca un altro: il secondo va a Bea
+  let s = table(["Ada", "Bea"], ["sc", "n4", "sc"], 200);
+  s = hit(s, "s0"); s = hit(s, "s1"); s = hit(s, "s0");
+  s = stay(s, s.turn); s = stay(s, s.turn);
+  const g = await savedGame({ ...s, status: "over" });
+
+  assert.equal(g.rounds.p0.r0.hearts, 1);
+  assert.equal(g.rounds.p1.r0.hearts, 1);
+  assert.equal(g.results.p0.hearts, 1);
+  assert.equal(g.results.p1.hearts, 1);
+
+  const { rows } = leaderboard({ x: g }, {});
+  assert.equal(rows.find((r) => r.playerId === "p0").hearts, 1);
+  assert.equal(rows.find((r) => r.playerId === "p0").heartTracked, 1);
+});
+
 test("una partita giocata davvero al tavolo si archivia intera", async () => {
   // Ada: 4 e 6; Bea: 3, poi il doppio 3 -> sballa
   let s = table(["Ada", "Bea"], ["n3", "n6", "n3", "n4"], 10);

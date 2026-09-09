@@ -1,12 +1,13 @@
 // Service worker minimale: network-first, cache solo come rete di sicurezza.
 // Cosi' gli aggiornamenti arrivano sempre e l'app si apre anche senza rete.
-const CACHE = "flip7-v55";
+const CACHE = "flip7-v56";
 const SHELL = [
   "./", "./index.html", "./css/styles.css", "./icon.svg", "./manifest.webmanifest",
   "./js/app.js", "./js/store.js", "./js/stats.js", "./js/scoring.js", "./js/ui.js",
   "./js/prefs.js", "./js/config.js", "./js/icons.js", "./js/theme.js", "./js/avatar.js",
   "./js/views/live.js", "./js/views/leaderboard.js", "./js/views/history.js", "./js/views/setup.js",
-  "./js/views/table.js", "./js/views/rooms.js", "./js/game.js", "./js/morph.js"
+  "./js/views/table.js", "./js/views/rooms.js", "./js/game.js", "./js/morph.js",
+  "./js/notify.js", "./js/share.js", "./icon-192.png", "./icon-512.png"
 ];
 
 self.addEventListener("install", (e) => {
@@ -37,4 +38,20 @@ self.addEventListener("fetch", (e) => {
       })
       .catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
   );
+});
+
+// Tocco sulla notifica ("tocca a te"): si torna sull'app, al tavolo.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "#tavolo";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const client of list) {
+      if ("focus" in client) {
+        client.focus();
+        if ("navigate" in client && !client.url.endsWith(url)) client.navigate(client.url.split("#")[0] + url).catch(() => {});
+        return;
+      }
+    }
+    return self.clients.openWindow(url);
+  }));
 });

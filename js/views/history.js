@@ -1,57 +1,36 @@
 // ---------------------------------------------------------------------------
-// Vista "Storico": elenco partite, dettaglio, inserimento partite passate e,
-// per il solo proprietario, correzione di una partita chiusa (mani comprese).
+// Vista "Storico": elenco partite (con l'ora, la durata e la classifica di
+// ognuna in chiaro), dettaglio con il grafico del corso della partita e il
+// replay mano per mano, inserimento partite passate e, per il solo
+// proprietario, correzione di una partita chiusa (mani comprese).
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
-import { esc, initials, colorOf, fmtDate, fmtDateTime, inputDate, openSheet, closeSheet, askText, askConfirm, askChoice, toast, sheet, captureSheetInputs, openPage, closePage, page, capturePageInputs } from "../ui.js";
-import { icon, crownEmblem } from "../icons.js";
-import { historyList, roundCount, reviseGame, roundKey, playerTotal, tiebreakOf } from "../stats.js";
+import { esc, colorOf, fmtDate, fmtDateTime, inputDate, openSheet, closeSheet, askText, askConfirm, askChoice, toast, sheet, captureSheetInputs, openPage, closePage, page, capturePageInputs } from "../ui.js";
+import { icon, crownEmblem, numberCard, modCard, flip7Card, heartCard, seasonBadge } from "../icons.js";
+import { historyList, roundCount, reviseGame, roundKey, playerTotal, tiebreakOf, gameProgress, fmtDuration, seasons, seasonShort } from "../stats.js";
 import { computeRound, isBlankEntry } from "../scoring.js";
-import { avatar, avatarHtml, playerAvatar } from "../avatar.js";
+import { avatar } from "../avatar.js";
 import { renderScoreSheet, patchCalcSheet, makeCalcState, normalizeEntry } from "./live.js";
+import { sharePodium } from "../share.js";
 
 const MONTHS = new Intl.DateTimeFormat("it-IT", { month: "short" });
+const TIME = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" });
+const WEEKDAY = new Intl.DateTimeFormat("it-IT", { weekday: "short" });
 const sortedResults = (game) => Object.entries(game.results || {}).sort((a, b) => b[1].total - a[1].total);
 
-const sourceLabel = (g) => g.source === "manual" ? "inserita a mano" : g.source === "online" ? "giocata al tavolo online" : fmtDateTime(g.playedAt);
+const sourceLabel = (g) => g.source === "manual" ? "inserita a mano" : g.source === "online" ? "giocata al tavolo online" : "segnata dal vivo";
 const sourceTag = (g) => g.source === "online" ? '<span class="tag online">online</span>' : g.source === "manual" ? '<span class="tag">a mano</span>' : "";
-
-/** Pallino di un giocatore nell'elenco: il suo avatar, o la sola iniziale. */
-function chip(id, r, won) {
-  const a = playerAvatar(id);
-  if (a) return avatarHtml(a, r.name, `hp ${won ? "w" : ""}`);
-  return `<i class="hp ${won ? "w" : ""}" style="background:${colorOf(r.name)}" title="${esc(r.name)}">${initials(r.name)[0]}</i>`;
-}
-
-/** Tinta della barra: quella dell'avatar se e' un personaggio, altrimenti dal nome. */
-function barColor(id, name) {
-  const a = playerAvatar(id);
-  return a && a.bg ? a.bg : colorOf(name);
-}
-
-/**
- * Mini classifica della partita: una colonna per giocatore, alta quanto i suoi
- * punti rispetto al primo, con l'avatar sotto. Si legge a colpo d'occhio se e'
- * stata una passeggiata o un testa a testa.
- */
-function scoreColumn(id, r, won, top) {
-  const total = Number(r.total) || 0;
-  const h = Math.max(7, Math.round((total / (top || 1)) * 100));
-  // la barra di chi ha vinto e' dorata: la tinta del giocatore la darebbe il CSS
-  const style = `height:${h}%` + (won ? "" : `;--bar:${barColor(id, r.name)}`);
-  return `<span class="hg-col ${won ? "win" : ""}" title="${esc(r.name)}: ${total}">
-    <b>${total}</b>
-    <span class="hg-track"><i style="${style}"></i></span>
-    ${chip(id, r, won)}
-  </span>`;
-}
+/** "20:41" oppure niente per le partite inserite a mano (l'ora e' fittizia). */
+const timeOf = (g) => (g.source === "manual" || !g.playedAt ? "" : TIME.format(new Date(g.playedAt)));
+/** La durata, se l'inizio e la fine sono credibili (sotto le 12 ore). */
+const durationOf = (g) => (g.finishedAt && g.playedAt && g.finishedAt > g.playedAt && g.finishedAt - g.playedAt < 12 * 36e5 ? fmtDuration(g.finishedAt - g.playedAt) : "");
 
 function groupByMonth(games) {
   const groups = [];
   let current = null;
   for (const g of games) {
     const d = new Date(g.playedAt || 0);
-    const key = d.getFullYear() + "-" + d.getMonth();
+    const key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
     if (!current || current.key !== key) {
       current = { key, label: new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(d), games: [] };
       groups.push(current);
@@ -71,9 +50,40 @@ export function openGameSheet(id, hl = null) {
   openSheet({ type: "game", id, game: g, hl }, renderGameSheet);
 }
 
+/**
+ * La classifica di una partita, riga per riga: posto (con la medaglia per i
+ * primi tre), avatar, nome, la barra dei punti in proporzione al primo e il
+ * totale. Si capisce a colpo d'occhio chi ha vinto e di quanto.
+ */
+function rankRows(g, { max = 6, cls = "" } = {}) {
+  const rows = sortedResults(g);
+  const top = rows.length ? Number(rows[0][1].total) || 0 : 0;
+  const shown = rows.length > max ? rows.slice(0, max - 1) : rows;
+  const winners = g.winnerIds || {};
+  let place = 0, prev = null;
+  const html = shown.map(([id, r], i) => {
+    const total = Number(r.total) || 0;
+    if (prev === null || total !== prev) place = i + 1;
+    prev = total;
+    const won = Boolean(winners[id]);
+    return `
+      <li class="hg-row ${won ? "win" : ""}">
+        <span class="rank ${place <= 3 ? "medal m" + place : ""}">${place}</span>
+        ${avatar(id, r.name, "xs")}
+        <span class="hg-name">${esc(r.name)}${won ? crownEmblem("mini") : ""}${r.blockedRound !== undefined ? `<small class="tag">bloccato</small>` : ""}</span>
+        <span class="hg-bar"><i style="width:${top ? Math.max(3, (total / top) * 100).toFixed(1) : 0}%; background:${won ? "" : colorOf(r.name)}"></i></span>
+        <b>${total}</b>
+      </li>`;
+  }).join("");
+  const more = rows.length > shown.length ? `<li class="hg-more">e altri ${rows.length - shown.length}</li>` : "";
+  return `<ol class="hg-rows ${cls}">${html}${more}</ol>`;
+}
+
 export const historyView = {
   render(ctx) {
     const games = historyList(ctx.room.history);
+    // il campione di ogni mese chiuso, per la coccarda in testa al gruppo
+    const byMonth = Object.fromEntries(seasons(ctx.room.history, ctx.room.players).map((s) => [s.key, s]));
 
     const row = (g) => {
       const rows = sortedResults(g);
@@ -83,7 +93,10 @@ export const historyView = {
       const nRounds = roundCount(g.rounds);
       // il distacco dal secondo racconta la partita meglio di qualsiasi etichetta
       const gap = winners.length === 1 && rows.length > 1 ? top - (Number(rows[1][1].total) || 0) : null;
+      const time = timeOf(g), dur = durationOf(g);
       const meta = [
+        time ? `${WEEKDAY.format(d)} ${time}` : WEEKDAY.format(d),
+        dur || null,
         rows.length === 1 ? "1 giocatore" : `${rows.length} giocatori`,
         nRounds ? (nRounds === 1 ? "1 mano" : `${nRounds} mani`) : null,
         winners.length > 1 ? "a pari punti" : gap === null ? null : gap === 0 ? "vinta ai punti" : `+${gap} sul secondo`
@@ -98,9 +111,7 @@ export const historyView = {
             </span>
             <span class="hg-top"><b>${top}</b><span>pt</span></span>
           </span>
-          <span class="hg-chart">
-            ${rows.map(([id, r]) => scoreColumn(id, r, Boolean(g.winnerIds && g.winnerIds[id]), top)).join("")}
-          </span>
+          ${rankRows(g)}
         </li>`;
     };
 
@@ -109,14 +120,19 @@ export const historyView = {
         <button class="btn primary big" data-action="hist-add">${icon("plus", "tiny")} Aggiungi partita passata</button>
         <p class="muted small center">Per recuperare le partite giocate prima dell'app.</p>
       </section>
-      ${games.length ? groupByMonth(games).map((grp) => `
+      ${games.length ? groupByMonth(games).map((grp) => {
+        const s = byMonth[grp.key];
+        const champ = s && s.closed && s.champions.length ? s.champions : null;
+        return `
         <section class="card tight">
           <div class="card-head">
             <span class="card-title cap">${esc(grp.label)}</span>
+            ${champ ? `<button class="month-champ" data-action="season-open" data-key="${grp.key}" title="Campione di ${esc(seasonShort(grp.key))}">${seasonBadge(grp.key, { cls: "xs" })}<span>${esc(champ.map((r) => r.name).join(" e "))}</span></button>` : s && !s.closed ? `<span class="month-live">in corso</span>` : ""}
             <span class="count-pill ml-auto">${grp.games.length}</span>
           </div>
           <ul class="hlist">${grp.games.map(row).join("")}</ul>
-        </section>`).join("") : `
+        </section>`;
+      }).join("") : `
         <section class="card empty-state">
           <div class="empty-ico">${icon("history")}</div>
           <h2 class="empty-title">Storico vuoto</h2>
@@ -139,6 +155,48 @@ export const historyView = {
         winner: "auto",
         rows: lastLineup.length ? lastLineup : [{ playerId: "", total: "" }, { playerId: "", total: "" }]
       }, renderManualSheet);
+    },
+    /** Condivide il podio di una partita chiusa (immagine). */
+    async "game-share"(ctx) {
+      const s = sheet.state;
+      if (!s || s.type !== "game") return "sheet-quiet";
+      const g = ctx.room.history[s.id] || s.game;
+      const rows = sortedResults(g).map(([id, r]) => ({ playerId: id, name: r.name, total: Number(r.total) || 0 }));
+      const winners = new Set(Object.keys(g.winnerIds || {}));
+      const n = roundCount(g.rounds);
+      await sharePodium(rows, winners, {
+        title: g.source === "online" ? "Vince al tavolo online" : "Vince",
+        room: ctx.room.meta.name || "",
+        dateLabel: fmtDate(g.playedAt) + (timeOf(g) ? ` · ${timeOf(g)}` : ""),
+        target: g.targetScore,
+        subtitle: `${rows[0] ? rows[0].total : 0} punti${n ? ` · ${n} ${n === 1 ? "mano" : "mani"}` : ""}`,
+        text: `Flip 7 · ${fmtDate(g.playedAt)}: vince ${rows.filter((r) => winners.has(r.playerId)).map((r) => r.name).join(" e ")}`
+      });
+      return "sheet-quiet";
+    },
+    /** Il replay: la partita rivista mano per mano. */
+    "game-replay"(ctx) {
+      const s = sheet.state;
+      if (!s || s.type !== "game") return;
+      const g = ctx.room.history[s.id] || s.game;
+      if (!roundCount(g.rounds)) return toast("Di questa partita ci sono solo i totali", "warn");
+      closeSheet();
+      openReplayPage(s.id, g);
+      return "page";
+    },
+    "replay-step"(ctx, el) {
+      const s = page.state;
+      if (!s || s.type !== "replay") return "page";
+      const n = s.progress.rounds;
+      const to = el.dataset.to === "prev" ? s.step - 1 : el.dataset.to === "next" ? s.step + 1 : Number(el.dataset.to);
+      s.step = Math.max(0, Math.min(n - 1, Number.isFinite(to) ? to : s.step));
+      return "page";
+    },
+    "season-open"(ctx, el) {
+      // la pagina della stagione vive nella Classifica: la si apre da li'
+      location.hash = "#classifica";
+      // dopo il cambio di scheda (che chiude le pagine aperte), non prima
+      setTimeout(() => document.dispatchEvent(new CustomEvent("flip7:open-season", { detail: el.dataset.key })), 60);
     },
 
     // --- correzione di una partita chiusa (solo proprietario) ---------------
@@ -280,38 +338,98 @@ function withDate(dateStr, originalMs) {
   return new Date(y, m - 1, d, orig.getHours(), orig.getMinutes(), orig.getSeconds()).getTime();
 }
 
+// --- grafico del corso della partita -------------------------------------------
+/**
+ * Una linea per giocatore: il totale dopo ogni round. Si vede chi era in
+ * testa e quando la partita si e' decisa. `mark` evidenzia un round.
+ */
+export function progressChart(g, { mark = -1, height = 150 } = {}) {
+  const p = gameProgress(g);
+  if (p.rounds < 2) return "";
+  const target = Number(g.targetScore) || 200;
+  const maxV = Math.max(target, ...p.series.map((s) => s.final)) * 1.06;
+  const padL = 34, padR = 16, padT = 12, padB = 22;
+  const w = Math.max(280, Math.min(640, 60 + p.rounds * 42));
+  const h = height;
+  const x = (i) => padL + (i / (p.rounds - 1)) * (w - padL - padR);
+  const y = (v) => padT + (1 - v / maxV) * (h - padT - padB);
+  const grid = [0, Math.round(maxV / 2 / 10) * 10, target].filter((v, i, a) => a.indexOf(v) === i);
+  const winners = g.winnerIds || {};
+  return `
+    <div class="chart-scroll"><div>
+      <svg class="progress-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Totali dopo ogni round">
+        ${grid.map((v) => `<line class="grid ${v === target ? "goal" : ""}" x1="${padL - 4}" y1="${y(v).toFixed(1)}" x2="${(w - padR + 4).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text x="${padL - 8}" y="${(y(v) + 3.5).toFixed(1)}">${v}</text>`).join("")}
+        ${Array.from({ length: p.rounds }, (_, i) => `<text class="rx" x="${x(i).toFixed(1)}" y="${h - 6}">${i + 1}</text>`).join("")}
+        ${mark >= 0 && mark < p.rounds ? `<line class="sel-line" x1="${x(mark).toFixed(1)}" y1="${padT - 4}" x2="${x(mark).toFixed(1)}" y2="${h - padB + 4}"/>` : ""}
+        ${p.series.map((s) => `
+          <polyline class="${winners[s.playerId] ? "win" : ""}" stroke="${winners[s.playerId] ? "var(--gold)" : colorOf(s.name)}"
+            points="${s.totals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}"/>`).join("")}
+        ${p.series.map((s) => {
+          const i = mark >= 0 && mark < p.rounds ? mark : p.rounds - 1;
+          return `<circle cx="${x(i).toFixed(1)}" cy="${y(s.totals[i]).toFixed(1)}" r="4" fill="${winners[s.playerId] ? "var(--gold)" : colorOf(s.name)}"><title>${esc(s.name)}: ${s.totals[i]}</title></circle>`;
+        }).join("")}
+      </svg>
+    </div></div>
+    <p class="chart-note">${p.leadChanges === 0 ? "in testa dall'inizio alla fine" : p.leadChanges === 1 ? "la testa è cambiata una volta" : `la testa è cambiata ${p.leadChanges} volte`} · la linea tratteggiata è il traguardo ${target}</p>`;
+}
+
 // --- sheet: dettaglio partita ------------------------------------------------
+/** Le note sulla riga di un giocatore nel dettaglio: Flip 7, sballi, congelate... */
+function resultNotes(r, g, pid) {
+  const notes = [];
+  if (r.flip7s) notes.push(`${r.flip7s}× Flip 7`);
+  if (r.busts) notes.push(`${r.busts}× sballo`);
+  if (r.freezes) notes.push(`${r.freezes}× congelato`);
+  if (r.hearts) notes.push(`${r.hearts}× cuore`);
+  const rows = (g.rounds && g.rounds[pid]) || {};
+  const froze = Object.values(g.rounds || {}).reduce((n, other) => n + Object.values(other || {}).filter((e) => e && e.frozenBy === pid).length, 0);
+  if (froze) notes.push(`ha congelato ${froze}×`);
+  const stays = Object.values(rows).filter((e) => e && e.stayed).length;
+  if (stays && Object.keys(rows).length) notes.push(`fermato ${stays}×`);
+  if (r.blockedRound !== undefined) notes.push(`bloccato al round ${r.blockedRound}`);
+  return notes.join(" · ");
+}
+
 function renderGameSheet(s) {
   const g = s.game;
   const rows = sortedResults(g);
   const nRounds = roundCount(g.rounds);
   const hl = s.hl || {};
+  const winners = g.winnerIds || {};
+  const time = timeOf(g), dur = durationOf(g);
+  let place = 0, prev = null;
+  const blockedAt = (pid) => (g.results[pid] && g.results[pid].blockedRound !== undefined ? Number(g.results[pid].blockedRound) : null);
 
   return `
     <div class="sheet-head">
       <div>
-        <div class="sheet-title">${fmtDate(g.playedAt)}</div>
-        <div class="sheet-sub">${sourceLabel(g)} · obiettivo ${g.targetScore || "—"}${g.editedAt ? ` · corretta il ${fmtDate(g.editedAt)}` : ""}</div>
+        <div class="sheet-title">${fmtDate(g.playedAt)}${time ? ` <span class="sheet-time">· ${time}</span>` : ""}</div>
+        <div class="sheet-sub">${sourceLabel(g)}${dur ? ` · ${dur}` : ""} · obiettivo ${g.targetScore || "—"}${g.editedAt ? ` · corretta il ${fmtDate(g.editedAt)}` : ""}</div>
       </div>
       <button class="icon-btn" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
     </div>
 
-    <ol class="board-rows in-sheet">
-      ${rows.map(([id, r], i) => `
-        <li class="brow">
-          <span class="rank r${i + 1}">${i + 1}</span>
-          <span class="bname">
-            ${avatar(id, r.name, "sm")}
-            <span class="txt">${esc(r.name)}</span>
-          </span>
-          <span class="win-cell">${g.winnerIds && g.winnerIds[id] ? icon("crownFill", "gold") : ""}</span>
-          <span class="total-cell">${r.total}</span>
-        </li>`).join("")}
+    <ol class="rank-list">
+      ${rows.map(([id, r], i) => {
+        const total = Number(r.total) || 0;
+        if (prev === null || total !== prev) place = i + 1;
+        prev = total;
+        const notes = resultNotes(r, g, id);
+        return `
+        <li class="${winners[id] ? "win" : ""} ${hl.pid === id ? "hl-row" : ""}">
+          <span class="rank ${place <= 3 ? "medal m" + place : ""}">${place}</span>
+          ${avatar(id, r.name, "sm")}
+          <span class="rl-name">${esc(r.name)}${notes ? `<small>${notes}</small>` : ""}</span>
+          ${winners[id] ? crownEmblem("mini") : ""}
+          <b>${total}</b>
+        </li>`;
+      }).join("")}
     </ol>
 
     ${nRounds ? `
+      ${progressChart(g, { mark: hl.round })}
       <div class="calc-section">
-        <div class="calc-label"><span>Round</span></div>
+        <div class="calc-label"><span>Round</span><span>${nRounds} ${nRounds === 1 ? "mano" : "mani"}</span></div>
         <div class="table-scroll">
           <table class="rounds">
             <thead><tr><th>Giocatore</th>${Array.from({ length: nRounds }, (_, i) => tiebreakOf(g, i)
@@ -322,8 +440,10 @@ function renderGameSheet(s) {
                 <tr class="${hl.pid === id ? "hl-row" : ""}"><th>${esc(r.name)}</th>${Array.from({ length: nRounds }, (_, i) => {
                   const e = g.rounds[id] && g.rounds[id][roundKey(i)];
                   const mark = hl.pid === id && hl.round === i ? " hl" : "";
-                  // in uno spareggio chi era fuori non ha mano: non e' un buco
-                  if (!e) return tiebreakOf(g, i) ? `<td class="dim${mark}" title="fuori dallo spareggio">–</td>` : `<td class="dim${mark}">·</td>`;
+                  const b = blockedAt(id);
+                  // in uno spareggio chi era fuori non ha mano: non e' un buco; idem chi era bloccato
+                  if (!e) return b !== null && i + 1 > b ? `<td class="dim${mark}" title="bloccato">⏸</td>`
+                    : tiebreakOf(g, i) ? `<td class="dim${mark}" title="fuori dallo spareggio">–</td>` : `<td class="dim${mark}">·</td>`;
                   const c = computeRound(e);
                   return `<td class="${e.busted ? "bust" : c.flip7 ? "flip7" : e.frozen ? "frozen" : ""}${mark}${c.doubled ? " x2" : ""}">${c.doubled ? `<span class="x2-val">${c.total}<i class="x2-flag">×2</i></span>` : c.total}</td>`;
                 }).join("")}</tr>`).join("")}
@@ -334,8 +454,91 @@ function renderGameSheet(s) {
     ${hl.note ? `<p class="hl-note">${icon("star", "tiny")} ${esc(hl.note)}</p>` : ""}
 
     <div class="sheet-actions">
+      ${nRounds ? `<button class="btn" data-action="game-replay">${icon("replay", "tiny")} Rivedi</button>` : ""}
+      <button class="btn" data-action="game-share">${icon("share", "tiny")} Podio</button>
       ${store.isOwner() ? `<button class="btn" data-action="game-edit">${icon("pencil", "tiny")} Modifica</button>` : ""}
       <button class="btn primary" data-action="sheet-close">Chiudi</button>
+    </div>`;
+}
+
+// --- pagina: replay mano per mano ------------------------------------------------
+function openReplayPage(id, g) {
+  const progress = gameProgress(g);
+  openPage({ type: "replay", id, game: g, progress, step: 0 }, renderReplayPage);
+}
+
+/** La mano di un giocatore in un round, disegnata con le carte. */
+function handCards(e) {
+  const r = computeRound(e);
+  if (r.manual) return `<span class="rp-typed">${r.typed} punti al tastierino${r.flip7 ? " + 15" : ""}</span>`;
+  const cards = [
+    ...(e.plus || []).slice().sort((a, b) => a - b).map((p) => modCard(p, { on: true, size: "mini" })),
+    ...(e.doubled ? [modCard("x2", { on: true, size: "mini" })] : []),
+    ...Array.from({ length: r.hearts }, () => heartCard({ size: "mini" })),
+    ...r.numbers.map((n) => numberCard(n, { on: true, size: "mini" })),
+    ...(r.flip7 ? [flip7Card({ size: "mini" })] : []),
+    ...(e.busted && e.bustCard !== undefined && e.bustCard !== null ? [numberCard(Number(e.bustCard), { on: true, size: "mini dup" })] : [])
+  ];
+  return cards.join("") || `<span class="hand-empty">${e.frozen ? "congelato senza carte" : "nessuna carta"}</span>`;
+}
+
+function renderReplayPage(s) {
+  const { game: g, progress: p, step } = s;
+  const nameOf = (pid) => (g.results && g.results[pid] && g.results[pid].name) || "?";
+  const rows = p.series
+    .map((sr) => ({ ...sr, total: sr.totals[step], entry: g.rounds[sr.playerId] && g.rounds[sr.playerId][roundKey(step)] }))
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "it"));
+  const target = Number(g.targetScore) || 200;
+  const max = Math.max(target, ...rows.map((r) => r.total));
+  const playoff = tiebreakOf(g, step);
+  const leaders = new Set(p.leaders[step] || []);
+  const last = step === p.rounds - 1;
+  return `
+    <div class="page-top">
+      <button class="nav-btn" data-action="page-close" aria-label="Indietro">${icon("arrowLeft")}</button>
+      <span class="page-title">Round ${step + 1} di ${p.rounds}</span>
+      <span class="page-sub">${fmtDate(g.playedAt)}</span>
+    </div>
+    <div class="page-body">
+      <div class="replay-nav">
+        <button class="nav-btn" data-action="replay-step" data-to="prev" ${step === 0 ? "disabled" : ""} aria-label="Round precedente">${icon("arrowLeft")}</button>
+        <div class="replay-dots">${Array.from({ length: p.rounds }, (_, i) => `<button class="rdot ${i === step ? "on" : ""} ${tiebreakOf(g, i) ? "sp" : ""}" data-action="replay-step" data-to="${i}" aria-label="Round ${i + 1}"></button>`).join("")}</div>
+        <button class="nav-btn" data-action="replay-step" data-to="next" ${last ? "disabled" : ""} aria-label="Round successivo">${icon("arrowLeft", "flip")}</button>
+      </div>
+      ${playoff ? `<div class="playoff-strip">${icon("flag", "tiny")}<span><b>Spareggio</b> · la manche la giocano solo ${playoff.map(nameOf).map(esc).join(" e ")}</span></div>` : ""}
+      <section class="card">
+        ${progressChart(g, { mark: step, height: 130 })}
+      </section>
+      <section class="card">
+        <ol class="rp-list">
+          ${rows.map((r) => {
+            const e = r.entry;
+            const c = e ? computeRound(e) : null;
+            const byName = (pid) => esc(nameOf(pid));
+            const notes = [];
+            if (e && e.frozen) notes.push(e.frozenBy ? `${icon("snow", "tiny")} congelato da ${byName(e.frozenBy)}` : `${icon("snow", "tiny")} congelato`);
+            if (e && e.fl3By) notes.push(`${icon("cardFan", "tiny")} Pesca Tre da ${(Array.isArray(e.fl3By) ? e.fl3By : Object.values(e.fl3By)).map(byName).join(", ")}`);
+            if (e && e.scFrom) notes.push(`${icon("heartFill", "tiny")} cuore da ${(Array.isArray(e.scFrom) ? e.scFrom : Object.values(e.scFrom)).map(byName).join(", ")}`);
+            if (e && e.stayed) notes.push("si è fermato");
+            if (e && e.blocked) notes.push("bloccato qui");
+            const state = !e ? (playoff ? "fuori dallo spareggio" : "non ha giocato") : e.busted ? "SBALLATO" : c.flip7 ? "FLIP 7" : "";
+            return `
+            <li class="rp-row ${e && e.busted ? "bust" : ""} ${c && c.flip7 ? "flip7" : ""} ${leaders.has(r.playerId) ? "lead" : ""}" style="--pc:${colorOf(r.name)}">
+              <div class="rp-head">
+                ${avatar(r.playerId, r.name, "sm")}
+                <b class="rp-name">${esc(r.name)}</b>
+                ${leaders.has(r.playerId) && r.total > 0 ? crownEmblem("mini") : ""}
+                ${state ? `<i class="seat-state ${e && e.busted ? "s-bust" : c && c.flip7 ? "s-flip7" : "s-excluded"}">${state}</i>` : ""}
+                <span class="seat-pts"><b>${r.total}</b><small class="${e && e.busted ? "bust" : c && c.total ? "up" : ""}">${e ? (e.busted ? "+0" : `+${c.total}`) : ""}</small></span>
+              </div>
+              <span class="seat-rail" aria-hidden="true"><i style="width:${((r.total / max) * 100).toFixed(1)}%"></i></span>
+              ${e ? `<div class="cards-row rp-cards">${handCards(e)}</div>` : ""}
+              ${notes.length ? `<div class="by-note">${notes.join(" · ")}</div>` : ""}
+            </li>`;
+          }).join("")}
+        </ol>
+      </section>
+      <p class="foot-note">${last ? "Ultima mano: la partita finisce qui." : "Scorri i round con le frecce o i puntini."}</p>
     </div>`;
 }
 
@@ -382,7 +585,7 @@ function renderEditPage(s) {
 
     <div class="page-body">
       <section class="card">
-        <div class="card-head">${icon("history")}<span class="card-title">${fmtDate(s.game.playedAt)}</span><span class="ml-auto">${sourceTag(s.game) || '<span class="tag">dal vivo</span>'}</span></div>
+        <div class="card-head">${icon("history")}<span class="card-title">${fmtDateTime(s.game.playedAt)}</span><span class="ml-auto">${sourceTag(s.game) || '<span class="tag">dal vivo</span>'}</span></div>
         <div class="field-row">
           <label class="field">
             <span>Data</span>
@@ -467,7 +670,7 @@ function openRoundCalc(pid, r) {
   const build = (id) => {
     const p = s.players.find((x) => x.playerId === id);
     const existing = (s.rounds[id] || {})[roundKey(r)] || null;
-    const st = makeCalcState({ order, roundIndex: r, playerId: id, playerName: p ? p.name : "?", existing, fullTotal: playerTotal({ scores: s.rounds }, id) });
+    const st = makeCalcState({ order, roundIndex: r, playerId: id, playerName: p ? p.name : "?", existing, fullTotal: playerTotal({ scores: s.rounds }, id), others: s.players.filter((x) => x.playerId !== id).map((x) => ({ id: x.playerId, name: x.name })) });
     st.saveLabel = "Salva";
     st.onSave = (cs) => { keep(cs); closeSheet(); return "page"; };
     st.onMove = (cs, delta) => {

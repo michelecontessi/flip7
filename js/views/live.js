@@ -8,9 +8,11 @@ import * as store from "../store.js";
 import { prefs } from "../prefs.js";
 import { esc, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
 import { avatar } from "../avatar.js";
-import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card } from "../icons.js";
-import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry } from "../scoring.js";
+import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card, heartCard } from "../icons.js";
+import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry, heartsOf, MAX_HEARTS } from "../scoring.js";
 import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter, roundPlayers, tiebreakOf } from "../stats.js";
+import { sharePodium } from "../share.js";
+import { fmtDate } from "../ui.js";
 
 const localState = { selected: null, target: null, showRounds: false, mode: "cards" };
 
@@ -286,6 +288,7 @@ function renderBoard(room, live, standings, me, { editable, selfId = null }) {
           if (row.flip7s) notes.push(row.flip7s + "× flip 7");
           if (row.busts) notes.push(row.busts + "× sballo");
           if (row.freezes) notes.push(row.freezes + "× congelato");
+          if (row.hearts) notes.push(row.hearts + (row.hearts === 1 ? "× cuore" : "× cuori"));
           return `
             <li class="brow ${row.playerId === me ? "me" : ""} ${row.rank === 1 ? "leader" : ""} ${out ? "sidelined" : ""}">
               <span class="rank r${row.rank}">${row.rank === 1 && row.total > 0 ? crownEmblem("rank-crown") : row.rank}</span>
@@ -380,12 +383,16 @@ function renderFinished(room, live, standings, me) {
         <button class="btn primary big" data-action="game-save-restart">Salva e inizia nuova partita</button>
         <button class="btn big" data-action="game-save">Salva e basta</button>
         <div class="board-links">
+          <button class="ghost-btn" data-action="share-live-podium">${icon("share", "tiny")} Condividi il podio</button>
           <button class="ghost-btn" data-action="round-back">${icon("arrowLeft", "tiny")} Riapri round</button>
           <button class="ghost-btn" data-action="pick-winner">Cambia vincitore</button>
           <button class="ghost-btn danger" data-action="game-cancel">Scarta</button>
         </div>
       </section>` : `
-      <section class="card empty-state"><p class="muted">Il segnapunti sta salvando la partita nello storico.</p></section>`}
+      <section class="card">
+        <p class="muted center">Il segnapunti sta salvando la partita nello storico.</p>
+        <div class="board-links"><span></span><button class="ghost-btn" data-action="share-live-podium">${icon("share", "tiny")} Condividi il podio</button><span></span></div>
+      </section>`}
 
     ${renderBoard(room, live, standings, me, { editable: false })}
     ${renderRoundsTable(room, live)}`;
@@ -406,7 +413,7 @@ function openScoreSheet(room, live, startPid) {
  * `onSave(s)` / `onMove(s, delta)` / `saveLabel`, anche la correzione delle
  * mani di una partita chiusa (vista Storico), che decide lei dove salvare.
  */
-export function makeCalcState({ order, roundIndex, playerId, playerName, existing, fullTotal, target = null }) {
+export function makeCalcState({ order, roundIndex, playerId, playerName, existing, fullTotal, target = null, others = [] }) {
   const entry = existing
     ? { ...emptyEntry(), ...existing, numbers: [...(existing.numbers || [])], plus: [...(existing.plus || [])] }
     : emptyEntry();
@@ -422,6 +429,8 @@ export function makeCalcState({ order, roundIndex, playerId, playerName, existin
     // si vede in diretta dove arriverebbe il giocatore
     baseTotal: (fullTotal || 0) - (existing ? computeRound(existing).total : 0),
     target,
+    // gli altri giocatori del round: per dire CHI ha congelato (facoltativo)
+    others,
     entry
   };
 }
@@ -445,7 +454,8 @@ function runningLine(s, e, r) {
 function buildSheetState(room, live, order, roundIndex, pid) {
   const existing = entryOf(live, pid, roundIndex);
   const fullTotal = (liveStandings(live, room.players).find((x) => x.playerId === pid) || {}).total || 0;
-  return makeCalcState({ order, roundIndex, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal, target: live.targetScore || 200 });
+  const others = order.filter((x) => x !== pid).map((x) => ({ id: x, name: nameOf(room, live, x) }));
+  return makeCalcState({ order, roundIndex, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal, target: live.targetScore || 200, others });
 }
 
 function keypadValue(entry) {
@@ -457,7 +467,9 @@ function buildHand(e, r) {
     ...(e.numbers || []).slice().sort((a, b) => a - b).map((n) => numberCard(n, { on: true })),
     ...(e.doubled ? [modCard("x2", { on: true })] : []),
     ...(e.plus || []).slice().sort((a, b) => a - b).map((p) => modCard(p, { on: true })),
-    ...(r.flip7 ? [flip7Card()] : [])
+    ...(r.flip7 ? [flip7Card()] : []),
+    // i cuori non fanno punti: stanno in fondo, a raccontare le vite extra
+    ...Array.from({ length: r.hearts }, () => heartCard())
   ];
   const inner = cards.join("") || `<span class="hand-empty">tocca le carte del giocatore</span>`;
   // sballare non e' una carta: le carte restano li', annullate
@@ -465,8 +477,10 @@ function buildHand(e, r) {
 }
 
 function noteOf(e, r, isKeypad) {
-  if (e.busted) return "sballato";
-  if (isKeypad) return (r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round") + (e.frozen ? " · congelato" : "");
+  // le vite extra non fanno punti: si dicono in coda, come nota
+  const life = r.hearts ? (r.hearts === 1 ? " · 1 vita extra" : ` · ${r.hearts} vite extra`) : "";
+  if (e.busted) return "sballato" + life;
+  if (isKeypad) return (r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round") + (e.frozen ? " · congelato" : "") + life;
   return formulaOf(e);
 }
 const displayClass = (e, r) => (e.busted ? "bust" : r.flip7 ? "flip7" : e.frozen ? "frozen" : "");
@@ -536,16 +550,27 @@ export function renderScoreSheet(s) {
         <button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>
         <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
         <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
-      </div>` : `
+      </div>
+      <div class="quick-row">${heartButton(e)}</div>` : `
       <div class="quick-row">
         <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballo</button>
         <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
+        ${heartButton(e)}
       </div>`}
+      <div class="frozen-by" ${e.frozen && (s.others || []).length ? "" : 'style="display:none"'}>${frozenByRow(s, e)}</div>
       <div class="act-row">
         <button class="btn" data-action="calc-clear">Azzera</button>
         <button class="btn primary" data-action="calc-save">${nextLabel(s)}</button>
       </div>
     </div>`;
+}
+
+/** "Congelato da chi?": un tocco sull'avatar di chi ha tirato il Congela (facoltativo). */
+function frozenByRow(s, e) {
+  const others = s.others || [];
+  if (!others.length) return "";
+  return `<span class="fb-label">congelato da</span>${others.map((o) => `
+    <button class="fb-pick ${e.frozenBy === o.id ? "on" : ""}" data-action="calc-frozen-by" data-id="${o.id}" aria-label="${esc(o.name)}" title="${esc(o.name)}">${avatar(o.id, o.name, "xs")}</button>`).join("")}`;
 }
 
 /** Aggiorna il pannello punti sul posto, senza ridisegnarlo (niente flicker). */
@@ -586,6 +611,30 @@ export function patchCalcSheet(s) {
   if (qb) qb.className = "quick " + (e.busted ? "on red" : "");
   const qf = root.querySelector('[data-action="calc-freeze"]');
   if (qf) qf.className = "quick " + (e.frozen ? "on ice" : "");
+  const fb = root.querySelector(".frozen-by");
+  if (fb) {
+    fb.style.display = e.frozen && (s.others || []).length ? "" : "none";
+    fb.innerHTML = frozenByRow(s, e);
+  }
+  const qh = root.querySelector('[data-action="calc-heart"]');
+  if (qh) {
+    const n = heartsOf(e);
+    qh.className = "quick heart " + (n ? "on rose" : "");
+    qh.innerHTML = `${icon("heartFill", "tiny")} ${heartLabel(n)}`;
+    qh.setAttribute("aria-label", `Vite extra: ${n}. Tocca per aggiungerne una`);
+  }
+}
+
+/** L'etichetta del tasto delle vite extra: dice quante ne ha prese. */
+function heartLabel(n) {
+  return n === 0 ? "Vita extra" : n === 1 ? "1 vita extra" : `${n} vite extra`;
+}
+
+/** Il tasto delle vite extra: un tocco ne aggiunge una, dopo l'ultima si azzera. */
+function heartButton(e) {
+  const n = heartsOf(e);
+  return `<button class="quick heart ${n ? "on rose" : ""}" data-action="calc-heart"
+    aria-label="Vite extra: ${n}. Tocca per aggiungerne una">${icon("heartFill", "tiny")} ${heartLabel(n)}</button>`;
 }
 
 function nextLabel(s) {
@@ -601,7 +650,10 @@ export function normalizeEntry(e) {
     busted: Boolean(e.busted),
     frozen: Boolean(e.frozen) && !e.busted,
     flip7: Boolean(e.flip7),
-    manual: e.manual === null || e.manual === undefined || e.manual === "" ? null : Number(e.manual)
+    hearts: heartsOf(e),
+    manual: e.manual === null || e.manual === undefined || e.manual === "" ? null : Number(e.manual),
+    // chi ha tirato il Congela, se il segnapunti l'ha detto (alimenta i record "attivi")
+    ...(e.frozen && !e.busted && e.frozenBy ? { frozenBy: String(e.frozenBy) } : {})
   };
 }
 
@@ -794,6 +846,19 @@ export const liveView = {
       const e = sheet.state.entry;
       e.frozen = !e.frozen;
       if (e.frozen) e.busted = false;
+      else e.frozenBy = null;
+      return "sheet";
+    },
+    "calc-frozen-by"(ctx, el) {
+      const e = sheet.state.entry;
+      e.frozenBy = e.frozenBy === el.dataset.id ? null : el.dataset.id;
+      return "sheet";
+    },
+    // le vite extra non danno punti: si segnano solo per la statistica,
+    // e un tocco di troppo torna a zero (niente tasto "meno" da cercare)
+    "calc-heart"() {
+      const e = sheet.state.entry;
+      e.hearts = (heartsOf(e) + 1) % (MAX_HEARTS + 1);
       return "sheet";
     },
     "calc-clear"() { sheet.state.entry = emptyEntry(); return "sheet"; },
@@ -853,6 +918,18 @@ export const liveView = {
         const name = first && ctx.room.players[first] ? ctx.room.players[first].name : null;
         toast(name ? `Si rigioca: apre ${name}` : "Nuova partita iniziata");
       }
+    },
+    async "share-live-podium"(ctx) {
+      const live = ctx.room.live;
+      if (!live) return;
+      const standings = liveStandings(live, ctx.room.players);
+      const winners = new Set(Object.keys(live.winnerIds || {}));
+      const n = roundsPlayed(live);
+      await sharePodium(standings.map((r) => ({ playerId: r.playerId, name: r.name, total: r.total })), winners, {
+        title: "Vince", room: ctx.room.meta.name || "", dateLabel: fmtDate(live.startedAt || Date.now()), target: live.targetScore,
+        subtitle: `${standings[0] ? standings[0].total : 0} punti${n ? ` · ${n} ${n === 1 ? "mano" : "mani"}` : ""}`,
+        text: `Flip 7 · vince ${[...winners].map((id) => nameOf(ctx.room, live, id)).join(" e ")}`
+      });
     },
     async "pick-winner"(ctx) {
       const live = ctx.room.live;

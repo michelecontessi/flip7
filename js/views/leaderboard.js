@@ -1,13 +1,16 @@
 // ---------------------------------------------------------------------------
 // Vista "Classifica": Crown perpetue. Una vittoria = una Crown.
-// Toccando un giocatore si apre la sua scheda a schermo intero.
+// Sotto: l'albo d'oro delle stagioni (un mese = una stagione, il campione
+// prende la coccarda), i record scherzosi, i primati della stanza, il rating
+// Elo e l'andamento nel tempo. Toccando un giocatore si apre la sua scheda.
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { avatar } from "../avatar.js";
-import { icon, crownEmblem, awardEmblem } from "../icons.js";
-import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList } from "../stats.js";
+import { icon, crownEmblem, awardEmblem, seasonBadge } from "../icons.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList, seasons, seasonTitles, seasonLabel, headToHead, roomRecords, eloRatings, ELO_START, monthKey, MONTHS_IT } from "../stats.js";
 import { openGameSheet } from "./history.js";
 import { getRoom } from "../store.js";
+import { sharePodium } from "../share.js";
 
 // ---------------------------------------------------------------------------
 // I record nati da UNA partita (o una mano) rimandano a quella partita, per
@@ -31,7 +34,7 @@ function gameLink(key, r, cls = "rewatch") {
     Vedi ${icon("chevron", "tiny")}</button>`;
 }
 
-const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null };
+const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null, showElo: false, showRecords: true, showSeasons: true };
 const filters = () => ({ period: localState.period, source: localState.source });
 
 const COLUMNS = [
@@ -78,6 +81,13 @@ function crownRow(n, max = 5) {
   return `<span class="crown-row">${Array.from({ length: n }, (_, i) => `<i style="--d:${i * 90}ms">${crownEmblem()}</i>`).join("")}</span>`;
 }
 
+/** Le coccarde di un giocatore in fila: fino a 3, poi "+N". */
+function badgeRow(list, max = 3, cls = "xs") {
+  if (!list || !list.length) return "";
+  const shown = list.slice(0, max);
+  return `<span class="badge-row" title="${esc(list.map((t) => `Campione di ${t.short}`).join(", "))}">${shown.map((t) => seasonBadge(t.key, { cls })).join("")}${list.length > max ? `<i class="badge-more">+${list.length - max}</i>` : ""}</span>`;
+}
+
 /**
  * Podio delle Crown: i primi tre sui gradini oro/argento/bronzo, il leader
  * al centro sotto la corona. Il podio segue sempre le Crown, qualunque
@@ -101,6 +111,53 @@ function renderPodium(rows, gamesCount) {
         ${col(top[1], 2)}${col(top[0], 1)}${col(top[2], 3)}
       </div>
       <div class="ch-sub">${leader.crowns === 1 ? "1 vittoria" : leader.crowns + " vittorie"} su ${gamesCount === 1 ? "1 partita" : gamesCount + " partite"} · media ${fmtNum(leader.avg, 1)}</div>
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// Stagioni: il mese in corso in cima (chi e' in testa), poi l'albo d'oro.
+// ---------------------------------------------------------------------------
+function renderSeasons(room) {
+  const list = seasons(room.history, room.players, { source: localState.source });
+  if (!list.length) return "";
+  const live = list.find((s) => !s.closed);
+  const closed = list.filter((s) => s.closed);
+  const open = localState.showSeasons;
+  return `
+    <section class="card">
+      <button class="card-head as-button" data-action="lb-toggle" data-k="showSeasons" aria-expanded="${open}">
+        <h2 class="section-title">Stagioni</h2>
+        <span class="muted small ml-auto">${closed.length === 1 ? "1 titolo assegnato" : `${closed.length} titoli assegnati`}</span>
+        <span class="chev ${open ? "open" : ""}">${icon("chevron")}</span>
+      </button>
+      ${open ? `
+      ${live ? `
+      <button class="season-live" data-action="season-open" data-key="${live.key}">
+        ${seasonBadge(live.key, { muted: true, title: `${live.label}, in corso` })}
+        <span class="sl-txt">
+          <b>${esc(live.label)} · in corso</b>
+          <small>${live.leader
+            ? `in testa <b>${esc(live.leader.name)}</b> con ${live.leader.crowns === 1 ? "1 Crown" : live.leader.crowns + " Crown"} su ${live.games === 1 ? "1 partita" : live.games + " partite"}${live.tie ? " · a pari merito" : ""}`
+            : "ancora nessuna partita"}</small>
+        </span>
+        ${icon("chevron", "tiny turn-r")}
+      </button>` : ""}
+      ${closed.length ? `
+      <ul class="season-list">
+        ${closed.map((s) => `
+          <li>
+            <button class="season-row" data-action="season-open" data-key="${s.key}">
+              ${seasonBadge(s.key, { cls: "md" })}
+              <span class="sr-avas">${s.champions.map((r) => avatar(r.playerId, r.name, "sm")).join("")}</span>
+              <span class="sr-txt">
+                <b>${esc(s.champions.map((r) => r.name).join(" e "))}</b>
+                <small>${esc(s.label)} · ${s.champions[0].crowns === 1 ? "1 Crown" : s.champions[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"}${s.tie ? " · titolo condiviso" : ""}</small>
+              </span>
+              ${icon("chevron", "tiny turn-r")}
+            </button>
+          </li>`).join("")}
+      </ul>` : `<p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione.</p>`}
+      <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online. La coccarda resta per sempre nella scheda del campione.</p>` : ""}
     </section>`;
 }
 
@@ -137,6 +194,64 @@ function renderAwards(rows) {
           </div>`;
         }).join("")}
       </div>
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// I primati della stanza: la partita piu' lunga, il punteggio di sempre...
+// ---------------------------------------------------------------------------
+const RECORD_ICONS = { longest: "clock", shortest: "burst", topscore: "target", widest: "flag", tightest: "swords", crowded: "users", richest: "cardFan", night: "history" };
+function renderRoomRecords(room) {
+  const list = roomRecords(room.history, room.players, { source: localState.source });
+  if (!list.length) return "";
+  const open = localState.showRecords;
+  return `
+    <section class="card">
+      <button class="card-head as-button" data-action="lb-toggle" data-k="showRecords" aria-expanded="${open}">
+        <h2 class="section-title">Primati della stanza</h2>
+        <span class="chev ml-auto ${open ? "open" : ""}">${icon("chevron")}</span>
+      </button>
+      ${open ? `
+      <ul class="rec-list">
+        ${list.map((r) => `
+          <li class="rec-row" data-action="award-game" data-g="${r.gameId}" ${r.playerId ? `data-pid="${r.playerId}"` : ""} ${r.round !== undefined ? `data-round="${r.round}"` : ""} data-note="${esc(`${r.title}: ${r.unit(r.value)}`)}">
+            <span class="rec-ico">${icon(RECORD_ICONS[r.id] || "star")}</span>
+            <span class="rec-txt">
+              <b>${r.title}</b>
+              <small>${r.desc}${r.playerName ? ` · <b>${esc(r.playerName)}</b>` : ""} · ${fmtDate(r.playedAt)}</small>
+            </span>
+            <span class="rec-val">${r.unit(r.value)}</span>
+          </li>`).join("")}
+      </ul>
+      <p class="foot-note">Tocca un primato per rivedere quella partita.</p>` : ""}
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// Rating Elo: un'altra lettura della classifica, che pesa CHI hai battuto.
+// ---------------------------------------------------------------------------
+function renderElo(room, me) {
+  const list = eloRatings(room.history, room.players, { source: localState.source });
+  if (list.length < 2) return "";
+  const open = localState.showElo;
+  return `
+    <section class="card">
+      <button class="card-head as-button" data-action="lb-toggle" data-k="showElo" aria-expanded="${open}">
+        <h2 class="section-title">Rating Elo</h2>
+        <span class="muted small ml-auto">parte da ${ELO_START}</span>
+        <span class="chev ${open ? "open" : ""}">${icon("chevron")}</span>
+      </button>
+      ${open ? `
+      <ul class="elo-list">
+        ${list.map((r) => `
+          <li class="${r.playerId === me ? "me" : ""}" data-action="lb-detail" data-id="${r.playerId}">
+            <span class="rank ${r.rank <= 3 ? "medal m" + r.rank : ""}">${r.rank}</span>
+            ${avatar(r.playerId, r.name, "sm")}
+            <span class="elo-name">${esc(r.name)}<small>${r.games === 1 ? "1 partita" : r.games + " partite"} · picco ${r.peak}</small></span>
+            <b class="${r.elo >= ELO_START ? "up" : "down"}">${r.elo}</b>
+          </li>`).join("")}
+      </ul>
+      <p class="foot-note">Batti chi ha un rating più alto del tuo e sali di più; ogni partita conta come uno scontro con ciascuno degli altri.</p>` : ""}
     </section>`;
 }
 
@@ -253,11 +368,20 @@ function trendCaption(step, series, byRank) {
   return `<b>${fmtDate(step.playedAt)}</b> · ${rows.join(" · ")}`;
 }
 
+// la pagina di una stagione si puo' chiedere anche da un'altra vista (Storico)
+if (typeof document !== "undefined") {
+  document.addEventListener("flip7:open-season", (ev) => {
+    const key = ev.detail;
+    if (key) openSeasonPage(key);
+  });
+}
+
 export const leaderboardView = {
   render(ctx) {
     const { room, me } = ctx;
     const { rows, gamesCount } = leaderboard(room.history, room.players, filters());
     const sorted = sortRows(rows);
+    const titles = seasonTitles(room.history, room.players, { source: localState.source });
 
     if (!rows.length) {
       return `
@@ -306,7 +430,7 @@ export const leaderboardView = {
               <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
               <span class="lbname">
                 ${avatar(r.playerId, r.name, "sm")}
-                <span class="txt">${esc(r.name)}
+                <span class="txt">${esc(r.name)}${badgeRow(titles[r.playerId])}
                   <small>rec. ${r.best}</small></span>
               </span>
               <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
@@ -317,7 +441,13 @@ export const leaderboardView = {
         </ul>
       </section>
 
+      ${renderSeasons(room)}
+
       ${renderAwards(rows)}
+
+      ${renderRoomRecords(room)}
+
+      ${renderElo(room, me)}
 
       ${renderTrend(room, me)}
 
@@ -331,6 +461,7 @@ export const leaderboardView = {
       if (localState.sort === k) localState.dir = -localState.dir;
       else { localState.sort = k; localState.dir = -1; }
     },
+    "lb-toggle"(ctx, el) { localState[el.dataset.k] = !localState[el.dataset.k]; },
     "trend-metric"(ctx, el) { localState.trendMetric = el.dataset.m; localState.trendSel = null; },
     "trend-point"(ctx, el) {
       const box = document.querySelector(".chart-scroll.from-end");
@@ -356,6 +487,27 @@ export const leaderboardView = {
       openGameSheet(d.g, { pid: d.pid || null, round: d.round !== undefined ? Number(d.round) : -1, note: d.note || "" });
       return "sheet-quiet";
     },
+    "season-open"(ctx, el) {
+      openSeasonPage(el.dataset.key);
+      return "page";
+    },
+    async "season-share"(ctx, el) {
+      const key = el.dataset.key;
+      const s = seasons(ctx.room.history, ctx.room.players, { source: localState.source }).find((x) => x.key === key);
+      if (!s) return "page";
+      const rows = s.rows.map((r) => ({ playerId: r.playerId, name: r.name, total: r.crowns }));
+      const winners = new Set((s.closed ? s.champions : s.leader ? [s.leader] : []).map((r) => r.playerId));
+      await sharePodium(rows, winners, {
+        title: s.closed ? `Campione di ${s.short}` : `${s.label}: in testa`,
+        room: ctx.room.meta.name || "",
+        dateLabel: s.label,
+        subtitle: `${s.champions[0] ? s.champions[0].crowns : s.leader ? s.leader.crowns : 0} Crown su ${s.games} ${s.games === 1 ? "partita" : "partite"}`,
+        foot: "Flip 7 · le Crown del mese · una stagione al mese",
+        filename: `flip7-${key}.png`,
+        text: s.closed ? `Flip 7 · Campione di ${s.short}: ${s.champions.map((r) => r.name).join(" e ")}` : `Flip 7 · ${s.label}, in testa ${s.leader ? s.leader.name : "—"}`
+      });
+      return "page";
+    },
     "lb-detail"(ctx, el) {
       const pid = el.dataset.id;
       const { rows } = leaderboard(ctx.room.history, ctx.room.players, filters());
@@ -380,6 +532,83 @@ export const leaderboardView = {
 };
 
 // ---------------------------------------------------------------------------
+// Pagina di una stagione: il campione con la coccarda, il podio del mese, la
+// classifica e i record di quel mese, le partite giocate.
+// ---------------------------------------------------------------------------
+function openSeasonPage(key) {
+  const room = getRoom();
+  const s = seasons(room.history, room.players, { source: localState.source }).find((x) => x.key === key);
+  if (!s) return;
+  const games = historyList(room.history).filter((g) => monthKey(g.playedAt || 0) === key && matchesSource(g, localState.source));
+  openPage({ type: "season", season: s, games }, renderSeasonPage);
+}
+
+function renderSeasonPage(st) {
+  const s = st.season;
+  const top = s.rows.slice(0, 3);
+  const heroes = s.closed ? s.champions : s.leader ? [s.leader] : [];
+  const list = awards(s.rows);
+  return `
+    <div class="page-top">
+      <button class="nav-btn" data-action="page-close" aria-label="Indietro">${icon("arrowLeft")}</button>
+      <span class="page-title">${esc(s.label)}</span>
+      <button class="nav-btn" data-action="season-share" data-key="${s.key}" aria-label="Condividi">${icon("share")}</button>
+    </div>
+    <div class="page-body">
+      <section class="season-hero ${s.closed ? "holo" : ""}">
+        ${s.closed ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
+        ${seasonBadge(s.key, { cls: "hero", muted: !s.closed, title: s.closed ? `Campione di ${s.short}` : `${s.label}, in corso` })}
+        <div class="sh-label">${s.closed ? (s.tie ? "Campioni di" : "Campione di") : "In testa a"} ${esc(s.short)}</div>
+        <div class="sh-avas">${heroes.map((r) => avatar(r.playerId, r.name, "xl")).join("")}</div>
+        <div class="sh-name">${esc(heroes.map((r) => r.name).join(" e ")) || "—"}</div>
+        <div class="sh-sub">${heroes[0] ? `${heroes[0].crowns === 1 ? "1 Crown" : heroes[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"} · media ${fmtNum(heroes[0].avg, 1)}` : "ancora nessuna partita"}${s.closed ? "" : " · il titolo si assegna a fine mese"}</div>
+      </section>
+
+      <section class="card tight">
+        <div class="card-head"><h2 class="section-title">Classifica del mese</h2><span class="muted small ml-auto">${s.games} ${s.games === 1 ? "partita" : "partite"}</span></div>
+        <ul class="lb-list">
+          ${s.rows.map((r, i) => `
+            <li class="lbrow ${i === 0 ? "top" : ""}" data-action="lb-detail" data-id="${r.playerId}">
+              <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
+              <span class="lbname">${avatar(r.playerId, r.name, "sm")}<span class="txt">${esc(r.name)}<small>rec. ${r.best}</small></span></span>
+              <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
+              ${winRing(r.winRate)}
+              <span class="col avg">${fmtNum(r.avg, 1)}</span>
+              <span class="col games">${r.games}</span>
+            </li>`).join("")}
+        </ul>
+      </section>
+
+      ${list.length ? `
+      <section class="card">
+        <div class="card-head"><h2 class="section-title">I record del mese</h2></div>
+        <ul class="aw-list compact">
+          ${list.map((a) => `
+            <li class="tone-${a.tone}">
+              ${awardEmblem(a.emblem, "small")}
+              <span class="nm"><span class="award-title">${a.title}</span><small>${esc(a.winners.map((w) => w.name).join(" e "))}</small></span>
+              <b>${a.unit(a.value)}</b>
+            </li>`).join("")}
+        </ul>
+      </section>` : ""}
+
+      <section class="card">
+        <div class="card-head"><h2 class="section-title">Le partite</h2><span class="muted small ml-auto">${st.games.length}</span></div>
+        <ul class="mini-list">
+          ${st.games.map((g) => {
+            const w = Object.keys(g.winnerIds || {}).map((id) => (g.results[id] || {}).name).filter(Boolean);
+            const topScore = Math.max(...Object.values(g.results || {}).map((r) => Number(r.total) || 0));
+            return `<li data-action="award-game" data-g="${g.id}" data-note="" class="tap">
+              <span class="mini-name">${crownEmblem("mini")}${esc(w.join(" e "))}<small class="muted"> · ${fmtDate(g.playedAt)}</small></span>
+              <b>${topScore}</b></li>`;
+          }).join("") || `<li class="muted">Nessuna partita</li>`}
+        </ul>
+      </section>
+      <p class="foot-note">${s.closed ? "Il titolo è assegnato: resta per sempre nella scheda del campione." : "Il mese non è finito: chi è in testa oggi potrebbe non esserlo il 30."}</p>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Pagina di un record: la stessa statistica per tutti i giocatori in gara.
 // ---------------------------------------------------------------------------
 function awardRowSub(a, r) {
@@ -397,6 +626,8 @@ function awardRowSub(a, r) {
   if (a.key === "bestComeback") return r.comebackWins === 1 ? "1 vittoria in rimonta" : `${r.comebackWins} vittorie in rimonta`;
   if (a.key === "seconds") return `${r.crowns === 1 ? "1 vittoria" : r.crowns + " vittorie"} su ${r.games === 1 ? "1 partita" : r.games + " partite"}`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
+  if (a.key === "hearts") return `in ${r.heartTracked === 1 ? "1 partita con i cuori segnati" : r.heartTracked + " partite con i cuori segnati"}`;
+  if (a.key === "froze" || a.key === "fl3" || a.key === "gave") return `in ${r.interTracked === 1 ? "1 partita che lo sa" : r.interTracked + " partite che lo sanno"}`;
   return `media ${fmtNum(r.avg, 1)}`;
 }
 
@@ -458,7 +689,7 @@ function renderChart(games, pid) {
               const h = Math.max(3, (v / scale) * 100).toFixed(1);
               const win = g.winnerIds && g.winnerIds[pid];
               return `
-                <div class="cbar ${win ? "win" : ""}" title="${fmtDate(g.playedAt)}: ${v}">
+                <div class="cbar ${win ? "win" : ""}" title="${fmtDate(g.playedAt)}: ${v}" data-action="award-game" data-g="${g.id}" data-note="">
                   ${dense ? "" : `<span class="cbar-val" style="bottom:calc(${h}% + 4px)">${v}</span>`}
                   <i style="height:${h}%"></i>
                 </div>`;
@@ -466,13 +697,59 @@ function renderChart(games, pid) {
           </div>
         </div>
       </div>
-      <p class="chart-note">dalla più vecchia alla più recente · in oro le vittorie · la linea è l'obiettivo ${target}</p>
+      <p class="chart-note">dalla più vecchia alla più recente · in oro le vittorie · la linea è l'obiettivo ${target} · tocca una barra per la partita</p>
+    </section>`;
+}
+
+/** La bacheca delle coccarde: i titoli di stagione, in grande. */
+function renderTitles(titles) {
+  if (!titles || !titles.length) return "";
+  return `
+    <section class="card titles-card">
+      <div class="card-head"><h2 class="section-title">Bacheca</h2><span class="muted small ml-auto">${titles.length === 1 ? "1 titolo di stagione" : titles.length + " titoli di stagione"}</span></div>
+      <div class="titles-grid">
+        ${titles.map((t) => `
+          <button class="title-tile" data-action="season-open" data-key="${t.key}">
+            ${seasonBadge(t.key, { cls: "big" })}
+            <b>${esc(t.short)}</b>
+            <small>${t.crowns === 1 ? "1 Crown" : t.crowns + " Crown"} su ${t.games}${t.shared ? " · condiviso" : ""}</small>
+          </button>`).join("")}
+      </div>
+    </section>`;
+}
+
+/** Testa a testa: contro ognuno degli altri, chi e' finito davanti. */
+function renderHeadToHead(h2h) {
+  if (!h2h.length) return "";
+  return `
+    <section class="card">
+      <div class="card-head"><h2 class="section-title">Testa a testa</h2><span class="muted small ml-auto">davanti · pari · dietro</span></div>
+      <ul class="h2h-list">
+        ${h2h.map((r) => {
+          const tot = r.ahead + r.even + r.behind || 1;
+          return `
+          <li data-action="lb-detail" data-id="${r.playerId}">
+            ${avatar(r.playerId, r.name, "sm")}
+            <span class="h2h-txt">
+              <b>${esc(r.name)}</b>
+              <small>${r.games === 1 ? "1 partita insieme" : r.games + " partite insieme"} · Crown ${r.myCrowns}–${r.theirCrowns} · media ${fmtNum(r.myAvg, 0)} contro ${fmtNum(r.theirAvg, 0)}</small>
+              <span class="h2h-bar" aria-hidden="true"><i class="a" style="width:${(r.ahead / tot * 100).toFixed(1)}%"></i><i class="e" style="width:${(r.even / tot * 100).toFixed(1)}%"></i><i class="b" style="width:${(r.behind / tot * 100).toFixed(1)}%"></i></span>
+            </span>
+            <span class="h2h-score ${r.ahead > r.behind ? "up" : r.ahead < r.behind ? "down" : ""}"><b>${r.ahead}</b>${r.even ? `<i>${r.even}</i>` : ""}<b>${r.behind}</b></span>
+          </li>`;
+        }).join("")}
+      </ul>
     </section>`;
 }
 
 function renderPlayerPage(s) {
   const { row, games, pid } = s;
+  const room = getRoom();
   const h = playerHighlights(games, pid);
+  const titles = (seasonTitles(room.history, room.players, { source: localState.source })[pid]) || [];
+  const h2h = headToHead(games, pid, room.players);
+  const elo = eloRatings(room.history, room.players, { source: localState.source }).find((r) => r.playerId === pid);
+  const nameOf = (id) => (room.players[id] && room.players[id].name) || "?";
 
   const mood = h.currentStreak >= 2 ? `In serie: <b>${h.currentStreak} vittorie di fila</b>`
     : h.sinceLastWin === 0 ? `Ha vinto <b>l'ultima partita</b>`
@@ -490,7 +767,8 @@ function renderPlayerPage(s) {
         <span class="holo-sweep" aria-hidden="true"></span>
         ${avatar(pid, row.name, "xl")}
         <div class="profile-name">${esc(row.name)}</div>
-        <div class="profile-sub">${row.games} partite giocate</div>
+        <div class="profile-sub">${row.games} partite giocate${titles.length ? ` · ${titles.length === 1 ? "1 titolo" : titles.length + " titoli"} di stagione` : ""}</div>
+        ${titles.length ? `<div class="profile-badges">${badgeRow(titles, 6, "sm")}</div>` : ""}
       </section>
 
       <div class="hl-grid">
@@ -515,6 +793,11 @@ function renderPlayerPage(s) {
           <b>${fmtNum(row.winRate * 100, 0)}%</b>
           <span>di partite vinte<small>${row.crowns} su ${row.games}</small></span>
         </div>
+        ${elo ? `
+        <div class="hl tone-silver">
+          <b>${elo.elo}</b>
+          <span>rating Elo<small>${elo.rank}º in stanza · picco ${elo.peak}</small></span>
+        </div>` : ""}
         ${h.detailedGames ? `
           <div class="hl tone-gold">
             <b>${h.flip7s}</b>
@@ -527,7 +810,20 @@ function renderPlayerPage(s) {
           ${h.freezeGames ? `
           <div class="hl tone-ice">
             <b>${h.freezes}</b>
-            <span>${h.freezes === 1 ? "volta congelato" : "volte congelato"}<small>in ${h.freezeGames === 1 ? "1 partita" : h.freezeGames + " partite"} con i Congela segnati</small></span>
+            <span>${h.freezes === 1 ? "volta congelato" : "volte congelato"}<small>${h.nemesis ? `la sua nemesi è ${esc(nameOf(h.nemesis.playerId))} (${h.nemesis.n}×)` : `in ${h.freezeGames === 1 ? "1 partita" : h.freezeGames + " partite"} con i Congela segnati`}</small></span>
+          </div>` : ""}
+          ${h.interGames ? `
+          <div class="hl tone-ice">
+            <b>${h.froze}</b>
+            <span>${h.froze === 1 ? "congelata tirata" : "congelate tirate"}<small>${h.victim ? `soprattutto a ${esc(nameOf(h.victim.playerId))} (${h.victim.n}×)` : `in ${h.interGames === 1 ? "1 partita" : h.interGames + " partite"} che lo sanno`}</small></span>
+          </div>
+          <div class="hl tone-fire">
+            <b>${h.fl3}</b>
+            <span>${h.fl3 === 1 ? "Pesca Tre tirato" : "Pesca Tre tirati"}<small>${h.bullied ? `soprattutto a ${esc(nameOf(h.bullied.playerId))}` : h.bully ? `ne subisce di più da ${esc(nameOf(h.bully.playerId))}` : "agli altri"}</small></span>
+          </div>
+          <div class="hl tone-rose">
+            <b>${h.gave}</b>
+            <span>${h.gave === 1 ? "cuore regalato" : "cuori regalati"}<small>Seconde Chance passate agli altri</small></span>
           </div>` : ""}
           ${h.rounds ? `
           <div class="hl tone-fire ${h.bestHandGame ? "tap" : ""}" ${h.bestHandGame ? `data-action="award-game" data-g="${h.bestHandGame}" data-pid="${pid}" data-round="${h.bestHandRound}" data-note="${esc(`la mano da ${h.bestHand} punti`)}"` : ""}>
@@ -548,10 +844,19 @@ function renderPlayerPage(s) {
           <div class="hl tone-orange">
             <b>${h.doubles}</b>
             <span>${h.doubles === 1 ? "×2 pescato" : "×2 pescati"}<small>in ${h.cardRounds === 1 ? "1 mano segnata con le carte" : h.cardRounds + " mani segnate con le carte"}</small></span>
+          </div>` : ""}
+          ${h.stays ? `
+          <div class="hl tone-green">
+            <b>${h.stays}</b>
+            <span>${h.stays === 1 ? "volta fermato da sé" : "volte fermato da sé"}<small>ha detto "mi fermo" prima che il round si chiudesse</small></span>
           </div>` : ""}` : ""}
       </div>
 
       <p class="mood">${mood}</p>
+
+      ${renderTitles(titles)}
+
+      ${renderHeadToHead(h2h)}
 
       ${renderChart(games, pid)}
 
@@ -564,8 +869,9 @@ function renderPlayerPage(s) {
           ${games.map((g) => {
             const res = g.results[pid];
             const win = g.winnerIds && g.winnerIds[pid];
-            return `<li class="${win ? "win" : ""}">
-              <span class="mini-name">${win ? crownEmblem("mini") : `<i class="dot-empty"></i>`}${fmtDate(g.playedAt)}</span>
+            const place = Object.values(g.results).filter((r) => (Number(r.total) || 0) > (Number(res.total) || 0)).length + 1;
+            return `<li class="${win ? "win" : ""} tap" data-action="award-game" data-g="${g.id}" data-note="">
+              <span class="mini-name">${win ? crownEmblem("mini") : `<i class="dot-empty"></i>`}${fmtDate(g.playedAt)}<small class="muted"> · ${place}º di ${Object.keys(g.results).length}</small></span>
               <b>${res.total}</b></li>`;
           }).join("") || `<li class="muted">Nessuna partita</li>`}
         </ul>

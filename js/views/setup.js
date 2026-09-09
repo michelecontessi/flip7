@@ -7,7 +7,8 @@
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
 import { esc, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, openSheet, closeSheet, sheet } from "../ui.js";
-import { isFirebaseConfigured } from "../config.js";
+import { isFirebaseConfigured, APP_VERSION } from "../config.js";
+import { NOTIFY_KEYS, wantsSound, wantsVibration, wantsPush, canPush, pushPermission, requestPush, ding, buzz } from "../notify.js";
 import { icon } from "../icons.js";
 import { applyTheme } from "../theme.js";
 import { avatar, avatarHtml, playerAvatar, loadPhoto, centerCrop, cropToAvatarImage, openAvatarCropper, symbolSvg, AVATAR_SYMBOLS, AVATAR_COLORS } from "../avatar.js";
@@ -186,6 +187,14 @@ export const setupView = {
       }
     },
 
+    async "check-update"() {
+      toast("Controllo…");
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+        setTimeout(() => location.reload(), 900);
+      } catch { location.reload(); }
+    },
     "export-json"() {
       const blob = new Blob([store.exportJSON()], { type: "application/json" });
       const a = document.createElement("a");
@@ -213,6 +222,15 @@ export const setupView = {
 
   changes: {
     "theme"(ctx, el) { prefs.set("theme", el.value); applyTheme(); },
+    "notify-sound"(ctx, el) { prefs.set(NOTIFY_KEYS.sound, el.checked); if (el.checked) ding("turn"); },
+    "notify-vibrate"(ctx, el) { prefs.set(NOTIFY_KEYS.vibrate, el.checked); if (el.checked) buzz(); },
+    async "notify-push"(ctx, el) {
+      if (!el.checked) { prefs.set(NOTIFY_KEYS.push, false); return; }
+      const res = await requestPush();
+      if (res === "granted") { prefs.set(NOTIFY_KEYS.push, true); toast("Notifiche attive: ti avviso quando tocca a te"); }
+      else { prefs.set(NOTIFY_KEYS.push, false); toast(res === "unsupported" ? "Questo browser non ha le notifiche (su iPhone servono l'app in Home e iOS 16.4+)" : "Permesso negato: si cambia dalle impostazioni del browser", "warn"); }
+    },
+    "training"(ctx, el) { prefs.set("training", el.checked); },
     async "ava-file"(ctx, el) {
       const file = el.files && el.files[0];
       el.value = "";
@@ -294,14 +312,33 @@ function accountCard(room, status, me) {
     </section>`;
 }
 
-const footNote = `<p class="foot-note">Flip 7 Scoreboard · nessun costo, nessun dominio: gira su GitHub Pages + Firebase (piani gratuiti).</p>`;
+const footNote = `<p class="foot-note">Flip 7 Scoreboard · versione ${APP_VERSION} · nessun costo, nessun dominio: gira su GitHub Pages + Firebase (piani gratuiti).
+  <button class="link" data-action="check-update">Controlla aggiornamenti</button></p>`;
+
+/** Avvisi del tavolo online: suono, vibrazione e notifica quando tocca a te. */
+function alertsCard() {
+  const perm = pushPermission();
+  return `
+    <section class="card">
+      <div class="card-head">${icon("bell")}<span class="card-title">Avvisi del tavolo</span></div>
+      <p class="muted small">Quando al tavolo online tocca a te, l'app te lo dice: così si gioca anche una mano ogni tanto, senza restare a fissare lo schermo.</p>
+      <label class="switch-row"><span>${icon("sound", "tiny")} Suono</span><input type="checkbox" data-change="notify-sound" ${wantsSound() ? "checked" : ""}></label>
+      <label class="switch-row"><span>${icon("vibrate", "tiny")} Vibrazione</span><input type="checkbox" data-change="notify-vibrate" ${wantsVibration() ? "checked" : ""}></label>
+      <label class="switch-row"><span>${icon("bell", "tiny")} Notifica a schermo spento</span><input type="checkbox" data-change="notify-push" ${wantsPush() && perm === "granted" ? "checked" : ""} ${canPush() && perm !== "denied" ? "" : "disabled"}></label>
+      <p class="hint">${!canPush() ? "Le notifiche non sono disponibili in questo browser: su iPhone servono l'app aggiunta alla Home e iOS 16.4 o più recente."
+        : perm === "denied" ? "Le notifiche sono bloccate dalle impostazioni del browser per questo sito."
+        : "La notifica arriva solo quando l'app non è in vista; suono e vibrazione anche mentre la guardi."}</p>
+      <label class="switch-row"><span>${icon("target", "tiny")} Modalità allenamento</span><input type="checkbox" data-change="training" ${prefs.get("training", false) ? "checked" : ""}></label>
+      <p class="hint">Al tuo turno vedi la probabilità di sballare alla prossima carta, calcolata dalle carte già uscite. Utile per imparare, meno per il brivido.</p>
+    </section>`;
+}
 
 // ---------------------------------------------------------------------------
 // Chi non gestisce la stanza: il suo profilo e basta
 // ---------------------------------------------------------------------------
 function renderMember(ctx) {
   const { room, status, me } = ctx;
-  return profileCard(room, me, { owner: false }) + themeCard() + accountCard(room, status, me) + footNote;
+  return profileCard(room, me, { owner: false }) + alertsCard() + themeCard() + accountCard(room, status, me) + footNote;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +368,7 @@ function renderOwner(ctx) {
         <button class="btn ghost" data-action="rooms-menu">${icon("door", "tiny")} Le tue stanze</button>
       </div>
       ${status.error ? `<p class="err small">${esc(status.error)}</p>` : ""}
+      ${store.canRetryOnline() ? `<button class="btn ghost" data-action="retry-online">${icon("refresh", "tiny")} Riprova il collegamento</button>` : ""}
     </section>
 
     <section class="card">
@@ -383,6 +421,7 @@ function renderOwner(ctx) {
     </section>
 
     ${profileCard(room, me, { owner: true })}
+    ${alertsCard()}
     ${themeCard()}
     ${accountCard(room, status, me)}
     ${advancedCard(room, status)}

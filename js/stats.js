@@ -42,7 +42,8 @@ export function liveStandings(live, players) {
       lastRound: last,
       flip7s: countFlip7(live, pid),
       busts: countBusts(live, pid),
-      freezes: countFreezes(live, pid)
+      freezes: countFreezes(live, pid),
+      hearts: countHearts(live, pid)
     };
   });
   rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, "it"));
@@ -116,6 +117,10 @@ function countBusts(live, pid) {
 function countFreezes(live, pid) {
   const rows = (live.scores && live.scores[pid]) || {};
   return Object.values(rows).filter((e) => e && e.frozen && !e.busted).length;
+}
+function countHearts(live, pid) {
+  const rows = (live.scores && live.scores[pid]) || {};
+  return Object.values(rows).reduce((a, e) => a + computeRound(e).hearts, 0);
 }
 
 /**
@@ -196,6 +201,37 @@ export const matchesSource = (g, source) =>
 export const FREEZE_STATS_SINCE = Date.parse("2026-09-03T11:35:00+02:00");
 const tracksFreezes = (game, res) => res.freezes !== undefined && (game.playedAt || 0) >= FREEZE_STATS_SINCE;
 
+/**
+ * Da quando il tavolo online scrive CHI ha congelato, chi ha tirato il Pesca
+ * Tre e chi ha regalato la Seconda Chance. Prima non c'era il dato, quindi
+ * quelle partite non concorrono ai record "attivi" (Iceman, Bullo, Generoso).
+ * Una partita dal vivo conta se il segnapunti ha segnato almeno un "da chi".
+ */
+export const INTERACTIONS_SINCE = Date.parse("2026-09-09T12:00:00+02:00");
+const listOf = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
+export function tracksInteractions(game) {
+  if (!game || !game.rounds) return false;
+  if (game.source === "online" && (game.playedAt || 0) >= INTERACTIONS_SINCE) return true;
+  return Object.values(game.rounds).some((rows) => Object.values(rows || {}).some((e) => e && (e.frozenBy || listOf(e.fl3By).length || listOf(e.scFrom).length)));
+}
+/**
+ * Chi ha fatto cosa in una partita, a credito di chi l'ha fatto:
+ * pid -> { froze, fl3, gave, frozeWhom: {pid: n}, fl3Whom: {pid: n} }.
+ */
+export function interactionCredits(game) {
+  const out = {};
+  const at = (pid) => out[pid] || (out[pid] = { froze: 0, fl3: 0, gave: 0, frozeWhom: {}, fl3Whom: {}, gaveWhom: {} });
+  for (const [victim, rows] of Object.entries((game && game.rounds) || {})) {
+    for (const e of Object.values(rows || {})) {
+      if (!e) continue;
+      if (e.frozenBy) { const c = at(e.frozenBy); c.froze += 1; c.frozeWhom[victim] = (c.frozeWhom[victim] || 0) + 1; }
+      for (const by of listOf(e.fl3By)) { const c = at(by); c.fl3 += 1; c.fl3Whom[victim] = (c.fl3Whom[victim] || 0) + 1; }
+      for (const by of listOf(e.scFrom)) { const c = at(by); c.gave += 1; c.gaveWhom[victim] = (c.gaveWhom[victim] || 0) + 1; }
+    }
+  }
+  return out;
+}
+
 export const PERIODS = {
   all: { label: "Sempre", since: () => 0 },
   year: { label: "Quest'anno", since: () => new Date(new Date().getFullYear(), 0, 1).getTime() },
@@ -250,10 +286,13 @@ export function leaderboard(history, players, opts = {}) {
     const results = game.results || {};
     const winners = game.winnerIds || {};
     const seconds = new Set(runnersUpOf(game));
+    const inter = tracksInteractions(game);
+    const credits = inter ? interactionCredits(game) : {};
     for (const [pid, res] of Object.entries(results)) {
       let e = acc.get(pid);
       if (!e) {
-        e = { playerId: pid, name: res.name || "?", crowns: 0, seconds: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, doubles: 0, cardRounds: 0, bestComeback: 0, comebackWins: 0,
+        e = { playerId: pid, name: res.name || "?", crowns: 0, seconds: 0, games: 0, points: 0, best: 0, worst: Infinity, lastPlayed: 0, flip7s: 0, busts: 0, freezes: 0, tracked: 0, frozenTracked: 0, hearts: 0, heartTracked: 0, hands: 0, cards: 0, bestHand: 0, rounds: 0, doubles: 0, cardRounds: 0, bestComeback: 0, comebackWins: 0,
+          froze: 0, fl3: 0, gave: 0, interTracked: 0, stays: 0, blockedGames: 0, titles: 0,
           bestGame: null, bestHandGame: null, bestHandRound: -1, bestComebackGame: null, bestComebackRound: -1 };
         acc.set(pid, e);
       }
@@ -269,6 +308,12 @@ export function leaderboard(history, players, opts = {}) {
         e.freezes += Number(res.freezes) || 0;
         e.frozenTracked += 1;
       }
+      // le vite extra si contano solo dove sono state segnate davvero: nelle
+      // partite piu' vecchie il campo non c'e' proprio, e non fanno media
+      if (res.hearts !== undefined) {
+        e.hearts += Number(res.hearts) || 0;
+        e.heartTracked += 1;
+      }
       const hs = handStats(game.rounds && game.rounds[pid]);
       e.hands += hs.hands;
       e.cards += hs.cards;
@@ -279,11 +324,23 @@ export function leaderboard(history, players, opts = {}) {
       const cb = comebackDetail(game, pid);
       if (cb.deficit > 0) e.comebackWins += 1;
       if (cb.deficit > e.bestComeback) { e.bestComeback = cb.deficit; e.bestComebackGame = game.id; e.bestComebackRound = cb.round; }
+      // chi ha congelato, chi ha tirato il Pesca Tre, chi ha regalato il cuore:
+      // solo nelle partite che lo sanno
+      if (inter) {
+        e.interTracked += 1;
+        const c = credits[pid];
+        if (c) { e.froze += c.froze; e.fl3 += c.fl3; e.gave += c.gave; }
+      }
+      e.stays += Object.values((game.rounds && game.rounds[pid]) || {}).filter((x) => x && x.stayed).length;
+      if (res.blockedRound !== undefined) e.blockedGames += 1;
       e.lastPlayed = Math.max(e.lastPlayed, game.playedAt || 0);
       if (winners[pid]) e.crowns += 1;
       if (seconds.has(pid)) e.seconds += 1;
     }
   }
+  // i titoli di stagione (campione del mese) sulle stesse partite
+  const titles = seasonTitles(history, players, opts);
+  for (const e of acc.values()) e.titles = (titles[e.playerId] || []).length;
 
   const rows = [...acc.values()].map((e) => ({
     ...e,
@@ -340,12 +397,21 @@ export const AWARDS = [
   { id: "doppiogiochista", key: "doubles", title: "Doppiogiochista", desc: "il ×2 gli finisce in mano più che a tutti", emblem: "doppiogiochista", tone: "violet",
     unit: (v) => v === 1 ? "1 ×2 pescato" : `${v} ×2 pescati` },
   { id: "rosicone", key: "seconds", title: "Rosicone", desc: "il secondo posto è casa sua, e ancora rosica", emblem: "rosicone", tone: "silver",
-    unit: (v) => v === 1 ? "1 secondo posto" : `${v} secondi posti` }
+    unit: (v) => v === 1 ? "1 secondo posto" : `${v} secondi posti` },
+  { id: "settevite", key: "hearts", title: "Sette Vite", desc: "le carte col cuore finiscono sempre in mano sua", emblem: "settevite", tone: "rose",
+    unit: (v) => v === 1 ? "1 vita extra" : `${v} vite extra` },
+  { id: "iceman", key: "froze", title: "Iceman", desc: "il Congela lo tira lui, e sempre a qualcun altro", emblem: "iceman", tone: "ice",
+    unit: (v) => v === 1 ? "1 congelata tirata" : `${v} congelate tirate` },
+  { id: "bullo", key: "fl3", title: "Bullo", desc: "il Pesca Tre lo rifila agli altri", emblem: "bullo", tone: "fire",
+    unit: (v) => v === 1 ? "1 Pesca Tre tirato" : `${v} Pesca Tre tirati` },
+  { id: "generoso", key: "gave", title: "Generoso", desc: "regala la Seconda Chance a chi ne ha bisogno", emblem: "generoso", tone: "rose",
+    unit: (v) => v === 1 ? "1 cuore regalato" : `${v} cuori regalati` }
 ];
 
 // Flip 7, sballi e congelate esistono solo nelle partite segnate round per
 // round (`tracked`); le mani lunghe solo dove le carte sono state segnate una
-// per una (`hands`). Chi ha solo totali recuperati a mano non concorre.
+// per una (`hands`); le vite extra solo da quando si segnano (`heartTracked`).
+// Chi ha solo totali recuperati a mano non concorre.
 const awardPool = (a, rows) =>
   a.key === "freezeRate" ? rows.filter((r) => r.frozenTracked > 0)
     : a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0)
@@ -354,6 +420,8 @@ const awardPool = (a, rows) =>
     : a.key === "doubles" ? rows.filter((r) => r.cardRounds > 0)
     : a.key === "bestComeback" ? rows.filter((r) => r.bestComeback > 0)
     : a.key === "seconds" ? rows.filter((r) => r.games > 0)
+    : a.key === "hearts" ? rows.filter((r) => r.heartTracked > 0)
+    : a.key === "froze" || a.key === "fl3" || a.key === "gave" ? rows.filter((r) => r.interTracked > 0)
     : rows;
 // arrotondo per confrontare le medie senza sorprese da virgola mobile
 const awardVal = (a, r) => Math.round((Number(r[a.key]) || 0) * 1000) / 1000;
@@ -452,6 +520,9 @@ export function playerHighlights(games, playerId) {
   const won = (g) => Boolean(g.winnerIds && g.winnerIds[playerId]);
 
   let bestStreak = 0, run = 0, flip7s = 0, busts = 0, freezes = 0, overTarget = 0, detailed = 0, freezeGames = 0, hands = 0, cards = 0, rounds = 0, doubles = 0, cardRounds = 0;
+  let froze = 0, fl3 = 0, gave = 0, interGames = 0, stays = 0;
+  const frozeWhom = {}, frozenBy = {}, fl3Whom = {}, fl3By = {};
+  const bump = (m, k, n = 1) => { if (k) m[k] = (m[k] || 0) + n; };
   let best = { total: -1, playedAt: 0, gameId: null };
   let bestHand = { total: 0, gameId: null, round: -1 };
   let bestComeback = { deficit: 0, gameId: null, round: -1 };
@@ -478,7 +549,23 @@ export function playerHighlights(games, playerId) {
     if (cb.deficit > bestComeback.deficit) bestComeback = { deficit: cb.deficit, gameId: g.id, round: cb.round };
     if (total >= (Number(g.targetScore) || 200)) overTarget += 1;
     if (total > best.total) best = { total, playedAt: g.playedAt || 0, gameId: g.id };
+    if (tracksInteractions(g)) {
+      interGames += 1;
+      const c = interactionCredits(g)[playerId];
+      if (c) {
+        froze += c.froze; fl3 += c.fl3; gave += c.gave;
+        for (const [k, n] of Object.entries(c.frozeWhom)) bump(frozeWhom, k, n);
+        for (const [k, n] of Object.entries(c.fl3Whom)) bump(fl3Whom, k, n);
+      }
+      for (const e of Object.values((g.rounds && g.rounds[playerId]) || {})) {
+        if (!e) continue;
+        if (e.frozenBy) bump(frozenBy, e.frozenBy);
+        for (const by of listOf(e.fl3By)) bump(fl3By, by);
+      }
+    }
+    stays += Object.values((g.rounds && g.rounds[playerId]) || {}).filter((x) => x && x.stayed).length;
   }
+  const topOf = (m) => { const best = Object.entries(m).sort((a, b) => b[1] - a[1])[0]; return best ? { playerId: best[0], n: best[1] } : null; };
 
   // strisce che arrivano fino a oggi
   let currentStreak = 0;
@@ -495,7 +582,13 @@ export function playerHighlights(games, playerId) {
     bestComeback: bestComeback.deficit, bestComebackGame: bestComeback.gameId, bestComebackRound: bestComeback.round,
     best: best.total < 0 ? { total: 0, playedAt: 0, gameId: null } : best,
     played: chrono.length,
-    detailedGames: detailed
+    detailedGames: detailed,
+    // chi ha fatto cosa a chi (solo dalle partite che lo sanno)
+    froze, fl3, gave, interGames, stays,
+    nemesis: topOf(frozenBy),     // chi lo congela di piu'
+    victim: topOf(frozeWhom),     // chi congela di piu'
+    bully: topOf(fl3By),          // chi gli tira piu' Pesca Tre
+    bullied: topOf(fl3Whom)       // a chi tira piu' Pesca Tre
   };
 }
 
@@ -581,7 +674,8 @@ export function reviseGame(game, draft) {
         total: rows.reduce((a, e) => a + computeRound(e).total, 0),
         flip7s: rows.filter((e) => computeRound(e).flip7).length,
         busts: rows.filter((e) => e && e.busted).length,
-        freezes: rows.filter((e) => e && e.frozen && !e.busted).length
+        freezes: rows.filter((e) => e && e.frozen && !e.busted).length,
+        hearts: rows.reduce((a, e) => a + computeRound(e).hearts, 0)
       };
     } else {
       results[p.playerId] = { ...prev, name, total: Math.max(0, Math.round(Number(p.total) || 0)) };
@@ -615,4 +709,275 @@ export function historyList(history) {
   return Object.entries(history || {})
     .map(([id, g]) => ({ id, ...g }))
     .sort((a, b) => (b.playedAt || 0) - (a.playedAt || 0));
+}
+
+// ---------------------------------------------------------------------------
+// Stagioni: un mese di calendario = una stagione. Si calcolano dallo storico,
+// niente da scrivere nel database. Il campione del mese e' chi guida la
+// classifica di quel mese (stessa formula: Crown, quota vittorie, media...);
+// valgono le partite dal vivo e quelle online insieme. Il mese in corso non
+// e' ancora assegnato: e' "in corso", con chi e' in testa adesso.
+// ---------------------------------------------------------------------------
+export const MONTHS_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+export const MONTHS_SHORT = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
+
+/** "2026-08" per un istante (mese locale). */
+export function monthKey(ms) {
+  const d = new Date(ms || 0);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+export function monthOf(key) {
+  const [y, m] = String(key).split("-").map(Number);
+  return { year: y, month: m - 1 };
+}
+/** "Agosto 2026" */
+export function seasonLabel(key) {
+  const { year, month } = monthOf(key);
+  return `${MONTHS_IT[month] || "?"} ${year}`;
+}
+/** "Agosto 26", la forma corta del badge. */
+export function seasonShort(key) {
+  const { year, month } = monthOf(key);
+  return `${MONTHS_IT[month] || "?"} ${String(year).slice(-2)}`;
+}
+/** true se quel mese e' finito (rispetto a `now`). */
+export function seasonClosed(key, now = Date.now()) {
+  const { year, month } = monthOf(key);
+  return new Date(year, month + 1, 1).getTime() <= now;
+}
+
+/** Stesso posto in classifica: uguali su tutta la catena degli spareggi. */
+const sameStanding = (a, b) => TIEBREAK.every((k) => (a[k] || 0) === (b[k] || 0));
+
+/**
+ * Le stagioni, dalla piu' recente. Ognuna porta la classifica del mese, il
+ * campione (o i campioni, a pari merito assoluto) se il mese e' chiuso, e
+ * chi e' in testa se e' ancora in corso.
+ * @returns {{key, label, short, year, month, games, rows, champions, leader, closed}[]}
+ */
+export function seasons(history, players, opts = {}) {
+  const now = opts.now || Date.now();
+  const byMonth = new Map();
+  for (const [id, g] of Object.entries(history || {})) {
+    if (!g || !matchesSource(g, opts.source)) continue;
+    const key = monthKey(g.playedAt || 0);
+    if (!byMonth.has(key)) byMonth.set(key, {});
+    byMonth.get(key)[id] = g;
+  }
+  return [...byMonth.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([key, games]) => {
+      const { rows } = leaderboard(games, players, { source: opts.source, skipTitles: true });
+      const sorted = sortLeaderboard(rows, "crowns");
+      const top = sorted[0] || null;
+      const tied = top ? sorted.filter((r) => sameStanding(r, top)) : [];
+      const closed = seasonClosed(key, now);
+      const { year, month } = monthOf(key);
+      return {
+        key, year, month,
+        label: seasonLabel(key), short: seasonShort(key),
+        games: Object.keys(games).length,
+        rows: sorted,
+        champions: closed ? tied : [],
+        leader: closed ? null : top,
+        tie: tied.length > 1,
+        closed
+      };
+    });
+}
+
+/** Titoli di stagione per giocatore: pid -> [{key, label, short, games, shared}], dal piu' recente. */
+export function seasonTitles(history, players, opts = {}) {
+  if (opts.skipTitles) return {};
+  const out = {};
+  for (const s of seasons(history, players, opts)) {
+    for (const r of s.champions) {
+      (out[r.playerId] = out[r.playerId] || []).push({ key: s.key, label: s.label, short: s.short, games: s.games, shared: s.champions.length > 1, crowns: r.crowns });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Testa a testa: come e' andata contro ognuno degli altri.
+// ---------------------------------------------------------------------------
+/**
+ * Per ogni avversario incontrato: partite insieme, quante volte e' finito
+ * davanti / dietro / alla pari, le Crown di ciascuno in quelle partite e
+ * le medie punti. Dal piu' incontrato.
+ */
+export function headToHead(games, pid, players = null) {
+  const acc = new Map();
+  for (const g of games || []) {
+    const res = g.results || {};
+    if (!res[pid]) continue;
+    const mine = Number(res[pid].total) || 0;
+    for (const [oid, r] of Object.entries(res)) {
+      if (oid === pid) continue;
+      let e = acc.get(oid);
+      if (!e) { e = { playerId: oid, name: r.name || "?", games: 0, ahead: 0, behind: 0, even: 0, myCrowns: 0, theirCrowns: 0, myPoints: 0, theirPoints: 0 }; acc.set(oid, e); }
+      const theirs = Number(r.total) || 0;
+      e.games += 1;
+      if (mine > theirs) e.ahead += 1; else if (mine < theirs) e.behind += 1; else e.even += 1;
+      if (g.winnerIds && g.winnerIds[pid]) e.myCrowns += 1;
+      if (g.winnerIds && g.winnerIds[oid]) e.theirCrowns += 1;
+      e.myPoints += mine;
+      e.theirPoints += theirs;
+    }
+  }
+  return [...acc.values()]
+    .map((e) => ({
+      ...e,
+      name: (players && players[e.playerId] && players[e.playerId].name) || e.name,
+      myAvg: e.games ? e.myPoints / e.games : 0,
+      theirAvg: e.games ? e.theirPoints / e.games : 0,
+      edge: e.games ? (e.ahead - e.behind) / e.games : 0
+    }))
+    .sort((a, b) => b.games - a.games || b.edge - a.edge || a.name.localeCompare(b.name, "it"));
+}
+
+// ---------------------------------------------------------------------------
+// Record della stanza: non "chi e' il migliore in X" ma "la partita piu'..."
+// ---------------------------------------------------------------------------
+const nameIn = (g, pid, players) => (players && players[pid] && players[pid].name) || (g.results && g.results[pid] && g.results[pid].name) || "?";
+
+/**
+ * I primati della stanza, ognuno con la partita (e il giocatore) che lo
+ * detiene: la partita piu' lunga e la piu' corta, il punteggio piu' alto di
+ * sempre, la vittoria piu' larga e quella piu' tirata, il tavolo piu'
+ * affollato, la mano piu' ricca, la serata piu' lunga.
+ */
+export function roomRecords(history, players, opts = {}) {
+  const games = Object.entries(history || {})
+    .map(([id, g]) => ({ id, ...g }))
+    .filter((g) => matchesSource(g, opts.source));
+  if (!games.length) return [];
+  const out = [];
+  const pick = (id, title, desc, unit, best) => { if (best) out.push({ id, title, desc, unit, ...best }); };
+  const maxBy = (list, val) => list.reduce((m, x) => { const v = val(x); return v !== null && (m === null || v > m.v) ? { v, x } : m; }, null);
+  const minBy = (list, val) => list.reduce((m, x) => { const v = val(x); return v !== null && (m === null || v < m.v) ? { v, x } : m; }, null);
+  const ref = (m, extra = {}) => (m ? { value: m.v, gameId: m.x.id, playedAt: m.x.playedAt || 0, ...extra(m.x) } : null);
+
+  const withRounds = games.filter((g) => roundCount(g.rounds) > 0);
+  pick("longest", "La maratona", "la partita con più mani", (v) => `${v} mani`,
+    ref(maxBy(withRounds, (g) => roundCount(g.rounds)), () => ({})));
+  pick("shortest", "La partita lampo", "chiusa in poche mani", (v) => `${v} mani`,
+    ref(minBy(withRounds.filter((g) => Object.keys(g.results || {}).length >= 2), (g) => roundCount(g.rounds)), () => ({})));
+
+  const topScore = maxBy(games.flatMap((g) => Object.entries(g.results || {}).map(([pid, r]) => ({ g, pid, v: Number(r.total) || 0 }))), (x) => x.v);
+  if (topScore) out.push({ id: "topscore", title: "Il punteggio di sempre", desc: "il totale più alto in una partita", unit: (v) => `${v} punti`,
+    value: topScore.v, gameId: topScore.x.g.id, playedAt: topScore.x.g.playedAt || 0, playerId: topScore.x.pid, playerName: nameIn(topScore.x.g, topScore.x.pid, players) });
+
+  const margins = games.map((g) => {
+    const rows = Object.entries(g.results || {}).sort((a, b) => (Number(b[1].total) || 0) - (Number(a[1].total) || 0));
+    if (rows.length < 2) return null;
+    return { g, pid: rows[0][0], v: (Number(rows[0][1].total) || 0) - (Number(rows[1][1].total) || 0) };
+  }).filter(Boolean);
+  const wide = maxBy(margins, (x) => x.v);
+  if (wide) out.push({ id: "widest", title: "La passeggiata", desc: "la vittoria più larga sul secondo", unit: (v) => `+${v} sul secondo`,
+    value: wide.v, gameId: wide.x.g.id, playedAt: wide.x.g.playedAt || 0, playerId: wide.x.pid, playerName: nameIn(wide.x.g, wide.x.pid, players) });
+  const tight = minBy(margins.filter((x) => x.v > 0), (x) => x.v);
+  if (tight) out.push({ id: "tightest", title: "Il fotofinish", desc: "la vittoria più tirata", unit: (v) => `+${v} sul secondo`,
+    value: tight.v, gameId: tight.x.g.id, playedAt: tight.x.g.playedAt || 0, playerId: tight.x.pid, playerName: nameIn(tight.x.g, tight.x.pid, players) });
+
+  pick("crowded", "Il tavolo pieno", "la partita con più giocatori", (v) => `${v} giocatori`,
+    ref(maxBy(games, (g) => Object.keys(g.results || {}).length), () => ({})));
+
+  const hands = games.flatMap((g) => Object.entries(g.rounds || {}).flatMap(([pid, rows]) => Object.entries(rows || {}).map(([k, e]) => ({ g, pid, round: Number(String(k).slice(1)), v: computeRound(e).total }))));
+  const richest = maxBy(hands, (x) => x.v);
+  if (richest) out.push({ id: "richest", title: "La mano d'oro", desc: "più punti in un solo round", unit: (v) => `${v} in una mano`,
+    value: richest.v, gameId: richest.x.g.id, playedAt: richest.x.g.playedAt || 0, playerId: richest.x.pid, playerName: nameIn(richest.x.g, richest.x.pid, players), round: richest.x.round });
+
+  const timed = games.filter((g) => g.finishedAt && g.playedAt && g.finishedAt > g.playedAt && g.finishedAt - g.playedAt < 12 * 36e5);
+  pick("night", "La serata lunga", "la partita durata di più", (v) => fmtDuration(v),
+    ref(maxBy(timed, (g) => g.finishedAt - g.playedAt), () => ({})));
+  return out;
+}
+
+/** "1 h 12 min" / "38 min". */
+export function fmtDuration(ms) {
+  const min = Math.round((ms || 0) / 6e4);
+  if (min < 1) return "meno di un minuto";
+  const h = Math.floor(min / 60), m = min % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+// ---------------------------------------------------------------------------
+// Rating Elo: premia chi batte i forti, e da' un ordine sensato anche a chi
+// ha giocato poche partite. Ogni partita vale come un giro di scontri a due
+// fra tutti i presenti (K diviso per il numero di avversari).
+// ---------------------------------------------------------------------------
+export const ELO_START = 1000;
+export function eloRatings(history, players, opts = {}) {
+  const K = opts.k || 32;
+  const games = Object.entries(history || {})
+    .map(([id, g]) => ({ id, ...g }))
+    .filter((g) => matchesSource(g, opts.source))
+    .sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
+  const rating = new Map();
+  const played = new Map();
+  const peak = new Map();
+  const get = (pid) => (rating.has(pid) ? rating.get(pid) : ELO_START);
+  for (const g of games) {
+    const ids = Object.keys(g.results || {});
+    if (ids.length < 2) continue;
+    const total = (pid) => Number(g.results[pid].total) || 0;
+    const delta = {};
+    for (const a of ids) {
+      let d = 0;
+      for (const b of ids) {
+        if (a === b) continue;
+        const expected = 1 / (1 + Math.pow(10, (get(b) - get(a)) / 400));
+        const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
+        d += (K / (ids.length - 1)) * (actual - expected);
+      }
+      delta[a] = d;
+    }
+    for (const a of ids) {
+      const next = get(a) + delta[a];
+      rating.set(a, next);
+      played.set(a, (played.get(a) || 0) + 1);
+      peak.set(a, Math.max(peak.get(a) || ELO_START, next));
+    }
+  }
+  return [...rating.entries()]
+    .map(([pid, r]) => ({
+      playerId: pid,
+      name: (players && players[pid] && players[pid].name) || "?",
+      elo: Math.round(r),
+      peak: Math.round(peak.get(pid) || ELO_START),
+      games: played.get(pid) || 0
+    }))
+    .sort((a, b) => b.elo - a.elo || a.name.localeCompare(b.name, "it"))
+    .map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+// ---------------------------------------------------------------------------
+// Il corso di una partita: i totali di ognuno dopo ogni round (per il
+// grafico nel dettaglio e per il replay mano per mano).
+// ---------------------------------------------------------------------------
+export function gameProgress(game) {
+  const rounds = (game && game.rounds) || {};
+  const n = roundCount(rounds);
+  const ids = [...new Set([...Object.keys((game && game.results) || {}), ...Object.keys(rounds)])];
+  const series = ids.map((pid) => {
+    const totals = [];
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const e = rounds[pid] && rounds[pid][roundKey(i)];
+      sum += e ? computeRound(e).total : 0;
+      totals.push(sum);
+    }
+    return { playerId: pid, name: (game.results && game.results[pid] && game.results[pid].name) || "?", totals, final: sum };
+  });
+  // chi era in testa dopo ogni round (a pari merito, tutti)
+  const leaders = Array.from({ length: n }, (_, i) => {
+    const top = Math.max(...series.map((s) => s.totals[i]));
+    return series.filter((s) => s.totals[i] === top).map((s) => s.playerId);
+  });
+  // quante volte e' cambiata la testa
+  let leadChanges = 0;
+  for (let i = 1; i < n; i++) if (leaders[i].join() !== leaders[i - 1].join()) leadChanges += 1;
+  return { rounds: n, series, leaders, leadChanges };
 }

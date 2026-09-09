@@ -55,7 +55,21 @@ const PATHS = {
   heartFill: `<path d="M12 20.6C6.8 16.8 3.2 13.5 3.2 9.7a4.8 4.8 0 0 1 8.8-2.7 4.8 4.8 0 0 1 8.8 2.7c0 3.8-3.6 7.1-8.8 10.9Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round"/>`,
   dots: `<circle cx="5.2" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="1.7" fill="currentColor" stroke="none"/>`,
   snow: `<path d="M12 2.8v18.4M4 7.4l16 9.2M20 7.4 4 16.6"/>
-         <path d="M9.4 4.4 12 6.6l2.6-2.2M9.4 19.6 12 17.4l2.6 2.2M3.9 10.7l3.2.6.7-3.2M20.1 13.3l-3.2-.6-.7 3.2M3.9 13.3l3.2-.6.7 3.2M20.1 10.7l-3.2.6-.7-3.2"/>`
+         <path d="M9.4 4.4 12 6.6l2.6-2.2M9.4 19.6 12 17.4l2.6 2.2M3.9 10.7l3.2.6.7-3.2M20.1 13.3l-3.2-.6-.7 3.2M3.9 13.3l3.2-.6.7 3.2M20.1 10.7l-3.2.6-.7-3.2"/>`,
+  bell: `<path d="M6 16.2V11a6 6 0 0 1 12 0v5.2l1.6 2.2H4.4Z"/><path d="M9.8 20.6a2.3 2.3 0 0 0 4.4 0"/><path d="M12 3.2v1.8"/>`,
+  bellOff: `<path d="M6 16.2V11a6 6 0 0 1 9.2-5.1M18 11v5.2l1.6 2.2H4.4"/><path d="M9.8 20.6a2.3 2.3 0 0 0 4.4 0"/><path d="m4 4 16 16"/>`,
+  share: `<path d="M12 3.6v11"/><path d="m7.8 7.8 4.2-4.2 4.2 4.2"/><path d="M5 12.4v6.4a1.6 1.6 0 0 0 1.6 1.6h10.8a1.6 1.6 0 0 0 1.6-1.6v-6.4"/>`,
+  pause: `<rect x="6.2" y="4.6" width="4" height="14.8" rx="1.2"/><rect x="13.8" y="4.6" width="4" height="14.8" rx="1.2"/>`,
+  play: `<path d="M7.4 4.6v14.8L19 12Z"/>`,
+  chart: `<path d="M3.6 20.4h16.8"/><path d="M6.2 16.4 10 11.6l3.4 2.8 4.6-6.4"/><circle cx="18" cy="8" r="1.3" fill="currentColor" stroke="none"/>`,
+  clock: `<circle cx="12" cy="12" r="8.4"/><path d="M12 7.4V12l3.2 2"/>`,
+  wifi: `<path d="M2.8 9.2a13.4 13.4 0 0 1 18.4 0"/><path d="M6 12.6a8.6 8.6 0 0 1 12 0"/><path d="M9.2 16a4 4 0 0 1 5.6 0"/><circle cx="12" cy="19.2" r="1.2" fill="currentColor" stroke="none"/>`,
+  replay: `<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M3.6 3.8v4.6h4.6"/><path d="m10.6 9.4 4.4 2.6-4.4 2.6Z" fill="currentColor" stroke="none"/>`,
+  sound: `<path d="M4 9.6v4.8h3.4L12 18.4V5.6L7.4 9.6Z"/><path d="M15.6 9.2a4 4 0 0 1 0 5.6M18.4 6.6a7.6 7.6 0 0 1 0 10.8"/>`,
+  vibrate: `<rect x="8" y="3.6" width="8" height="16.8" rx="2"/><path d="M4.4 8.4v7.2M19.6 8.4v7.2M2 10v4M22 10v4"/>`,
+  smile: `<circle cx="12" cy="12" r="8.4"/><path d="M8.6 14.2a4.2 4.2 0 0 0 6.8 0"/><circle cx="9.3" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="14.7" cy="10" r="1" fill="currentColor" stroke="none"/>`,
+  trophy: `<path d="M7 4.6h10v5.2a5 5 0 0 1-10 0Z"/><path d="M7 6.4H4.2v1.8a3 3 0 0 0 3 3M17 6.4h2.8v1.8a3 3 0 0 1-3 3"/><path d="M12 14.8v3M8.6 19.6h6.8"/>`,
+  swords: `<path d="m4 4 6.4 6.4M20 4l-6.4 6.4M4 20l4.2-4.2M20 20l-4.2-4.2"/><path d="m8.6 12.2 3.2 3.2M15.4 12.2l-3.2 3.2"/><path d="M4 4h3M4 4v3M20 4h-3M20 4v3"/>`
 };
 
 /** Restituisce l'SVG dell'icona. `cls` aggiunge classi (es. "big", "gold"). */
@@ -388,7 +402,118 @@ const EMBLEMS = {
             fill="url(#${id}b)" stroke="#6d7c8d" stroke-width="2"/>
     </g>
     <text x="28" y="45.4" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif"
-          font-weight="700" font-size="8.4" fill="#5a697a">2</text>`
+          font-weight="700" font-size="8.4" fill="#5a697a">2</text>`,
+
+  // Sette Vite: la carta della Seconda Chance con le vite di scorta che le
+  // svolazzano intorno. Il gatto ne ha sette; a lui i cuori arrivano lo stesso.
+  settevite: (id) => {
+    const heart = "M12 20.6C6.8 16.8 3.2 13.5 3.2 9.7a4.8 4.8 0 0 1 8.8-2.7 4.8 4.8 0 0 1 8.8 2.7c0 3.8-3.6 7.1-8.8 10.9Z";
+    return `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff9f92"/><stop offset=".5" stop-color="#e25549"/><stop offset="1" stop-color="#a92b21"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ffd7d2"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ff9ec4">
+      <path d="M7 12l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L2.9 12.9Z"/>
+      <path d="M49.5 9l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M46 41l.6-2 .6 2 2 .6-2 .6-.6 2-.6-2-2-.6Z"/>
+    </g>
+    <g transform="rotate(-8 28 27)">
+      <rect x="14.5" y="7" width="27" height="38" rx="5.5" fill="url(#${id})" stroke="#8e2a20" stroke-width="2"/>
+      <path d="M19 12h6.5" stroke="#fff" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+      <g transform="translate(28 27.5) scale(.98) translate(-12 -12)">
+        <path d="${heart}" fill="url(#${id}b)" stroke="#8e2a20" stroke-width="1.3" stroke-linejoin="round"/>
+      </g>
+    </g>
+    <g transform="translate(45.5 17) rotate(15) scale(.44) translate(-12 -12)">
+      <path d="${heart}" fill="#ff8ab8" stroke="#a92b21" stroke-width="1.7" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(10.5 35) rotate(-17) scale(.36) translate(-12 -12)">
+      <path d="${heart}" fill="#ffb3cd" stroke="#a92b21" stroke-width="2" stroke-linejoin="round"/>
+    </g>`;
+  },
+
+  // Iceman: la carta Congela lanciata, con la scia di brina dietro
+  iceman: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#eefaff"/><stop offset=".5" stop-color="#8fd8ff"/><stop offset="1" stop-color="#2e86c8"/>
+      </linearGradient>
+    </defs>
+    <g stroke="#8fd8ff" stroke-width="2.4" stroke-linecap="round" fill="none" opacity=".85">
+      <path d="M5 16h11"/><path d="M3 24h9"/><path d="M6 32h10"/>
+    </g>
+    <g class="ae-spark" fill="#c8efff">
+      <path d="M48 7l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M50 40l.6-2 .6 2 2 .6-2 .6-.6 2-.6-2-2-.6Z"/>
+    </g>
+    <g transform="rotate(12 33 26)">
+      <rect x="22" y="7" width="24" height="34" rx="5" fill="url(#${id})" stroke="#1f5f8f" stroke-width="2"/>
+      <g stroke="#1f5f8f" stroke-width="2" stroke-linecap="round" fill="none">
+        <path d="M34 15v18M26.2 19.5l15.6 9M41.8 19.5l-15.6 9"/>
+        <path d="M34 15l-2.2 2.2M34 15l2.2 2.2M34 33l-2.2-2.2M34 33l2.2-2.2"/>
+      </g>
+      <path d="M26 11h6" stroke="#fff" stroke-opacity=".6" stroke-width="2" stroke-linecap="round"/>
+    </g>`,
+
+  // Bullo: le tre carte del Pesca Tre scagliate addosso a qualcuno
+  bullo: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffd166"/><stop offset=".55" stop-color="#ff8a3d"/><stop offset="1" stop-color="#c9531a"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fffdf5"/><stop offset="1" stop-color="#f0dfb8"/>
+      </linearGradient>
+    </defs>
+    <g stroke="#ffb07a" stroke-width="2.4" stroke-linecap="round" fill="none" opacity=".9">
+      <path d="M4 14h9"/><path d="M2 22h8"/><path d="M5 30h9"/>
+    </g>
+    <g stroke="#7a3a12" stroke-width="1.8" stroke-linejoin="round">
+      <rect x="18" y="20" width="14" height="20" rx="2.6" transform="rotate(-22 25 30)" fill="url(#${id}b)"/>
+      <rect x="27" y="14" width="14" height="20" rx="2.6" transform="rotate(-8 34 24)" fill="url(#${id}b)"/>
+      <rect x="36" y="8" width="14" height="20" rx="2.6" transform="rotate(8 43 18)" fill="url(#${id})"/>
+    </g>
+    <text x="43" y="21.5" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="9" fill="#fff8e6" stroke="#7a3a12" stroke-width=".6" transform="rotate(8 43 18)">3</text>
+    <g class="ae-spark" fill="#ffc93f">
+      <path d="M50 38l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+      <path d="M12 42l.6-2 .6 2 2 .6-2 .6-.6 2-.6-2-2-.6Z"/>
+    </g>`,
+
+  // Generoso: la carta col cuore impacchettata col fiocco, come un regalo
+  generoso: (id) => {
+    const heart = "M12 20.6C6.8 16.8 3.2 13.5 3.2 9.7a4.8 4.8 0 0 1 8.8-2.7 4.8 4.8 0 0 1 8.8 2.7c0 3.8-3.6 7.1-8.8 10.9Z";
+    return `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffb3cd"/><stop offset=".5" stop-color="#e2558e"/><stop offset="1" stop-color="#a92b5e"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffe9a8"/><stop offset="1" stop-color="#e2a416"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ff9ec4">
+      <path d="M8 10l.9-3.1.9 3.1 3.1.9-3.1.9-.9 3.1-.9-3.1L4.9 10.9Z"/>
+      <path d="M49 12l.7-2.4.7 2.4 2.4.7-2.4.7-.7 2.4-.7-2.4-2.4-.7Z"/>
+    </g>
+    <g transform="rotate(-6 28 28)">
+      <rect x="14.5" y="10" width="27" height="38" rx="5.5" fill="url(#${id})" stroke="#8e2a4e" stroke-width="2"/>
+      <g transform="translate(28 30) scale(.9) translate(-12 -12)">
+        <path d="${heart}" fill="#fff" stroke="#8e2a4e" stroke-width="1.3" stroke-linejoin="round"/>
+      </g>
+      <rect x="26" y="10" width="4" height="38" fill="url(#${id}b)" stroke="#8a5a10" stroke-width="1.2"/>
+      <rect x="14.5" y="27" width="27" height="4" fill="url(#${id}b)" stroke="#8a5a10" stroke-width="1.2"/>
+    </g>
+    <g fill="url(#${id}b)" stroke="#8a5a10" stroke-width="1.4" stroke-linejoin="round">
+      <path d="M28 8 C22 2, 16 4, 20 9 Z"/>
+      <path d="M28 8 C34 2, 40 4, 36 9 Z"/>
+    </g>
+    <circle cx="28" cy="8.5" r="2.2" fill="url(#${id}b)" stroke="#8a5a10" stroke-width="1.2"/>`;
+  }
 };
 
 /** Emblema di un record. `kind` e' la chiave di EMBLEMS. */
@@ -452,7 +577,131 @@ export function flip7Card({ size = "", attrs = "" } = {}) {
   return `<span class="fcard flip7 on ${size}" data-face="7" ${attrs}><b>+15</b></span>`;
 }
 
+/** Faccia della Seconda Chance: la carta col cuore, la vita extra. */
+export function heartCard({ on = true, size = "", attrs = "" } = {}) {
+  return `<span class="fcard sc ${on ? "on" : ""} ${size}" data-face="♥" ${attrs}><i class="acard">${icon("heartFill")}</i></span>`;
+}
+
 /** Dorso della carta (il mazzo del tavolo online). */
 export function cardBack({ size = "" } = {}) {
   return `<span class="fcard back ${size}"><b>FLIP<i>7</i></b></span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Badge di stagione: la coccarda del campione del mese. Rosetta dorata con il
+// mese in alto e l'anno in basso, e i nastri del colore dell'anno (ogni anno
+// il suo). Stesso viewBox per tutte le taglie: da 20px in lista a 80px in
+// bacheca, dove le lettere si leggono davvero.
+// ---------------------------------------------------------------------------
+const RIBBON_TONES = ["#c53b30", "#2270b8", "#1a7a55", "#7a4fd0", "#c9531a", "#c4306e"];
+const MONTHS_ABBR = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
+const MONTHS_FULL = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+let badgeSeq = 0;
+
+/**
+ * @param {string} key  "2026-08"
+ * @param {{cls?:string, muted?:boolean, title?:string}} opts  muted = mese in corso (argento, non ancora assegnato)
+ */
+export function seasonBadge(key, opts = {}) {
+  const [y, m] = String(key).split("-").map(Number);
+  const month = MONTHS_ABBR[(m || 1) - 1] || "?";
+  const year = String(y || "").slice(-2);
+  const id = "sb" + (++badgeSeq);
+  const ribbon = opts.muted ? "#9aa5b1" : RIBBON_TONES[Math.abs(y || 0) % RIBBON_TONES.length];
+  const petals = Array.from({ length: 12 }, (_, i) => {
+    const a = (i / 12) * Math.PI * 2;
+    return `<circle cx="${(28 + Math.cos(a) * 16.5).toFixed(2)}" cy="${(26 + Math.sin(a) * 16.5).toFixed(2)}" r="5.2"/>`;
+  }).join("");
+  const title = opts.title || `Campione di ${MONTHS_FULL[(m || 1) - 1] || "?"} ${year}`;
+  return `<svg class="season-badge ${opts.cls || ""} ${opts.muted ? "muted" : ""}" viewBox="0 0 56 64" role="img" aria-label="${title}" focusable="false">
+    <title>${title}</title>
+    <defs>
+      ${opts.muted ? `
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#f4f7fa"/><stop offset=".5" stop-color="#c9d3de"/><stop offset="1" stop-color="#8f9dab"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#e6ecf2"/><stop offset="1" stop-color="#aab6c3"/>
+      </linearGradient>` : `
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffe9a8"/><stop offset=".45" stop-color="#ffc247"/><stop offset="1" stop-color="#d98f16"/>
+      </linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff4cf"/><stop offset="1" stop-color="#ffd875"/>
+      </linearGradient>`}
+    </defs>
+    <g fill="${ribbon}" stroke="${opts.muted ? "#6d7a88" : "#7a3a12"}" stroke-opacity=".55" stroke-width="1.2" stroke-linejoin="round">
+      <path d="M17 38 12 60l7-3 4 5 6-22Z"/>
+      <path d="M39 38l5 22-7-3-4 5-6-22Z"/>
+    </g>
+    <g fill="url(#${id})" stroke="${opts.muted ? "#6d7a88" : "#b97d0c"}" stroke-width="1.2">${petals}</g>
+    <circle cx="28" cy="26" r="17" fill="url(#${id})" stroke="${opts.muted ? "#6d7a88" : "#b97d0c"}" stroke-width="1.6"/>
+    <circle cx="28" cy="26" r="13.4" fill="url(#${id}b)" stroke="${opts.muted ? "#8f9dab" : "#c99a2a"}" stroke-width="1"/>
+    <text x="28" y="23.2" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="8.6" letter-spacing=".4" fill="${opts.muted ? "#4f5b68" : "#7a4a08"}">${month}</text>
+    <text x="28" y="35.6" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="800" font-size="13" fill="${opts.muted ? "#3f4a56" : "#5d3f04"}">${year}</text>
+    <path d="M18.5 15.5a13 13 0 0 1 8-4.6" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// ---------------------------------------------------------------------------
+// Sticker del tavolo: reazioni disegnate (facce e simboli), da lanciare sulla
+// riga di chi ha appena sballato o fatto Flip 7. Stesso viewBox 48x48.
+// ---------------------------------------------------------------------------
+const FACE = (id, extra) => `
+  <defs>
+    <radialGradient id="${id}" cx=".35" cy=".3" r=".9">
+      <stop offset="0" stop-color="#fff2a8"/><stop offset=".6" stop-color="#ffd23f"/><stop offset="1" stop-color="#e9a11a"/>
+    </radialGradient>
+  </defs>
+  <circle cx="24" cy="24" r="20" fill="url(#${id})" stroke="#9a6a0c" stroke-width="1.8"/>
+  ${extra}`;
+
+export const STICKERS = {
+  lol: { label: "Che ridere", draw: (id) => FACE(id, `
+    <path d="M13 20c2-3 5-3 7 0M28 20c2-3 5-3 7 0" fill="none" stroke="#5a3a06" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M13.5 27h21c-1 7-6 11-10.5 11S14.5 34 13.5 27Z" fill="#7a2a1a" stroke="#5a3a06" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M17 33.5c4-2 10-2 14 0-2 3-5 4.5-7 4.5s-5-1.5-7-4.5Z" fill="#ff8a94"/>
+    <path d="M9 24c-3 2-3 6-.5 7 2.5-1 2.5-5 .5-7ZM39 24c3 2 3 6 .5 7-2.5-1-2.5-5-.5-7Z" fill="#6ec2ff" stroke="#2a7cc2" stroke-width="1.2"/>`) },
+  wow: { label: "Wow", draw: (id) => FACE(id, `
+    <circle cx="17" cy="20" r="4.2" fill="#fff" stroke="#5a3a06" stroke-width="1.6"/>
+    <circle cx="31" cy="20" r="4.2" fill="#fff" stroke="#5a3a06" stroke-width="1.6"/>
+    <circle cx="17.6" cy="20.6" r="2" fill="#3a2a10"/><circle cx="31.6" cy="20.6" r="2" fill="#3a2a10"/>
+    <path d="M12 13c2-2 5-2.4 8-1M36 13c-2-2-5-2.4-8-1" fill="none" stroke="#5a3a06" stroke-width="2.2" stroke-linecap="round"/>
+    <ellipse cx="24" cy="33" rx="5" ry="6" fill="#7a2a1a" stroke="#5a3a06" stroke-width="1.6"/>`) },
+  cry: { label: "Che sfiga", draw: (id) => FACE(id, `
+    <path d="M13 17c3 1 5 3 6 5M35 17c-3 1-5 3-6 5" fill="none" stroke="#5a3a06" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="17.5" cy="23" r="1.9" fill="#3a2a10"/><circle cx="30.5" cy="23" r="1.9" fill="#3a2a10"/>
+    <path d="M16 36c3-4 13-4 16 0" fill="none" stroke="#5a3a06" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M16.5 26c-3 5-3 9 0 10 3-1 3-5 0-10Z" fill="#6ec2ff" stroke="#2a7cc2" stroke-width="1.2"/>
+    <path d="M31.5 26c-3 5-3 9 0 10 3-1 3-5 0-10Z" fill="#6ec2ff" stroke="#2a7cc2" stroke-width="1.2"/>`) },
+  cool: { label: "Troppo forte", draw: (id) => FACE(id, `
+    <path d="M8 18h32" stroke="#23272f" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M11 18h11a1 1 0 0 1 1 1v3.5a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5V19a1 1 0 0 1 1-1Z" fill="#23272f"/>
+    <path d="M26 18h11a1 1 0 0 1 1 1v3.5a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5V19a1 1 0 0 1 1-1Z" fill="#23272f"/>
+    <path d="M13 21.5c1.6-1.4 4-1.6 6-1M28 21.5c1.6-1.4 4-1.6 6-1" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M15 32c4 4 14 4 18 0" fill="none" stroke="#5a3a06" stroke-width="2.4" stroke-linecap="round"/>`) },
+  fire: { label: "Fuoco", draw: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#d9441f"/><stop offset=".55" stop-color="#ff8a3d"/><stop offset="1" stop-color="#ffd166"/>
+      </linearGradient>
+    </defs>
+    <path d="M24 4c2 7 9 10 9 19 0 3-1 5-2 7 4-1 7-5 7-10 3 5 4 11 1 16-4 7-11 9-15 9S13 43 9 36c-3-6 0-13 5-17-1 4 0 7 2 8-1-9 7-13 8-23Z" fill="url(#${id})" stroke="#9a2f0f" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M24 26c1 4 5 5 5 10 0 4-2 7-5 7s-5-3-5-7c0-4 4-6 5-10Z" fill="#fff4b0" opacity=".9"/>`
+  },
+  gg: { label: "Bravo", draw: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffe0b8"/><stop offset="1" stop-color="#f0b57a"/>
+      </linearGradient>
+    </defs>
+    <rect x="7" y="22" width="9" height="19" rx="2.5" fill="#2270b8" stroke="#123f6b" stroke-width="1.6"/>
+    <path d="M17 41V23l6-5c1.5-1.5 3-6 3-10 0-2 1.5-3 3-2.5 2.5 1 3 5 1 11h9.5a3.5 3.5 0 0 1 0 7 3.5 3.5 0 0 1 1 7 3.5 3.5 0 0 1-2 7 3.5 3.5 0 0 1-3 6H26c-3 0-6-1.5-9-3Z" fill="url(#${id})" stroke="#8a5a2a" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M30 23.5h8M30 30.5h8M30 37.5h6" fill="none" stroke="#8a5a2a" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round"/>`
+  }
+};
+let stickerSeq = 0;
+export function sticker(kind, cls = "") {
+  const def = STICKERS[kind] || STICKERS.wow;
+  return `<svg class="sticker ${cls}" viewBox="0 0 48 48" aria-label="${def.label}" role="img" focusable="false">${def.draw("st" + (++stickerSeq))}</svg>`;
 }

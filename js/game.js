@@ -15,6 +15,14 @@
 //   - il mazzo continua fra i round; finito, si rimescolano gli scarti
 //   - pareggio al traguardo: manche di SPAREGGIO fra i soli pari merito
 //     (gli altri restano fuori), ripetuta finche' resta un vincitore solo
+//   - chi sparisce a meta' partita puo' essere BLOCCATO dagli altri, di comune
+//     accordo: incassa quello che ha in mano, resta al suo punteggio e la
+//     partita continua senza di lui (puo' rientrare dal round dopo)
+//
+// Ogni mano ricorda anche CHI ha fatto cosa (chi ha congelato, chi ha tirato
+// il Pesca Tre, chi ha regalato la Seconda Chance, con quale carta si e'
+// sballato, se ci si e' fermati di propria volonta'): sono dati che il tavolo
+// ha gratis e che nello storico diventano statistiche.
 // ---------------------------------------------------------------------------
 
 export const CARD = {
@@ -45,7 +53,11 @@ export function shuffle(cards, rng = Math.random) {
   return a;
 }
 
-const emptyHand = () => ({ nums: [], plus: [], x2: false, sc: false, out: null, bustCard: null });
+// `scGot`: quante vite extra (carte col cuore) sono finite in questa mano nel
+// round, comprese quelle gia' spese. Non danno punti: servono alle statistiche.
+// `frozenBy`, `fl3By`, `scFrom`: chi ha congelato, chi ha tirato il Pesca Tre,
+// chi ha regalato il cuore (posti). `chose`: si e' fermato di sua volonta'.
+const emptyHand = () => ({ nums: [], plus: [], x2: false, sc: false, scGot: 0, scFrom: [], out: null, bustCard: null, frozenBy: null, fl3By: [], chose: false, blocked: false });
 
 /** Firebase puo' restituire un array come oggetto {0:..,1:..}: qui torna lista. */
 const toList = (v) => Array.isArray(v) ? v
@@ -63,8 +75,12 @@ export function normalizeGame(g) {
   state.hands = {};
   for (const sid of state.order) {
     const h = (g.hands || {})[sid] || {};
-    state.hands[sid] = { nums: h.nums || [], plus: h.plus || [], x2: Boolean(h.x2), sc: Boolean(h.sc), scUsed: Boolean(h.scUsed), out: h.out || null, bustCard: h.bustCard ?? null };
+    state.hands[sid] = { nums: h.nums || [], plus: h.plus || [], x2: Boolean(h.x2), sc: Boolean(h.sc), scGot: Number(h.scGot) || 0, scFrom: h.scFrom || [], scUsed: Boolean(h.scUsed), out: h.out || null, bustCard: h.bustCard ?? null, frozenBy: h.frozenBy || null, fl3By: h.fl3By || [], chose: Boolean(h.chose), blocked: Boolean(h.blocked) };
   }
+  state.votes = g.votes || null;
+  state.seen = g.seen || {};
+  state.reactions = g.reactions || {};
+  state.winners = g.winners || null;
   state.pending = g.pending || null;
   state.flip3 = g.flip3 ? { ...g.flip3, deferred: g.flip3.deferred || [] } : null;
   state.log = g.log || [];
@@ -74,6 +90,8 @@ export function normalizeGame(g) {
   state.trend = toList(g.trend);
   state.rounds = toList(g.rounds);
   state.tiebreak = toList(g.tiebreak);
+  // assente nei tavoli aperti prima di questo campo: chi legge lo capisce da undefined
+  state.playoffRounds = g.playoffRounds === undefined ? undefined : toList(g.playoffRounds);
   return state;
 }
 
@@ -95,7 +113,7 @@ export function createLobby(target = 200, meta = {}) {
 /** Avvia la partita (deckOverride serve ai test). */
 export function startGame(state, rng = Math.random, deckOverride = null) {
   if (state.order.length < 2) throw new Error("Servono almeno 2 giocatori seduti");
-  const s = { ...state, status: "playing", round: 1, startedAt: Date.now(), discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [], rounds: [], tiebreak: null };
+  const s = { ...state, status: "playing", round: 1, startedAt: Date.now(), discard: [], pending: null, flip3: null, lastDraw: null, lastRound: null, trend: [], rounds: [], tiebreak: null, votes: null, winners: null, reactions: null, playoffRounds: [] };
   s.deck = deckOverride ? [...deckOverride] : shuffle(fullDeck(), rng);
   s.hands = {};
   for (const sid of s.order) s.hands[sid] = emptyHand();
@@ -135,17 +153,27 @@ export function handPoints(h) {
 
 /**
  * La mano nel formato del segnapunti dal vivo (js/scoring.js): numeri, +,
- * x2, sballo e congelata. Serve ad archiviare la partita online round per
- * round, cosi' vale nelle statistiche quanto una segnata a mano.
+ * x2, sballo, congelata e vite extra ricevute. Serve ad archiviare la partita
+ * online round per round, cosi' vale nelle statistiche quanto una segnata a mano.
  */
 export function handEntry(h) {
-  return {
+  const e = {
     numbers: [...h.nums],
     plus: [...h.plus],
     doubled: Boolean(h.x2),
     busted: h.out === "bust",
-    frozen: h.out === "frozen"
+    frozen: h.out === "frozen",
+    hearts: Number(h.scGot) || 0
   };
+  // i dettagli "chi ha fatto cosa" si scrivono solo quando ci sono: le mani
+  // senza restano identiche a prima (e leggere in mezzo allo storico)
+  if (h.out === "frozen" && h.frozenBy) e.frozenBy = h.frozenBy;
+  if (h.fl3By && h.fl3By.length) e.fl3By = [...h.fl3By];
+  if (h.scFrom && h.scFrom.length) e.scFrom = [...h.scFrom];
+  if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) e.bustCard = h.bustCard;
+  if (h.chose) e.stayed = true;
+  if (h.blocked) e.blocked = true;
+  return e;
 }
 
 function endRound(s) {
@@ -181,10 +209,13 @@ function endRound(s) {
   const totalOf = (sid) => s.seats[sid].total || 0;
   const top = Math.max(...s.order.map(totalOf));
   const leaders = s.order.filter((sid) => totalOf(sid) === top);
-  const playoff = top >= s.target && leaders.length > 1;
-  s.tiebreak = playoff ? leaders : null;
+  // chi e' stato bloccato non gioca lo spareggio: a pari merito lo perde
+  const contenders = leaders.filter((sid) => !s.seats[sid].blocked);
+  const playoff = top >= s.target && leaders.length > 1 && contenders.length > 1;
+  s.tiebreak = playoff ? contenders : null;
   s.status = top >= s.target && !playoff ? "over" : "roundEnd";
-  if (playoff) logIt(s, `Pareggio a ${top}: spareggio fra ${leaders.map((sid) => s.seats[sid].name).join(" e ")}`);
+  s.winners = s.status === "over" ? (contenders.length ? contenders : leaders) : null;
+  if (playoff) logIt(s, `Pareggio a ${top}: spareggio fra ${contenders.map((sid) => s.seats[sid].name).join(" e ")}`);
   return s;
 }
 
@@ -194,15 +225,29 @@ function endRound(s) {
  * gia' fuori: resta seduto e guarda, senza carte e senza punti.
  */
 export function nextRound(state) {
-  const s = { ...state, status: "playing", round: state.round + 1, pending: null, flip3: null, lastDraw: null, lastRound: null, endReason: null };
+  const s = { ...state, status: "playing", round: state.round + 1, pending: null, flip3: null, lastDraw: null, lastRound: null, endReason: null, votes: null };
   s.order = [...state.order.slice(1), state.order[0]];
   const only = (state.tiebreak || []).length ? new Set(state.tiebreak) : null;
+  // le manche di spareggio si ricordano per numero: nello storico si distinguono
+  // cosi' dai round saltati da chi era stato bloccato
+  s.playoffRounds = [...(toList(state.playoffRounds) || []), ...(only ? [s.round] : [])];
   s.hands = {};
   for (const sid of s.order) {
     s.hands[sid] = emptyHand();
-    if (only && !only.has(sid)) s.hands[sid].out = "excluded";
+    // chi e' fuori dallo spareggio, o e' stato bloccato, resta seduto a guardare
+    if ((only && !only.has(sid)) || s.seats[sid].blocked) s.hands[sid].out = "excluded";
   }
-  s.turn = s.order.find((sid) => !s.hands[sid].out) || s.order[0];
+  const first = s.order.find((sid) => !s.hands[sid].out);
+  if (!first) {
+    // sono bloccati tutti: non c'e' piu' nessuno che possa giocare
+    s.status = "over";
+    s.endReason = "blocked";
+    const totalOf = (sid) => s.seats[sid].total || 0;
+    const top = Math.max(...s.order.map(totalOf));
+    s.winners = s.order.filter((sid) => totalOf(sid) === top);
+    return s;
+  }
+  s.turn = first;
   return s;
 }
 
@@ -217,10 +262,92 @@ export function abandonGame(state, sid) {
   s.status = "over";
   s.endReason = "left";
   s.tiebreak = null;
+  s.votes = null;
   s.endedBy = s.seats[sid].name;
   s.pending = null;
   s.flip3 = null;
+  const totalOf = (x) => s.seats[x].total || 0;
+  const top = Math.max(...s.order.map(totalOf));
+  s.winners = s.order.filter((x) => totalOf(x) === top);
   logIt(s, `${s.seats[sid].name} ha abbandonato: partita chiusa con i punteggi di adesso`);
+  return s;
+}
+
+// ---------------------------------------------------------------------------
+// Blocco di chi non risponde piu'. Non e' un abbandono: la partita continua.
+// ---------------------------------------------------------------------------
+
+/**
+ * Blocca un posto al punteggio di adesso: incassa la mano che ha (come se si
+ * fosse fermato), un'eventuale carta azione in sospeso va negli scarti, e da
+ * qui in poi non riceve carte ne' punti. Il totale resta in classifica, quindi
+ * a fine partita conta come tutti gli altri. Si usa quando qualcuno sparisce a
+ * meta' partita e gli altri, di comune accordo, decidono di andare avanti.
+ */
+export function blockSeat(state, sid) {
+  if (!state.order.includes(sid) || state.status === "lobby" || state.status === "over") return state;
+  if (state.seats[sid].blocked) return state;
+  const s = structuredClone(state);
+  s.seats[sid] = { ...s.seats[sid], blocked: true, blockedRound: s.round };
+  const h = s.hands[sid];
+  // la carta azione che doveva assegnare torna negli scarti, con quelle in coda
+  if (s.pending && s.pending.chooser === sid) {
+    s.discard = [...s.discard, s.pending.type, ...((s.pending.thenDeferred && s.pending.thenDeferred.cards) || [])];
+    s.pending = null;
+  } else if (s.pending) {
+    // era fra i bersagli possibili: non lo e' piu'
+    s.pending.options = (s.pending.options || []).filter((x) => x !== sid);
+    if (!s.pending.options.length) { s.discard = [...s.discard, s.pending.type]; s.pending = null; }
+  }
+  // stava pescando tre carte: il Pesca Tre finisce qui, le azioni accantonate si perdono
+  if (s.flip3 && s.flip3.target === sid) {
+    s.discard = [...s.discard, ...(s.flip3.deferred || [])];
+    s.flip3 = null;
+  }
+  if (!h.out) h.out = "stay"; // incassa quello che ha
+  h.blocked = true;
+  s.votes = null;
+  const pts = h.out === "bust" ? 0 : handPoints(h);
+  logIt(s, `${s.seats[sid].name} non risponde: bloccato a ${(s.seats[sid].total || 0) + pts} punti, la partita continua`);
+  if (s.status !== "playing") return s; // a round chiuso basta il segno: dal prossimo sta fuori
+  if (s.turn === sid) return advanceTurn(s);
+  if (!activeSeats(s).length) return endRound(s);
+  return s;
+}
+
+/** Chi era stato bloccato torna in partita: gioca dal round successivo. */
+export function unblockSeat(state, sid) {
+  if (!state.order.includes(sid) || !state.seats[sid] || !state.seats[sid].blocked || state.status === "over") return state;
+  const s = structuredClone(state);
+  const { blocked: _b, blockedRound: _r, ...seat } = s.seats[sid];
+  s.seats[sid] = seat;
+  logIt(s, `${seat.name} e' tornato: rientra dal prossimo round`);
+  return s;
+}
+
+/**
+ * Un voto per bloccare `targetSid`. `required` e' l'elenco degli account il
+ * cui consenso serve (di norma: tutti gli altri giocatori collegati in quel
+ * momento): appena ci sono tutti, il blocco scatta nello stesso colpo.
+ */
+export function voteBlock(state, targetSid, voterUid, required = null) {
+  if (!state.order.includes(targetSid) || state.status === "lobby" || state.status === "over") return state;
+  if (state.seats[targetSid].blocked) return state;
+  const s = structuredClone(state);
+  s.votes = { ...(s.votes || {}) };
+  s.votes[targetSid] = { ...(s.votes[targetSid] || {}), [voterUid]: true };
+  if (required && required.length && required.every((u) => s.votes[targetSid][u])) return blockSeat(s, targetSid);
+  return s;
+}
+
+/** Ritira il proprio voto. */
+export function unvoteBlock(state, targetSid, voterUid) {
+  if (!state.votes || !state.votes[targetSid] || !state.votes[targetSid][voterUid]) return state;
+  const s = structuredClone(state);
+  s.votes = { ...s.votes, [targetSid]: { ...s.votes[targetSid] } };
+  delete s.votes[targetSid][voterUid];
+  if (!Object.keys(s.votes[targetSid]).length) delete s.votes[targetSid];
+  if (!Object.keys(s.votes).length) s.votes = null;
   return s;
 }
 
@@ -241,6 +368,8 @@ export function stay(state, seatId) {
   if (state.status !== "playing" || state.turn !== seatId || state.pending || state.flip3) return state;
   const s = structuredClone(state);
   s.hands[seatId].out = "stay";
+  s.hands[seatId].chose = true; // fermato di sua volonta', non chiuso d'ufficio
+  s.votes = null; // una mossa cancella le votazioni in corso
   logIt(s, `${s.seats[seatId].name} sta`);
   return advanceTurn(s);
 }
@@ -284,10 +413,17 @@ function applyCard(s, seatId, card, duringFlip3, rng) {
 
   // carte azione
   if (card === "sc") {
-    if (!h.sc) { h.sc = true; return "kept"; }
+    if (!h.sc) { h.sc = true; h.scGot = (h.scGot || 0) + 1; return "kept"; }
     const eligible = activeSeats(s).filter((sid) => sid !== seatId && !s.hands[sid].sc);
     if (!eligible.length) { s.discard = [...s.discard, "sc"]; logIt(s, "Seconda Chance in più: scartata"); return "kept"; }
-    if (eligible.length === 1) { s.hands[eligible[0]].sc = true; logIt(s, `Seconda Chance regalata a ${s.seats[eligible[0]].name}`); return "given"; }
+    if (eligible.length === 1) {
+      const to = s.hands[eligible[0]];
+      to.sc = true;
+      to.scGot = (to.scGot || 0) + 1;
+      to.scFrom = [...(to.scFrom || []), seatId];
+      logIt(s, `Seconda Chance regalata a ${s.seats[eligible[0]].name}`);
+      return "given";
+    }
     s.pending = { type: "sc", chooser: seatId, options: eligible };
     return "pending";
   }
@@ -295,21 +431,24 @@ function applyCard(s, seatId, card, duringFlip3, rng) {
   // frz / fl3: durante un Pesca Tre si mettono da parte
   if (duringFlip3) { s.flip3.deferred = [...s.flip3.deferred, card]; return "deferred"; }
   const eligible = activeSeats(s);
-  if (eligible.length === 1) return resolveAction(s, card, eligible[0], rng);
+  if (eligible.length === 1) return resolveAction(s, card, eligible[0], rng, seatId);
   s.pending = { type: card, chooser: seatId, options: eligible };
   return "pending";
 }
 
-function resolveAction(s, card, targetId, rng) {
-  s.lastAction = { type: card, target: targetId }; // per l'animazione in vista
+/** Applica Congela o Pesca Tre al bersaglio; `byId` e' chi l'ha tirato. */
+function resolveAction(s, card, targetId, rng, byId = null) {
+  s.lastAction = { type: card, target: targetId, by: byId }; // per l'animazione in vista
   if (card === "frz") {
     s.hands[targetId].out = "frozen";
+    s.hands[targetId].frozenBy = byId;
     s.discard = [...s.discard, "frz"];
     logIt(s, `${s.seats[targetId].name} viene congelato: incassa ed esce`);
     return "kept";
   }
   if (card === "fl3") {
     s.flip3 = { target: targetId, left: 3, deferred: [] };
+    s.hands[targetId].fl3By = [...(s.hands[targetId].fl3By || []), byId];
     s.discard = [...s.discard, "fl3"];
     logIt(s, `${s.seats[targetId].name} deve pescare 3 carte`);
     return "kept";
@@ -334,7 +473,7 @@ function settleFlip3(s, rng) {
     const card = deferred[i];
     const eligible = activeSeats(s);
     if (!eligible.length) { s.discard = [...s.discard, ...deferred.slice(i)]; return; }
-    if (eligible.length === 1) { resolveAction(s, card, eligible[0], rng); }
+    if (eligible.length === 1) { resolveAction(s, card, eligible[0], rng, f.target); }
     else {
       s.pending = { type: card, chooser: f.target, options: eligible };
       if (deferred.length > i + 1) s.pending.thenDeferred = { target: f.target, cards: deferred.slice(i + 1) };
@@ -348,6 +487,7 @@ function settleFlip3(s, rng) {
 export function hit(state, seatId, rng = Math.random) {
   if (state.status !== "playing" || state.pending) return state;
   const s = structuredClone(state);
+  s.votes = null; // una mossa cancella le votazioni in corso
 
   if (s.flip3) {
     if (s.flip3.target !== seatId || s.hands[seatId].out) return state;
@@ -376,14 +516,17 @@ export function chooseTarget(state, chooserId, targetId, rng = Math.random) {
   const p = state.pending;
   if (!p || p.chooser !== chooserId || !(p.options || []).includes(targetId)) return state;
   const s = structuredClone(state);
+  s.votes = null; // una mossa cancella le votazioni in corso
   const pend = s.pending;
   s.pending = null;
   if (pend.type === "sc") {
     s.hands[targetId].sc = true;
-    s.lastAction = { type: "sc", target: targetId };
+    s.hands[targetId].scGot = (s.hands[targetId].scGot || 0) + 1;
+    s.hands[targetId].scFrom = [...(s.hands[targetId].scFrom || []), chooserId];
+    s.lastAction = { type: "sc", target: targetId, by: chooserId };
     logIt(s, `Seconda Chance regalata a ${s.seats[targetId].name}`);
   } else {
-    resolveAction(s, pend.type, targetId, rng);
+    resolveAction(s, pend.type, targetId, rng, chooserId);
   }
   // azioni rimaste da un Pesca Tre precedente
   if (pend.thenDeferred && !s.flip3) {
