@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { avatar } from "../avatar.js";
-import { icon, crownEmblem, awardEmblem, seasonBadge } from "../icons.js";
+import { icon, crownEmblem, awardEmblem, seasonBadge, seasonTone } from "../icons.js";
 import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList, seasons, seasonTitles, seasonLabel, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, monthKey, MONTHS_IT } from "../stats.js";
 import { openGameSheet } from "./history.js";
 import { getRoom } from "../store.js";
@@ -86,7 +86,7 @@ function crownRow(n, max = 5) {
   return `<span class="crown-row">${Array.from({ length: n }, (_, i) => `<i style="--d:${i * 90}ms">${crownEmblem()}</i>`).join("")}</span>`;
 }
 
-/** Le coccarde di un giocatore in fila: fino a 3, poi "+N". */
+/** Gli scudetti di un giocatore in fila: fino a 3, poi "+N". */
 function badgeRow(list, max = 3, cls = "xs") {
   if (!list || !list.length) return "";
   const shown = list.slice(0, max);
@@ -217,7 +217,7 @@ function renderSeasonHome(room, me) {
       <div class="sn-empty">
         ${crownEmblem("big")}
         <b>Ancora nessuna partita a ${monthName}</b>
-        <small>La prima Crown del mese è in palio: chi guida la classifica il ${lastDay} ${monthName} diventa il campione e si prende la coccarda.</small>
+        <small>La prima Crown del mese è in palio: chi guida la classifica il ${lastDay} ${monthName} diventa il campione e si prende lo scudetto.</small>
       </div>`}
       ${holder ? `
       <button class="sn-holder" data-action="season-open" data-key="${holder.key}">
@@ -258,7 +258,7 @@ function renderGoldBook(closed) {
     return `
     <section class="card">
       <div class="card-head"><h2 class="section-title">Albo d'oro</h2></div>
-      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione, e la coccarda resta per sempre nella sua scheda.</p>
+      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione, e lo scudetto resta per sempre nella sua scheda.</p>
     </section>`;
   }
   const open = localState.showSeasons;
@@ -284,7 +284,7 @@ function renderGoldBook(closed) {
             </button>
           </li>`).join("")}
       </ul>
-      <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online. La coccarda resta per sempre nella scheda del campione.</p>` : ""}
+      <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online. Lo scudetto resta per sempre nella scheda del campione.</p>` : ""}
     </section>`;
 }
 
@@ -665,7 +665,7 @@ export const leaderboardView = {
 };
 
 // ---------------------------------------------------------------------------
-// Pagina di una stagione: il campione con la coccarda, il podio del mese, la
+// Pagina di una stagione: il campione con lo scudetto, il podio del mese, la
 // classifica e i record di quel mese, le partite giocate.
 // ---------------------------------------------------------------------------
 function openSeasonPage(key) {
@@ -835,7 +835,7 @@ function renderChart(games, pid) {
     </section>`;
 }
 
-/** La bacheca delle coccarde: i titoli di stagione, in grande. */
+/** La bacheca degli scudetti: i titoli di stagione, in grande, ognuno del colore del suo mese. */
 function renderTitles(titles) {
   if (!titles || !titles.length) return "";
   return `
@@ -843,7 +843,7 @@ function renderTitles(titles) {
       <div class="card-head"><h2 class="section-title">Bacheca</h2><span class="muted small ml-auto">${titles.length === 1 ? "1 titolo di stagione" : titles.length + " titoli di stagione"}</span></div>
       <div class="titles-grid">
         ${titles.map((t) => `
-          <button class="title-tile" data-action="season-open" data-key="${t.key}">
+          <button class="title-tile" data-action="season-open" data-key="${t.key}" style="--tone:${seasonTone(t.key)}">
             ${seasonBadge(t.key, { cls: "big" })}
             <b>${esc(t.short)}</b>
             <small>${t.crowns === 1 ? "1 Crown" : t.crowns + " Crown"} su ${t.games}${t.shared ? " · condiviso" : ""}</small>

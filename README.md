@@ -10,7 +10,7 @@ e alimenta la **classifica perpetua**: ogni vittoria vale una **Crown** 👑.
 - 🧮 calcolatrice con le carte: numeri, `+2…+10`, `×2`, bonus **Flip 7** e sballo
 - 🕰️ inserimento di **partite vecchie**, giocate prima dell'app
 - 🔁 formazione libera: i giocatori possono cambiare da una partita all'altra
-- 🏅 **stagioni mensili**: chi guida la classifica del mese ne diventa il campione, con la sua coccarda
+- 🏅 **stagioni mensili**: chi guida la classifica del mese ne diventa il campione, con il suo scudetto
 - 🔔 al tavolo online l'app **avvisa quando tocca a te** (suono, vibrazione, notifica), e chi sparisce
   si **blocca di comune accordo** senza chiudere la partita
 - 💸 **costo zero**: nessun dominio, nessun abbonamento
@@ -238,7 +238,7 @@ la stessa cosa in grande nel proprio riquadro: **ti mancano 69 punti**.
 **Invitare qualcuno a partita in corso**: il pulsante **Invita** in cima al tabellone
 (o l'icona 🔗 nella barra in alto) apre la condivisione del link della stanza.
 
-**Lo Storico** raggruppa le partite per mese (con la coccarda del **campione del
+**Lo Storico** raggruppa le partite per mese (con lo scudetto del **campione del
 mese**, quando il mese è chiuso) e di ognuna racconta com'è andata senza doverla aprire:
 giorno e **ora**, quanto è **durata**, quanti erano e quante mani sono servite, di
 **quanto ha vinto sul secondo**, e sotto la **classifica della partita** riga per riga —
@@ -430,14 +430,17 @@ uno dall'altro invece di una griglia tutta uguale:
 
 **Le stagioni.** Un mese di calendario è una stagione: alla fine del mese, chi guida la
 classifica di quel mese (stessa formula: Crown, quota di vittorie, media) ne diventa il
-**campione** e si prende la **coccarda** — una rosetta dorata con il mese e l'anno
-(*AGO 26*), i nastri del colore dell'anno — disegnata apposta, che resta per sempre
-accanto al suo nome in classifica e nella **Bacheca** della sua scheda. Valgono le
+**campione** e si prende lo **scudetto** — uno scudo smaltato con la cornice d'oro, il
+mese sulla fascia in alto e l'anno grande al centro (*SET 26*), disegnato apposta. Ogni
+mese ha il suo colore, dal blu ghiaccio di gennaio al verde abete di dicembre, e la fascia
+è avorio negli anni pari e inchiostro in quelli dispari: due stagioni non si confondono
+mai. Lo scudetto resta per sempre accanto al nome in classifica e nella **Bacheca** della
+scheda, dove ogni riquadro prende la tinta del suo mese. Valgono le
 partite dal vivo e quelle online insieme; a parità assoluta il titolo si condivide.
 
 La **Classifica si apre sulla stagione in corso**, perché il mese conta più del
 totale di sempre: in cima il mese con i giorni che mancano e la barra del tempo, il
-podio del mese con chi è in testa (e la coccarda ancora in argento), il **campione in
+podio del mese con chi è in testa (e lo scudetto ancora in argento), il **campione in
 carica** dell'ultimo mese chiuso, poi la classifica del mese, i record del mese e
 l'**albo d'oro**. Lo switch in alto (**Stagione / Generale**, c'è anche un pulsante in
 fondo) porta al generale: le Crown di sempre con i filtri di periodo e provenienza, i

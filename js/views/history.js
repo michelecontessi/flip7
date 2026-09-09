@@ -82,7 +82,7 @@ function rankRows(g, { max = 6, cls = "" } = {}) {
 export const historyView = {
   render(ctx) {
     const games = historyList(ctx.room.history);
-    // il campione di ogni mese chiuso, per la coccarda in testa al gruppo
+    // il campione di ogni mese chiuso, per lo scudetto in testa al gruppo
     const byMonth = Object.fromEntries(seasons(ctx.room.history, ctx.room.players).map((s) => [s.key, s]));
 
     const row = (g) => {

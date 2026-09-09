@@ -588,58 +588,94 @@ export function cardBack({ size = "" } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Badge di stagione: la coccarda del campione del mese. Rosetta dorata con il
-// mese in alto e l'anno in basso, e i nastri del colore dell'anno (ogni anno
-// il suo). Stesso viewBox per tutte le taglie: da 20px in lista a 80px in
-// bacheca, dove le lettere si leggono davvero.
+// Scudetto di stagione: il simbolo del campione del mese. Campo smaltato del
+// colore del mese (dodici tinte, dal blu ghiaccio di gennaio al verde abete
+// di dicembre), fascia in alto con il mese - avorio negli anni pari,
+// inchiostro in quelli dispari, cosi' due edizioni dello stesso mese non si
+// confondono - l'anno grande al centro e la cornice d'oro. Il mese in corso
+// e' d'argento: il titolo non e' ancora assegnato. Stesso viewBox per tutte
+// le taglie: da 19px accanto ai nomi a 96px in cima alla pagina della stagione.
 // ---------------------------------------------------------------------------
-const RIBBON_TONES = ["#c53b30", "#2270b8", "#1a7a55", "#7a4fd0", "#c9531a", "#c4306e"];
 const MONTHS_ABBR = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
 const MONTHS_FULL = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+/** Per ogni mese: [campo, tinta chiara, inchiostro dell'anno]. */
+export const SEASON_TONES = [
+  ["#2a5db0", "#dcecff", "#fff"],    // gennaio: blu ghiaccio
+  ["#6b42c6", "#ece4ff", "#fff"],    // febbraio: viola
+  ["#238a48", "#dff6e3", "#fff"],    // marzo: verde nuovo
+  ["#cf3f83", "#ffe4ef", "#fff"],    // aprile: rosa fiore
+  ["#5f8c14", "#eef8d2", "#fff"],    // maggio: verde lime
+  ["#1187a6", "#dbf4fa", "#fff"],    // giugno: azzurro mare
+  ["#f0b21b", "#fff3cf", "#4a3105"], // luglio: giallo sole
+  ["#e0611a", "#ffe6d2", "#fff"],    // agosto: arancio
+  ["#c43a2a", "#ffe0da", "#fff"],    // settembre: terracotta
+  ["#9e5218", "#f8e6cf", "#fff"],    // ottobre: ruggine
+  ["#7c2a58", "#f6dfeb", "#fff"],    // novembre: prugna
+  ["#136048", "#d9f2e6", "#fff"]     // dicembre: verde abete
+];
+const MUTED_TONES = ["#aab4c0", "#eef2f6", "#fff"];
 let badgeSeq = 0;
+
+/** Scurisce (k < 0) o schiarisce (k > 0) un colore #rrggbb. */
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k));
+  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+function seasonParts(key) {
+  const [y, m] = String(key).split("-").map(Number);
+  return { y: y || 0, mi: (((m || 1) - 1) % 12 + 12) % 12 };
+}
+
+/** Il colore del mese di una stagione ("2026-09" -> il rosso di settembre). */
+export function seasonTone(key) {
+  return SEASON_TONES[seasonParts(key).mi][0];
+}
 
 /**
  * @param {string} key  "2026-08"
  * @param {{cls?:string, muted?:boolean, title?:string}} opts  muted = mese in corso (argento, non ancora assegnato)
  */
 export function seasonBadge(key, opts = {}) {
-  const [y, m] = String(key).split("-").map(Number);
-  const month = MONTHS_ABBR[(m || 1) - 1] || "?";
-  const year = String(y || "").slice(-2);
+  const { y, mi } = seasonParts(key);
+  const month = MONTHS_ABBR[mi];
+  const year = String(y).slice(-2);
   const id = "sb" + (++badgeSeq);
-  const ribbon = opts.muted ? "#9aa5b1" : RIBBON_TONES[Math.abs(y || 0) % RIBBON_TONES.length];
-  const petals = Array.from({ length: 12 }, (_, i) => {
-    const a = (i / 12) * Math.PI * 2;
-    return `<circle cx="${(28 + Math.cos(a) * 16.5).toFixed(2)}" cy="${(26 + Math.sin(a) * 16.5).toFixed(2)}" r="5.2"/>`;
-  }).join("");
-  const title = opts.title || `Campione di ${MONTHS_FULL[(m || 1) - 1] || "?"} ${year}`;
-  return `<svg class="season-badge ${opts.cls || ""} ${opts.muted ? "muted" : ""}" viewBox="0 0 56 64" role="img" aria-label="${title}" focusable="false">
+  const muted = !!opts.muted;
+  const inkBand = y % 2 === 1;
+  const [field, light, ink] = muted ? MUTED_TONES : SEASON_TONES[mi];
+  const title = opts.title || `Campione di ${MONTHS_FULL[mi]} ${year}`;
+  const T = 4, B = 61;
+  const shield = `M9 ${T}H47a3 3 0 0 1 3 3V${T + 27}c0 13.2-9.6 22.6-22 ${B - T - 27}C15.6 ${B - 5.4} 6 ${T + 40.2} 6 ${T + 27}V${T + 3}a3 3 0 0 1 3-3Z`;
+  const bandBottom = T + 14.5;
+  const rim = muted ? ["#f2f5f8", "#bcc6d1", "#8494a4"] : ["#ffedb3", "#ffc247", "#cf8710"];
+  const rimLine = muted ? "#6b7886" : "#8f5f0a";
+  const bandFill = muted ? "#e8edf2" : inkBand ? "#262a33" : "#fff7e3";
+  const monthInk = muted ? "#6b7886" : inkBand ? light : shade(field, -0.15);
+  return `<svg class="season-badge ${opts.cls || ""} ${muted ? "muted" : ""}" viewBox="0 0 56 64" role="img" aria-label="${title}" focusable="false">
     <title>${title}</title>
     <defs>
-      ${opts.muted ? `
-      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#f4f7fa"/><stop offset=".5" stop-color="#c9d3de"/><stop offset="1" stop-color="#8f9dab"/>
+      <clipPath id="${id}c"><path d="${shield}"/></clipPath>
+      <linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${rim[0]}"/><stop offset=".5" stop-color="${rim[1]}"/><stop offset="1" stop-color="${rim[2]}"/>
       </linearGradient>
-      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#e6ecf2"/><stop offset="1" stop-color="#aab6c3"/>
-      </linearGradient>` : `
-      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#ffe9a8"/><stop offset=".45" stop-color="#ffc247"/><stop offset="1" stop-color="#d98f16"/>
+      <linearGradient id="${id}f" x1="0" y1="0" x2=".7" y2="1">
+        <stop offset="0" stop-color="${shade(field, 0.12)}"/><stop offset="1" stop-color="${shade(field, -0.22)}"/>
       </linearGradient>
-      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#fff4cf"/><stop offset="1" stop-color="#ffd875"/>
-      </linearGradient>`}
+      <linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".5" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#000" stop-opacity=".12"/>
+      </linearGradient>
     </defs>
-    <g fill="${ribbon}" stroke="${opts.muted ? "#6d7a88" : "#7a3a12"}" stroke-opacity=".55" stroke-width="1.2" stroke-linejoin="round">
-      <path d="M17 38 12 60l7-3 4 5 6-22Z"/>
-      <path d="M39 38l5 22-7-3-4 5-6-22Z"/>
+    <path d="${shield}" fill="none" stroke="${rimLine}" stroke-width="4.6" stroke-linejoin="round"/>
+    <path d="${shield}" fill="url(#${id}f)" stroke="url(#${id}r)" stroke-width="3" stroke-linejoin="round"/>
+    <g clip-path="url(#${id}c)">
+      <rect x="0" y="0" width="56" height="${bandBottom}" fill="${bandFill}"/>
+      <path d="M0 ${bandBottom}H56" stroke="url(#${id}r)" stroke-width="1.4"/>
+      <path d="${shield}" fill="url(#${id}g)"/>
     </g>
-    <g fill="url(#${id})" stroke="${opts.muted ? "#6d7a88" : "#b97d0c"}" stroke-width="1.2">${petals}</g>
-    <circle cx="28" cy="26" r="17" fill="url(#${id})" stroke="${opts.muted ? "#6d7a88" : "#b97d0c"}" stroke-width="1.6"/>
-    <circle cx="28" cy="26" r="13.4" fill="url(#${id}b)" stroke="${opts.muted ? "#8f9dab" : "#c99a2a"}" stroke-width="1"/>
-    <text x="28" y="23.2" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="8.6" letter-spacing=".4" fill="${opts.muted ? "#4f5b68" : "#7a4a08"}">${month}</text>
-    <text x="28" y="35.6" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="800" font-size="13" fill="${opts.muted ? "#3f4a56" : "#5d3f04"}">${year}</text>
-    <path d="M18.5 15.5a13 13 0 0 1 8-4.6" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>
+    <text x="28" y="${T + 10.6}" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="9.6" letter-spacing=".8" fill="${monthInk}">${month}</text>
+    <text x="28" y="${T + 41.5}" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="23" fill="${ink}">${year}</text>
   </svg>`;
 }
 
