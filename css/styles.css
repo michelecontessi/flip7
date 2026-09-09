@@ -2160,14 +2160,32 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
 .h2h-verdict.down { background: rgba(210,70,60,.13); color: var(--c-red); }
 
 /* ---- setup: interruttori ---- */
-.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; font-weight: 600; }
+/* L'interruttore: una pillola con la pallina che scorre. Tocca tutta la riga
+   (e' una <label>), percio' il bersaglio per il dito resta grande anche se la
+   pillola e' piccola. Le misure vanno RIMESSE una per una: la regola generale
+   di `input` da' a tutti min-height 48px, padding e bordo, e senza azzerarli
+   la pillola cresce in altezza e la pallina finisce in alto invece che al centro. */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; font-weight: 600; }
 .switch-row:last-of-type { border-bottom: 0; }
 .switch-row > span { display: inline-flex; align-items: center; gap: 7px; }
-.switch-row input[type="checkbox"] { appearance: none; width: 42px; height: 24px; border-radius: 999px; background: var(--surface-3); position: relative; margin: 0; cursor: pointer; transition: background .2s ease; }
-.switch-row input[type="checkbox"]::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s ease; }
-.switch-row input[type="checkbox"]:checked { background: var(--green); }
-.switch-row input[type="checkbox"]:checked::after { transform: translateX(18px); }
-.switch-row input[type="checkbox"]:disabled { opacity: .4; cursor: not-allowed; }
+.switch-row input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  flex: none; width: 46px; height: 27px; min-height: 0; padding: 0; margin: 0; border: 0;
+  border-radius: 999px; background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  position: relative; cursor: pointer; transition: background .2s ease;
+}
+.switch-row input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 50%; left: 3px; width: 21px; height: 21px;
+  margin-top: -10.5px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(20,20,30,.35); transition: transform .2s ease;
+}
+.switch-row input[type="checkbox"]:checked { background: var(--green); box-shadow: none; }
+.switch-row input[type="checkbox"]:checked::after { transform: translateX(19px); }
+.switch-row input[type="checkbox"]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.switch-row input[type="checkbox"]:disabled { opacity: .45; cursor: not-allowed; }
+.switch-row input[type="checkbox"]:not(:disabled):active::after { transform: scale(.92); }
+.switch-row input[type="checkbox"]:not(:disabled):checked:active::after { transform: translateX(19px) scale(.92); }
 
 /* ---- "congelato da" nel pannello punti ---- */
 .frozen-by { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px 2px 0; }
