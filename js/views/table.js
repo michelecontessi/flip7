@@ -1065,17 +1065,23 @@ function blockedBox(g, ctx, me) {
 }
 
 /**
- * L'allenamento c'e' solo dove ha senso: a partita in corso e con almeno un
- * bot al tavolo. Fra sole persone il rischio non si mostra mai, e la voce
- * nel menu non compare proprio.
+ * L'allenamento c'e' solo dove ha senso: a un tavolo con almeno un bot seduto.
+ * Li' la voce nel menu c'e' sempre - in lobby, a partita in corso e a partita
+ * finita - cosi' chi l'ha acceso lo ritrova per spegnerlo. Fra sole persone
+ * non compare proprio.
  */
 export function trainingAllowed(g) {
-  if (!g || g.status === "lobby" || g.status === "over") return false;
+  if (!g) return false;
   return (g.order || []).some((sid) => g.seats && g.seats[sid] && g.seats[sid].bot);
+}
+/** Acceso davvero: c'e' un bot, l'interruttore e' su e la partita e' in corso. */
+export function trainingOn(g) {
+  if (!trainingAllowed(g) || g.status === "lobby" || g.status === "over") return false;
+  return prefs.get("training", false) === true;
 }
 /** Il rischio di sballare alla prossima carta (modalita' allenamento). */
 function riskLine(g, sid) {
-  if (!trainingAllowed(g) || !prefs.get("training", false)) return "";
+  if (!trainingOn(g)) return "";
   const o = drawOdds(g, sid);
   const pct = Math.round(o.pBust * 100);
   const tone = o.protectedBySc ? "safe" : pct >= 35 ? "hot" : pct >= 18 ? "warm" : "safe";
@@ -1429,7 +1435,7 @@ export const tableView = {
       const choices = [];
       if (me && g.status !== "over" && g.status !== "lobby") choices.push({ id: "leave", label: "Abbandono la partita" });
       if (isTableOwner(g, ctx) || isStale(g)) choices.push({ id: "close", label: "Annulla il tavolo" });
-      if (trainingAllowed(g)) choices.push({ id: "training", label: `${prefs.get("training", false) ? "✓ " : ""}Modalità allenamento (rischio di sballo)` });
+      if (trainingAllowed(g)) choices.push({ id: "training", label: prefs.get("training", false) ? "✓ Modalità allenamento — tocca per spegnerla" : "Modalità allenamento (rischio di sballo)" });
       choices.push({ id: "list", label: "Tavoli aperti (aprine un altro)" });
       const pick = await askChoice("Tavolo", choices, {
         message: me && g.status !== "over" && g.status !== "lobby"
@@ -1437,7 +1443,7 @@ export const tableView = {
           : "Lo storico non si tocca in nessun caso."
       });
       if (pick === "list") { viewingId = null; browsing = true; return; }
-      if (pick === "training") { prefs.set("training", !prefs.get("training", false)); toast(prefs.get("training") ? "Allenamento: vedi il rischio di sballo al tuo turno" : "Allenamento disattivato"); return; }
+      if (pick === "training") { prefs.set("training", !prefs.get("training", false)); toast(prefs.get("training") ? "Allenamento acceso: al tuo turno vedi il rischio di sballo — si spegne da questo stesso menu" : "Allenamento spento"); return; }
       if (pick === "leave") return tableView.actions["tbl-leave"](ctx);
       if (pick === "close") return tableView.actions["tbl-close"](ctx);
     },

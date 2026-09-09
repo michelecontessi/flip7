@@ -331,9 +331,11 @@ un conta-carte, la partita regge.
 
 **Modalità allenamento** (dal menu **⋯** del tavolo): al tuo turno, sotto *Pesca* e
 *Mi fermo*, vedi il **rischio di sballo** alla prossima carta e quanto vale in media
-pescare, con lo stesso conto del bot. Esiste solo dove ha senso: a partita in corso e
-con almeno un bot seduto. Fra sole persone la voce non compare e il rischio non si
-mostra mai. Utile per imparare; per il brivido meglio spenta.
+pescare, con lo stesso conto del bot. La voce compare solo ai tavoli con almeno un bot
+seduto — lì però c'è sempre, in lobby, a partita in corso e a partita finita: si accende
+e si spegne dallo stesso menu, e la spunta ✓ dice com'è messa adesso. Fra sole persone
+non compare e il rischio non si mostra mai; anche acceso, il rischio si vede solo a
+partita in corso. Utile per imparare; per il brivido meglio spenta.
 
 **Reazioni.** Sotto le righe del tavolo ci sono dieci sticker disegnati, due file da
 cinque (risata, wow, pianto, occhiali da sole, fuoco, pollice, *Che culo!*, *Parolacce*,
