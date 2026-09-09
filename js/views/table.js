@@ -716,6 +716,7 @@ function raceBoard(g, me) {
   return `
     <div class="race">
       <div class="race-head"><span>La corsa</span><span>traguardo ${g.target}</span></div>
+      <p class="race-note">i punti del round in corso sono già contati</p>
       ${sorted.map((sid) => {
         const seat = g.seats[sid];
         const b = banked(sid), r = roundPts(g, sid);
@@ -726,7 +727,7 @@ function raceBoard(g, me) {
             <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>
             ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>` : ""}
           </span>
-          <b>${b}${r ? `<small>+${r}</small>` : ""}</b>
+          <b>${r ? b + r : b}${r ? `<small>+${r}</small>` : ""}</b>
         </div>`;
       }).join("")}
     </div>`;
@@ -970,6 +971,7 @@ function renderSeatRow(g, sid, ctx, max, me) {
         <span class="seat-pts">
           <b>${total}</b>
           <small class="${h.out === "bust" && !flying ? "bust" : pts > 0 ? "up" : ""}">+${pts}</small>
+          ${pts > 0 && g.status === "playing" ? `<i class="seat-tot" title="Totale se si ferma adesso">${total + pts}</i>` : ""}
         </span>
       </div>
       <span class="seat-rail" aria-hidden="true">
@@ -1148,7 +1150,7 @@ function renderControls(g, ctx, me) {
     return `
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit">Pesca</button>
-        <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${pts}</button>
+        <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
       </div>${flying ? "" : riskLine(g, actor)}`;
   }
   // fuori dallo spareggio: niente comandi, si guarda e basta
@@ -1180,17 +1182,17 @@ const playingSeats = (g) => {
 const isPlayoff = (g) => Boolean((g.tiebreak || []).length) && g.status !== "over";
 
 /**
- * L'ordine delle righe: si legge dall'alto in basso come si gioca. In cima
- * chi ha il turno ADESSO, sotto chi viene dopo, e cosi' via nel giro; a round
- * chiuso si parte gia' da chi aprira'. Chi e' fuori dallo spareggio finisce in
- * fondo. Il proprio posto non viene spostato in cima: si riconosce dal bordo.
+ * L'ordine delle righe: FERMO per tutto il round. In cima chi apre la mano,
+ * sotto chi viene dopo nel giro, e li' restano fino alla fine del round -
+ * le facce non si rincorrono su e giu' a ogni turno, e si impara a colpo
+ * d'occhio dove sta ognuno. A round chiuso la lista si riordina una volta
+ * sola, sul prossimo che aprira'. Chi e' fuori dallo spareggio va in fondo;
+ * il proprio posto non viene spostato in cima, si riconosce dal bordo.
  */
 const seatOrder = (g) => {
   const line = playingSeats(g);
   const bench = turnOrder(g).filter((sid) => !line.includes(sid));
-  const focus = g.status === "playing" ? (flightHold(g) || actorOf(g)) : null;
-  const i = focus ? line.indexOf(focus) : -1;
-  return (i > 0 ? [...line.slice(i), ...line.slice(0, i)] : line).concat(bench);
+  return line.concat(bench);
 };
 
 /**

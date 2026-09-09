@@ -9,7 +9,7 @@
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { avatar } from "../avatar.js";
 import { icon, crownEmblem, awardEmblem, seasonBadge, seasonTone } from "../icons.js";
-import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList, seasons, seasonTitles, seasonLabel, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, monthKey, MONTHS_IT } from "../stats.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList, seasons, seasonTitles, seasonLabel, SEASON_MIN_GAMES, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, monthKey, MONTHS_IT } from "../stats.js";
 import { openGameSheet } from "./history.js";
 import { getRoom } from "../store.js";
 import { sharePodium } from "../share.js";
@@ -86,7 +86,20 @@ function crownRow(n, max = 5) {
   return `<span class="crown-row">${Array.from({ length: n }, (_, i) => `<i style="--d:${i * 90}ms">${crownEmblem()}</i>`).join("")}</span>`;
 }
 
-/** Gli scudetti di un giocatore in fila: fino a 3, poi "+N". */
+/**
+ * Quante partite servono per il titolo, e chi ci e' arrivato. Il campione del
+ * mese non e' chi passa una sera fortunata: bisogna aver giocato la stagione.
+ */
+function seasonNeedLine(s) {
+  const min = s.minGames || SEASON_MIN_GAMES;
+  if (s.eligible && s.eligible.length) {
+    return `In corsa per il titolo: ${s.eligible.map((r) => esc(r.name)).join(", ")} · servono ${min} partite nel mese`;
+  }
+  const best = [...(s.rows || [])].sort((a, b) => (b.games || 0) - (a.games || 0))[0];
+  return `Per il titolo servono ${min} partite nel mese${best ? `: ${esc(best.name)} è a ${best.games}` : ""}`;
+}
+
+/** Le carte di stagione di un giocatore in fila: fino a 3, poi "+N". */
 function badgeRow(list, max = 3, cls = "xs") {
   if (!list || !list.length) return "";
   const shown = list.slice(0, max);
@@ -184,7 +197,7 @@ function renderSeasonHome(room, me) {
   const key = monthKey(now);
   const live = list.find((s) => s.key === key) || null;
   const closed = list.filter((s) => s.closed);
-  const holder = closed[0] || null;
+  const holder = closed.find((s) => s.champions.length) || null;
   const d = new Date(now);
   const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
@@ -213,11 +226,12 @@ function renderSeasonHome(room, me) {
       ${podiumCols(top)}
       <div class="ch-sub">${leader
         ? `in testa <b>${esc(leader.name)}</b> con ${leader.crowns === 1 ? "1 Crown" : leader.crowns + " Crown"} su ${live.games === 1 ? "1 partita" : live.games + " partite"}${live.tie ? " · a pari merito" : ""} · il titolo si assegna il ${lastDay}`
-        : ""}</div>` : `
+        : ""}</div>
+      <div class="sn-need">${seasonNeedLine(live)}</div>` : `
       <div class="sn-empty">
         ${crownEmblem("big")}
         <b>Ancora nessuna partita a ${monthName}</b>
-        <small>La prima Crown del mese è in palio: chi guida la classifica il ${lastDay} ${monthName} diventa il campione e si prende lo scudetto.</small>
+        <small>La prima Crown del mese è in palio: chi guida la classifica il ${lastDay} ${monthName} diventa il campione e si prende la carta del mese, purché abbia giocato almeno ${SEASON_MIN_GAMES} partite.</small>
       </div>`}
       ${holder ? `
       <button class="sn-holder" data-action="season-open" data-key="${holder.key}">
@@ -258,33 +272,36 @@ function renderGoldBook(closed) {
     return `
     <section class="card">
       <div class="card-head"><h2 class="section-title">Albo d'oro</h2></div>
-      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione, e lo scudetto resta per sempre nella sua scheda.</p>
+      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione — servono almeno ${SEASON_MIN_GAMES} partite giocate in quel mese — e la carta resta per sempre nella sua scheda.</p>
     </section>`;
   }
   const open = localState.showSeasons;
+  const won = closed.filter((s) => s.champions.length).length;
   return `
     <section class="card">
       <button class="card-head as-button" data-action="lb-toggle" data-k="showSeasons" aria-expanded="${open}">
         <h2 class="section-title">Albo d'oro</h2>
-        <span class="muted small ml-auto">${closed.length === 1 ? "1 titolo" : `${closed.length} titoli`}</span>
+        <span class="muted small ml-auto">${won === 1 ? "1 titolo" : `${won} titoli`}</span>
         <span class="chev ${open ? "open" : ""}">${icon("chevron")}</span>
       </button>
       ${open ? `
       <ul class="season-list">
         ${closed.map((s) => `
           <li>
-            <button class="season-row" data-action="season-open" data-key="${s.key}">
-              ${seasonBadge(s.key, { cls: "md" })}
+            <button class="season-row ${s.champions.length ? "" : "empty"}" data-action="season-open" data-key="${s.key}">
+              ${seasonBadge(s.key, { cls: "md", muted: !s.champions.length, title: s.champions.length ? `Campione di ${s.short}` : `${s.label}: titolo non assegnato` })}
               <span class="sr-avas">${s.champions.map((r) => avatar(r.playerId, r.name, "sm")).join("")}</span>
               <span class="sr-txt">
-                <b>${esc(s.champions.map((r) => r.name).join(" e "))}</b>
-                <small>${esc(s.label)} · ${s.champions[0].crowns === 1 ? "1 Crown" : s.champions[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"}${s.tie ? " · titolo condiviso" : ""}</small>
+                <b>${s.champions.length ? esc(s.champions.map((r) => r.name).join(" e ")) : "Titolo non assegnato"}</b>
+                <small>${esc(s.label)} · ${s.champions.length
+                  ? `${s.champions[0].crowns === 1 ? "1 Crown" : s.champions[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"}${s.tie ? " · titolo condiviso" : ""}`
+                  : `nessuno è arrivato a ${s.minGames || SEASON_MIN_GAMES} partite`}</small>
               </span>
               ${icon("chevron", "tiny turn-r")}
             </button>
           </li>`).join("")}
       </ul>
-      <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online. Lo scudetto resta per sempre nella scheda del campione.</p>` : ""}
+      <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online, e per il titolo servono almeno ${SEASON_MIN_GAMES} partite giocate nel mese. La carta resta per sempre nella scheda del campione.</p>` : ""}
     </section>`;
 }
 
@@ -413,7 +430,9 @@ function renderTrend(room, me) {
   const { steps, series } = leaderboardTrend(room.history, room.players, filters());
   if (steps.length < 2 || series.length < 2) return "";
 
-  const byRank = localState.trendMetric !== "avg";
+  const metric = ["rank", "avg", "elo"].includes(localState.trendMetric) ? localState.trendMetric : "rank";
+  const byRank = metric === "rank";
+  const valOf = (v) => (metric === "avg" ? v.avg : v.elo || ELO_START);
   const padL = byRank ? 30 : 40;
   const padR = 42, padT = 14, padB = 12;
   // larghezza reale della card (vista max 660px meno i padding): con poche
@@ -430,11 +449,11 @@ function renderTrend(room, me) {
   const h = padT + plotH + padB;
   const x = (i) => padL + i * stepW;
 
-  // scala della media ancorata ai valori reali, non allo zero
+  // scala di media ed Elo ancorata ai valori reali, non allo zero
   let hi = 10, lo = 0;
   if (!byRank) {
     let max = 0, min = Infinity;
-    for (const s of steps) for (const v of Object.values(s.snap)) { max = Math.max(max, v.avg); min = Math.min(min, v.avg); }
+    for (const s of steps) for (const v of Object.values(s.snap)) { const x = valOf(v); max = Math.max(max, x); min = Math.min(min, x); }
     hi = Math.max(10, Math.ceil(max / 10) * 10);
     lo = Math.max(0, Math.min(Math.floor(min / 10) * 10, hi - 10));
   }
@@ -450,7 +469,7 @@ function renderTrend(room, me) {
     const pts = [];
     steps.forEach((s, i) => {
       const v = s.snap[p.playerId];
-      if (v) pts.push([x(i), y(byRank ? v.rank : v.avg)]);
+      if (v) pts.push([x(i), y(byRank ? v.rank : valOf(v))]);
     });
     return { ...p, pts, end: pts.length ? pts[pts.length - 1][1] : null, color: colorOf(p.name) };
   }).filter((p) => p.pts.length);
@@ -474,8 +493,9 @@ function renderTrend(room, me) {
         <span class="muted small ml-auto">${steps.length} partite</span>
       </div>
       <div class="mode-switch">
-        <button class="${byRank ? "on" : ""}" data-action="trend-metric" data-m="rank">Posizione</button>
-        <button class="${!byRank ? "on" : ""}" data-action="trend-metric" data-m="avg">Media punti</button>
+        <button class="${metric === "rank" ? "on" : ""}" data-action="trend-metric" data-m="rank">Posizione</button>
+        <button class="${metric === "avg" ? "on" : ""}" data-action="trend-metric" data-m="avg">Media punti</button>
+        <button class="${metric === "elo" ? "on" : ""}" data-action="trend-metric" data-m="elo">Rating Elo</button>
       </div>
       <div class="chart-scroll from-end"><div>
         <svg class="trend-svg" width="${w}" height="${totH}" viewBox="0 0 ${w} ${totH}">
@@ -498,23 +518,29 @@ function renderTrend(room, me) {
           }).join("")}
           ${sel !== null ? lines.map((p) => {
             const v = steps[sel].snap[p.playerId];
-            return v ? `<circle class="pt" cx="${x(sel).toFixed(1)}" cy="${y(byRank ? v.rank : v.avg).toFixed(1)}" r="4.5" fill="${p.color}"/>` : "";
+            return v ? `<circle class="pt" cx="${x(sel).toFixed(1)}" cy="${y(byRank ? v.rank : valOf(v)).toFixed(1)}" r="4.5" fill="${p.color}"/>` : "";
           }).join("") : ""}
           ${steps.map((s, i) => `<rect class="hit" data-action="trend-point" data-i="${i}"
             x="${hitX(i).toFixed(1)}" y="0" width="${(hitR(i) - hitX(i)).toFixed(1)}" height="${totH}"/>`).join("")}
         </svg>
       </div></div>
-      <p class="chart-note">${sel !== null ? trendCaption(steps[sel], series, byRank) : `${byRank ? "posizione in classifica" : "media punti"} dopo ogni partita · tocca una colonna per i dettagli`}</p>
+      <p class="chart-note">${sel !== null ? trendCaption(steps[sel], series, metric)
+        : `${METRIC_LABEL[metric]} dopo ogni partita · tocca una colonna per i dettagli${metric === "elo" ? ` · si parte da ${ELO_START}` : ""}`}</p>
     </section>`;
 }
 
+const METRIC_LABEL = { rank: "posizione in classifica", avg: "media punti", elo: "rating Elo" };
+
 /** Didascalia della partita selezionata sul grafico. */
-function trendCaption(step, series, byRank) {
+function trendCaption(step, series, metric = "rank") {
+  const val = (v) => (metric === "avg" ? v.avg : v.elo || ELO_START);
   const rows = series
     .map((p) => ({ name: p.name, v: step.snap[p.playerId] }))
     .filter((r) => r.v)
-    .sort((a, b) => (byRank ? a.v.rank - b.v.rank : b.v.avg - a.v.avg))
-    .map((r) => (byRank ? `${r.v.rank}º ${esc(r.name)}` : `${esc(r.name)} ${fmtNum(r.v.avg, 1)}`));
+    .sort((a, b) => (metric === "rank" ? a.v.rank - b.v.rank : val(b.v) - val(a.v)))
+    .map((r) => (metric === "rank" ? `${r.v.rank}º ${esc(r.name)}`
+      : metric === "avg" ? `${esc(r.name)} ${fmtNum(r.v.avg, 1)}`
+      : `${esc(r.name)} ${val(r.v)}`));
   return `<b>${fmtDate(step.playedAt)}</b> · ${rows.join(" · ")}`;
 }
 
@@ -631,13 +657,13 @@ export const leaderboardView = {
       const rows = s.rows.map((r) => ({ playerId: r.playerId, name: r.name, total: r.crowns }));
       const winners = new Set((s.closed ? s.champions : s.leader ? [s.leader] : []).map((r) => r.playerId));
       await sharePodium(rows, winners, {
-        title: s.closed ? `Campione di ${s.short}` : `${s.label}: in testa`,
+        title: s.noChampion ? `${s.short}: titolo non assegnato` : s.closed ? `Campione di ${s.short}` : `${s.label}: in testa`,
         room: ctx.room.meta.name || "",
         dateLabel: s.label,
         subtitle: `${s.champions[0] ? s.champions[0].crowns : s.leader ? s.leader.crowns : 0} Crown su ${s.games} ${s.games === 1 ? "partita" : "partite"}`,
         foot: "Flip 7 · le Crown del mese · una stagione al mese",
         filename: `flip7-${key}.png`,
-        text: s.closed ? `Flip 7 · Campione di ${s.short}: ${s.champions.map((r) => r.name).join(" e ")}` : `Flip 7 · ${s.label}, in testa ${s.leader ? s.leader.name : "—"}`
+        text: s.noChampion ? `Flip 7 · ${s.short}: titolo non assegnato` : s.closed ? `Flip 7 · Campione di ${s.short}: ${s.champions.map((r) => r.name).join(" e ")}` : `Flip 7 · ${s.label}, in testa ${s.leader ? s.leader.name : "—"}`
       });
       return "page";
     },
@@ -665,7 +691,7 @@ export const leaderboardView = {
 };
 
 // ---------------------------------------------------------------------------
-// Pagina di una stagione: il campione con lo scudetto, il podio del mese, la
+// Pagina di una stagione: il campione con la sua carta, il podio del mese, la
 // classifica e i record di quel mese, le partite giocate.
 // ---------------------------------------------------------------------------
 function openSeasonPage(key) {
@@ -688,13 +714,16 @@ function renderSeasonPage(st) {
       <button class="nav-btn" data-action="season-share" data-key="${s.key}" aria-label="Condividi">${icon("share")}</button>
     </div>
     <div class="page-body">
-      <section class="season-hero ${s.closed ? "holo" : ""}">
-        ${s.closed ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
-        ${seasonBadge(s.key, { cls: "hero", muted: !s.closed, title: s.closed ? `Campione di ${s.short}` : `${s.label}, in corso` })}
-        <div class="sh-label">${s.closed ? (s.tie ? "Campioni di" : "Campione di") : "In testa a"} ${esc(s.short)}</div>
+      <section class="season-hero ${s.closed && !s.noChampion ? "holo" : ""}">
+        ${s.closed && !s.noChampion ? '<span class="holo-sweep" aria-hidden="true"></span>' : ""}
+        ${seasonBadge(s.key, { cls: "hero", muted: !s.closed || s.noChampion, title: s.noChampion ? `${s.label}: titolo non assegnato` : s.closed ? `Campione di ${s.short}` : `${s.label}, in corso` })}
+        <div class="sh-label">${s.noChampion ? "Nessun campione di" : s.closed ? (s.tie ? "Campioni di" : "Campione di") : "In testa a"} ${esc(s.short)}</div>
         <div class="sh-avas">${heroes.map((r) => avatar(r.playerId, r.name, "xl")).join("")}</div>
-        <div class="sh-name">${esc(heroes.map((r) => r.name).join(" e ")) || "—"}</div>
-        <div class="sh-sub">${heroes[0] ? `${heroes[0].crowns === 1 ? "1 Crown" : heroes[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"} · media ${fmtNum(heroes[0].avg, 1)}` : "ancora nessuna partita"}${s.closed ? "" : " · il titolo si assegna a fine mese"}</div>
+        <div class="sh-name">${s.noChampion ? "Titolo non assegnato" : esc(heroes.map((r) => r.name).join(" e ")) || "—"}</div>
+        <div class="sh-sub">${s.noChampion
+          ? `il mese si è chiuso senza nessuno a ${s.minGames || SEASON_MIN_GAMES} partite: il titolo resta in bacheca`
+          : `${heroes[0] ? `${heroes[0].crowns === 1 ? "1 Crown" : heroes[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"} · media ${fmtNum(heroes[0].avg, 1)}` : "ancora nessuna partita"}${s.closed ? "" : " · il titolo si assegna a fine mese"}`}</div>
+        ${s.closed ? "" : `<div class="sh-need">${seasonNeedLine(s)}</div>`}
       </section>
 
       <section class="card tight">
@@ -835,7 +864,7 @@ function renderChart(games, pid) {
     </section>`;
 }
 
-/** La bacheca degli scudetti: i titoli di stagione, in grande, ognuno del colore del suo mese. */
+/** La bacheca: i titoli di stagione, con la carta del mese in grande. */
 function renderTitles(titles) {
   if (!titles || !titles.length) return "";
   return `

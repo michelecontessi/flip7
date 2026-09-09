@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
+import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, SEASON_MIN_GAMES, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, leaderboardTrend, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
 
 const at = (y, m, d = 10) => new Date(y, m, d, 20).getTime();
 const game = (id, playedAt, totals, extra = {}) => {
@@ -24,7 +24,7 @@ test("stagioni: un mese chiuso ha il suo campione, quello in corso solo chi e' i
     game("g3", at(2026, 7, 20), { ada: 220, bea: 120, cal: 200 }),
     game("g4", at(2026, 8, 2), { cal: 230, ada: 100 })
   ]);
-  const list = seasons(history, players, { now });
+  const list = seasons(history, players, { now, minGames: 1 });
   assert.equal(list.length, 2);
   assert.equal(list[0].key, "2026-09");
   assert.equal(list[0].closed, false);
@@ -36,12 +36,12 @@ test("stagioni: un mese chiuso ha il suo campione, quello in corso solo chi e' i
   assert.equal(list[1].short, "Agosto 26");
   assert.equal(list[1].games, 3);
   assert.deepEqual(list[1].champions.map((r) => r.playerId), ["ada"], "2 Crown su 3: e' Ada la campionessa");
-  const titles = seasonTitles(history, players, { now });
+  const titles = seasonTitles(history, players, { now, minGames: 1 });
   assert.equal(titles.ada.length, 1);
   assert.equal(titles.ada[0].key, "2026-08");
   assert.equal(titles.bea, undefined);
   // e la classifica sa quanti titoli ha ognuno
-  const { rows } = leaderboard(history, players);
+  const { rows } = leaderboard(history, players, { minGames: 1 });
   assert.equal(rows.find((r) => r.playerId === "ada").titles, 1);
   assert.equal(rows.find((r) => r.playerId === "cal").titles, 0);
 });
@@ -52,11 +52,11 @@ test("stagioni: vale tutto insieme, dal vivo e online; a parita' assoluta il tit
     game("a", at(2026, 8, 1), { ada: 200, bea: 100 }, { source: "online" }),
     game("b", at(2026, 8, 2), { ada: 100, bea: 200 })
   ]);
-  const s = seasons(history, players, { now })[0];
+  const s = seasons(history, players, { now, minGames: 1 })[0];
   assert.equal(s.games, 2, "la partita online conta come quella dal vivo");
   assert.deepEqual(s.champions.map((r) => r.playerId).sort(), ["ada", "bea"]);
   assert.equal(s.tie, true);
-  assert.equal(seasonTitles(history, players, { now }).ada[0].shared, true);
+  assert.equal(seasonTitles(history, players, { now, minGames: 1 }).ada[0].shared, true);
 });
 
 test("monthKey e seasonClosed seguono il calendario locale", () => {
@@ -64,6 +64,45 @@ test("monthKey e seasonClosed seguono il calendario locale", () => {
   assert.equal(seasonClosed("2026-08", at(2026, 8, 1, 0)), true);
   assert.equal(seasonClosed("2026-09", at(2026, 8, 30, 23)), false);
   assert.equal(seasonShort("2025-12"), "Dicembre 25");
+});
+
+
+test("stagioni: il titolo va solo a chi ha giocato almeno 10 partite quel mese", () => {
+  const now = at(2026, 8, 5);
+  const entries = [];
+  for (let i = 0; i < 12; i++) entries.push(game("g" + i, at(2026, 7, i + 1), { ada: 200, bea: 100 }));
+  // Cal passa di li' una sera sola e vince: niente titolo, non ha giocato la stagione
+  entries.push(game("cal", at(2026, 7, 20), { cal: 300, bea: 10 }));
+  const s = seasons(Object.fromEntries(entries), players, { now })[0];
+  assert.equal(SEASON_MIN_GAMES, 10);
+  assert.equal(s.minGames, 10);
+  assert.deepEqual(s.eligible.map((r) => r.playerId).sort(), ["ada", "bea"], "in corsa solo chi arriva a 10");
+  assert.deepEqual(s.champions.map((r) => r.playerId), ["ada"]);
+  assert.equal(s.noChampion, false);
+});
+
+test("stagioni: mese chiuso senza nessuno a 10 partite = titolo non assegnato", () => {
+  const now = at(2026, 8, 5);
+  const history = Object.fromEntries([
+    game("g1", at(2026, 7, 3), { ada: 210, bea: 150 }),
+    game("g2", at(2026, 7, 12), { ada: 190, bea: 205 })
+  ]);
+  const s = seasons(history, players, { now })[0];
+  assert.deepEqual(s.champions, []);
+  assert.equal(s.noChampion, true);
+  assert.deepEqual(s.eligible, []);
+  assert.equal(s.rows.length, 2, "la classifica del mese resta");
+  assert.equal(seasonTitles(history, players, { now }).ada, undefined, "nessuna carta in bacheca");
+});
+
+test("stagione in corso: chi guida si vede anche se non e' ancora in corsa per il titolo", () => {
+  const now = at(2026, 8, 9);
+  const history = Object.fromEntries([game("g1", at(2026, 8, 2), { ada: 210, bea: 150 })]);
+  const s = seasons(history, players, { now })[0];
+  assert.equal(s.closed, false);
+  assert.equal(s.leader.playerId, "ada", "in testa c'e' comunque qualcuno");
+  assert.deepEqual(s.eligible, [], "ma nessuno e' ancora in corsa");
+  assert.deepEqual(s.champions, []);
 });
 
 test("testa a testa: davanti, dietro, pari e le Crown incrociate", () => {
@@ -182,7 +221,7 @@ test("chi ha fatto cosa: Iceman, Bullo e Generoso contano solo dove il dato esis
   assert.equal(c.ada.fl3, 1);
   assert.equal(c.cal.fl3, 1);
   assert.equal(c.bea.gave, 1);
-  const { rows } = leaderboard(history, players);
+  const { rows } = leaderboard(history, players, { minGames: 1 });
   const ada = rows.find((r) => r.playerId === "ada");
   assert.equal(ada.froze, 2);
   assert.equal(ada.interTracked, 1);
@@ -198,4 +237,23 @@ test("chi ha fatto cosa: Iceman, Bullo e Generoso contano solo dove il dato esis
   // una partita dal vivo conta se il segnapunti ha segnato un "da chi"
   assert.equal(tracksInteractions({ source: "live", rounds: { x: { r0: { numbers: [1], frozen: true, frozenBy: "y" } } } }), true);
   assert.equal(tracksInteractions({ source: "live", rounds: { x: { r0: { numbers: [1], frozen: true } } } }), false);
+});
+
+test("andamento: la serie porta anche il rating Elo, partita per partita", () => {
+  const history = Object.fromEntries([
+    game("g1", at(2026, 7, 3), { ada: 210, bea: 150 }),
+    game("g2", at(2026, 7, 12), { ada: 190, bea: 205 }),
+    game("g3", at(2026, 7, 20), { ada: 220, bea: 120 })
+  ]);
+  const { steps } = leaderboardTrend(history, players, {});
+  assert.equal(steps.length, 3);
+  for (const s of steps) {
+    assert.ok(Number.isFinite(s.snap.ada.elo) && Number.isFinite(s.snap.bea.elo));
+    assert.equal(s.snap.ada.elo + s.snap.bea.elo, 2 * ELO_START, "quel che uno prende, l'altro lo perde");
+  }
+  assert.ok(steps[0].snap.ada.elo > ELO_START, "chi vince la prima sale");
+  assert.ok(steps[1].snap.ada.elo < steps[0].snap.ada.elo, "poi perde e scende");
+  // e il valore finale coincide con la classifica Elo vera
+  const elo = eloRatings(history, players, {});
+  assert.equal(steps[2].snap.ada.elo, elo.find((r) => r.playerId === "ada").elo);
 });

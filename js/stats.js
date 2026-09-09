@@ -477,6 +477,9 @@ export function leaderboardTrend(history, players, opts = {}) {
 
   const acc = new Map();
   const steps = [];
+  // il rating Elo passo passo, sulle stesse partite del grafico
+  const elo = new Map();
+  const eloOf = (pid) => (elo.has(pid) ? elo.get(pid) : ELO_START);
   for (const game of games) {
     const winners = game.winnerIds || {};
     for (const [pid, res] of Object.entries(game.results || {})) {
@@ -499,8 +502,24 @@ export function leaderboardTrend(history, players, opts = {}) {
       avg: e.games ? e.points / e.games : 0,
       winRate: e.games ? e.crowns / e.games : 0
     }));
+    // stesso calcolo di eloRatings(), applicato partita per partita
+    const ids = Object.keys(game.results || {});
+    if (ids.length > 1) {
+      const total = (pid) => Number(game.results[pid].total) || 0;
+      const delta = {};
+      for (const a of ids) {
+        let d = 0;
+        for (const b of ids) {
+          if (a === b) continue;
+          const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
+          d += eloSwing(eloOf(a), eloOf(b), actual, ELO_K / (ids.length - 1));
+        }
+        delta[a] = d;
+      }
+      for (const a of ids) elo.set(a, eloOf(a) + delta[a]);
+    }
     const snap = {};
-    sortLeaderboard(rows).forEach((r, i) => { snap[r.playerId] = { rank: i + 1, avg: r.avg }; });
+    sortLeaderboard(rows).forEach((r, i) => { snap[r.playerId] = { rank: i + 1, avg: r.avg, elo: Math.round(eloOf(r.playerId)) }; });
     steps.push({ playedAt: game.playedAt || 0, snap });
   }
 
@@ -750,6 +769,13 @@ export function seasonClosed(key, now = Date.now()) {
 const sameStanding = (a, b) => TIEBREAK.every((k) => (a[k] || 0) === (b[k] || 0));
 
 /**
+ * Partite che servono, a testa, per essere in corsa per il titolo del mese:
+ * il campione e' chi ha giocato la stagione, non chi passa di li' una sera
+ * fortunata. Chi non ci arriva resta in classifica, ma fuori dal titolo.
+ */
+export const SEASON_MIN_GAMES = 10;
+
+/**
  * Le stagioni, dalla piu' recente. Ognuna porta la classifica del mese, il
  * campione (o i campioni, a pari merito assoluto) se il mese e' chiuso, e
  * chi e' in testa se e' ancora in corso.
@@ -769,8 +795,11 @@ export function seasons(history, players, opts = {}) {
     .map(([key, games]) => {
       const { rows } = leaderboard(games, players, { source: opts.source, skipTitles: true });
       const sorted = sortLeaderboard(rows, "crowns");
-      const top = sorted[0] || null;
-      const tied = top ? sorted.filter((r) => sameStanding(r, top)) : [];
+      const min = opts.minGames === undefined ? SEASON_MIN_GAMES : opts.minGames;
+      // in corsa per il titolo solo chi ha giocato abbastanza quel mese
+      const eligible = sorted.filter((r) => (r.games || 0) >= min);
+      const top = eligible[0] || null;
+      const tied = top ? eligible.filter((r) => sameStanding(r, top)) : [];
       const closed = seasonClosed(key, now);
       const { year, month } = monthOf(key);
       return {
@@ -778,8 +807,13 @@ export function seasons(history, players, opts = {}) {
         label: seasonLabel(key), short: seasonShort(key),
         games: Object.keys(games).length,
         rows: sorted,
+        // chi e' in corsa (>= minGames) e chi guida comunque la classifica
+        eligible,
+        minGames: min,
         champions: closed ? tied : [],
-        leader: closed ? null : top,
+        leader: closed ? null : (top || sorted[0] || null),
+        // il mese e' chiuso ma nessuno ha fatto le partite che servono
+        noChampion: closed && !tied.length,
         tie: tied.length > 1,
         closed
       };

@@ -12,6 +12,10 @@ export const wantsVibration = () => prefs.get(NOTIFY_KEYS.vibrate, true) !== fal
 export const wantsPush = () => prefs.get(NOTIFY_KEYS.push, false) === true;
 
 export const canPush = () => typeof Notification !== "undefined" && "serviceWorker" in navigator;
+/** true se questo dispositivo sa vibrare dal browser (iPhone: no). */
+export const canVibrate = () => typeof navigator !== "undefined" && typeof navigator.vibrate === "function";
+/** true se il browser sa produrre suoni. */
+export const canSound = () => typeof window !== "undefined" && Boolean(window.AudioContext || window.webkitAudioContext);
 export const pushPermission = () => (typeof Notification === "undefined" ? "unsupported" : Notification.permission);
 
 /** Chiede il permesso per le notifiche (va chiamato da un tocco). */
@@ -35,17 +39,34 @@ function audioCtx() {
 export function unlockAudio() {
   const c = audioCtx();
   if (c && c.state === "suspended") c.resume().catch(() => {});
+  return c;
 }
+// Il primo tocco sblocca l'audio. L'ascolto resta finche' il contesto non e'
+// davvero partito: al primissimo tocco `resume()` puo' non fare in tempo, e
+// togliere subito l'ascolto lasciava l'app muta per sempre.
 if (typeof document !== "undefined") {
-  const once = () => { unlockAudio(); document.removeEventListener("pointerdown", once); };
+  const once = () => {
+    const c = unlockAudio();
+    if (c && c.state === "running") document.removeEventListener("pointerdown", once);
+  };
   document.addEventListener("pointerdown", once, { passive: true });
 }
 
-/** Due note brevi (turno) o una sola (avviso). Silenzioso se disattivato. */
+/**
+ * Due note brevi (turno) o una sola (avviso). Silenzioso se disattivato.
+ * Se il contesto audio e' ancora sospeso (succede al primo tocco, e su iOS
+ * dopo ogni pausa) si sveglia e poi suona, invece di non fare niente.
+ */
 export function ding(kind = "turn") {
   if (!wantsSound()) return;
   const c = audioCtx();
-  if (!c || c.state !== "running") return;
+  if (!c) return;
+  if (c.state === "suspended") { c.resume().then(() => tones(c, kind)).catch(() => {}); return; }
+  if (c.state !== "running") return;
+  tones(c, kind);
+}
+
+function tones(c, kind) {
   const notes = kind === "turn" ? [[880, 0], [1175, 0.13]] : kind === "over" ? [[660, 0], [880, 0.12], [1175, 0.24]] : [[740, 0]];
   const t0 = c.currentTime;
   for (const [freq, at] of notes) {
@@ -62,10 +83,10 @@ export function ding(kind = "turn") {
   }
 }
 
-/** Vibrazione breve (Android; iOS la ignora senza far danni). */
+/** Vibrazione breve. Torna true se il dispositivo ha davvero vibrato. */
 export function buzz(pattern = [70, 40, 70]) {
-  if (!wantsVibration()) return;
-  try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* niente */ }
+  if (!wantsVibration() || !canVibrate()) return false;
+  try { return Boolean(navigator.vibrate(pattern)); } catch { return false; }
 }
 
 /**

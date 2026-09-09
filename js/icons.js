@@ -588,94 +588,72 @@ export function cardBack({ size = "" } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Scudetto di stagione: il simbolo del campione del mese. Campo smaltato del
-// colore del mese (dodici tinte, dal blu ghiaccio di gennaio al verde abete
-// di dicembre), fascia in alto con il mese - avorio negli anni pari,
-// inchiostro in quelli dispari, cosi' due edizioni dello stesso mese non si
-// confondono - l'anno grande al centro e la cornice d'oro. Il mese in corso
-// e' d'argento: il titolo non e' ancora assegnato. Stesso viewBox per tutte
-// le taglie: da 19px accanto ai nomi a 96px in cima alla pagina della stagione.
+// La carta del mese: il simbolo del campione di stagione. Non una medaglia,
+// non una coccarda: la CARTA del mazzo di Flip 7 che porta il numero del mese
+// (maggio = la carta 5, dicembre = la carta 12), col colore che quel numero ha
+// nel gioco. Cornice d'oro da campione, l'anno nel cartiglio in basso, la
+// faccia crema negli anni pari e notte in quelli dispari. Il mese in corso e'
+// spento (grigio): la carta non e' ancora stata assegnata. Stesso viewBox 40x56
+// (le proporzioni delle carte vere) per tutte le taglie.
 // ---------------------------------------------------------------------------
-const MONTHS_ABBR = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
 const MONTHS_FULL = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
-/** Per ogni mese: [campo, tinta chiara, inchiostro dell'anno]. */
-export const SEASON_TONES = [
-  ["#2a5db0", "#dcecff", "#fff"],    // gennaio: blu ghiaccio
-  ["#6b42c6", "#ece4ff", "#fff"],    // febbraio: viola
-  ["#238a48", "#dff6e3", "#fff"],    // marzo: verde nuovo
-  ["#cf3f83", "#ffe4ef", "#fff"],    // aprile: rosa fiore
-  ["#5f8c14", "#eef8d2", "#fff"],    // maggio: verde lime
-  ["#1187a6", "#dbf4fa", "#fff"],    // giugno: azzurro mare
-  ["#f0b21b", "#fff3cf", "#4a3105"], // luglio: giallo sole
-  ["#e0611a", "#ffe6d2", "#fff"],    // agosto: arancio
-  ["#c43a2a", "#ffe0da", "#fff"],    // settembre: terracotta
-  ["#9e5218", "#f8e6cf", "#fff"],    // ottobre: ruggine
-  ["#7c2a58", "#f6dfeb", "#fff"],    // novembre: prugna
-  ["#136048", "#d9f2e6", "#fff"]     // dicembre: verde abete
-];
-const MUTED_TONES = ["#aab4c0", "#eef2f6", "#fff"];
+/** I colori delle carte numero, dall'1 al 12: gli stessi del mazzo (.n1….n12). */
+export const SEASON_TONES = ["#9aa0a6", "#b1cb31", "#e04a63", "#2fa7a4", "#3aa246", "#8a56c2", "#c96f4a", "#8fc665", "#ef8c34", "#e03c31", "#6fa8dc", "#8d8272"];
 let badgeSeq = 0;
 
-/** Scurisce (k < 0) o schiarisce (k > 0) un colore #rrggbb. */
-function shade(hex, k) {
-  const n = parseInt(hex.slice(1), 16);
-  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k));
-  return "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
-}
-
-function seasonParts(key) {
+const seasonMonth = (key) => {
   const [y, m] = String(key).split("-").map(Number);
-  return { y: y || 0, mi: (((m || 1) - 1) % 12 + 12) % 12 };
+  return { y: y || 0, n: Math.min(12, Math.max(1, m || 1)) };
+};
+
+/** Il colore della carta di quel mese ("2026-05" -> il verde del 5). */
+export function seasonTone(key) {
+  return SEASON_TONES[seasonMonth(key).n - 1];
 }
 
-/** Il colore del mese di una stagione ("2026-09" -> il rosso di settembre). */
-export function seasonTone(key) {
-  return SEASON_TONES[seasonParts(key).mi][0];
+/** Il ventaglio a raggi ai lati della carta, come le conchiglie del mazzo vero. */
+function cardFan(cx, cy, r, dir, color) {
+  const parts = [];
+  for (let i = 0; i < 7; i++) {
+    const a0 = (-90 + i * 26) * Math.PI / 180, a1 = a0 + 11 * Math.PI / 180;
+    const x0 = cx + dir * Math.sin(a0) * r, y0 = cy - Math.cos(a0) * r;
+    const x1 = cx + dir * Math.sin(a1) * r, y1 = cy - Math.cos(a1) * r;
+    parts.push(`M${cx} ${cy}L${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 ${dir > 0 ? 1 : 0} ${x1.toFixed(2)} ${y1.toFixed(2)}Z`);
+  }
+  return `<path d="${parts.join("")}" fill="${color}" opacity=".32"/>`;
 }
 
 /**
  * @param {string} key  "2026-08"
- * @param {{cls?:string, muted?:boolean, title?:string}} opts  muted = mese in corso (argento, non ancora assegnato)
+ * @param {{cls?:string, muted?:boolean, title?:string}} opts  muted = mese in corso (spento, non ancora assegnato)
  */
 export function seasonBadge(key, opts = {}) {
-  const { y, mi } = seasonParts(key);
-  const month = MONTHS_ABBR[mi];
-  const year = String(y).slice(-2);
+  const { y, n } = seasonMonth(key);
   const id = "sb" + (++badgeSeq);
   const muted = !!opts.muted;
-  const inkBand = y % 2 === 1;
-  const [field, light, ink] = muted ? MUTED_TONES : SEASON_TONES[mi];
-  const title = opts.title || `Campione di ${MONTHS_FULL[mi]} ${year}`;
-  const T = 4, B = 61;
-  const shield = `M9 ${T}H47a3 3 0 0 1 3 3V${T + 27}c0 13.2-9.6 22.6-22 ${B - T - 27}C15.6 ${B - 5.4} 6 ${T + 40.2} 6 ${T + 27}V${T + 3}a3 3 0 0 1 3-3Z`;
-  const bandBottom = T + 14.5;
+  const night = !muted && y % 2 === 1;
+  const tone = muted ? "#9aa0a6" : SEASON_TONES[n - 1];
+  const face = night ? "#303356" : "#f6efdc";
+  const ink = night ? "#f6efdc" : "#303356";
   const rim = muted ? ["#f2f5f8", "#bcc6d1", "#8494a4"] : ["#ffedb3", "#ffc247", "#cf8710"];
   const rimLine = muted ? "#6b7886" : "#8f5f0a";
-  const bandFill = muted ? "#e8edf2" : inkBand ? "#262a33" : "#fff7e3";
-  const monthInk = muted ? "#6b7886" : inkBand ? light : shade(field, -0.15);
-  return `<svg class="season-badge ${opts.cls || ""} ${muted ? "muted" : ""}" viewBox="0 0 56 64" role="img" aria-label="${title}" focusable="false">
+  const yearInk = muted ? "#4f5b68" : "#3b2703";
+  const title = opts.title || `Campione di ${MONTHS_FULL[n - 1]} ${y}`;
+  return `<svg class="season-badge ${opts.cls || ""} ${muted ? "muted" : ""}" viewBox="0 0 40 56" role="img" aria-label="${title}" focusable="false">
     <title>${title}</title>
     <defs>
-      <clipPath id="${id}c"><path d="${shield}"/></clipPath>
+      <clipPath id="${id}c"><rect x="4.4" y="4.4" width="31.2" height="47.2" rx="2.4"/></clipPath>
       <linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="${rim[0]}"/><stop offset=".5" stop-color="${rim[1]}"/><stop offset="1" stop-color="${rim[2]}"/>
       </linearGradient>
-      <linearGradient id="${id}f" x1="0" y1="0" x2=".7" y2="1">
-        <stop offset="0" stop-color="${shade(field, 0.12)}"/><stop offset="1" stop-color="${shade(field, -0.22)}"/>
-      </linearGradient>
-      <linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset=".5" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#000" stop-opacity=".12"/>
-      </linearGradient>
     </defs>
-    <path d="${shield}" fill="none" stroke="${rimLine}" stroke-width="4.6" stroke-linejoin="round"/>
-    <path d="${shield}" fill="url(#${id}f)" stroke="url(#${id}r)" stroke-width="3" stroke-linejoin="round"/>
-    <g clip-path="url(#${id}c)">
-      <rect x="0" y="0" width="56" height="${bandBottom}" fill="${bandFill}"/>
-      <path d="M0 ${bandBottom}H56" stroke="url(#${id}r)" stroke-width="1.4"/>
-      <path d="${shield}" fill="url(#${id}g)"/>
-    </g>
-    <text x="28" y="${T + 10.6}" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="9.6" letter-spacing=".8" fill="${monthInk}">${month}</text>
-    <text x="28" y="${T + 41.5}" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="23" fill="${ink}">${year}</text>
+    <rect x="1" y="1" width="38" height="54" rx="4.5" fill="${face}" stroke="#fff" stroke-width="1.6"/>
+    <rect x="3.3" y="3.3" width="33.4" height="49.4" rx="3" fill="none" stroke="url(#${id}r)" stroke-width="1.5"/>
+    <rect x="5.4" y="5.4" width="29.2" height="45.2" rx="1.8" fill="none" stroke="url(#${id}r)" stroke-width=".55" opacity=".85"/>
+    <g clip-path="url(#${id}c)">${cardFan(3.2, 28, 9.5, 1, tone)}${cardFan(36.8, 28, 9.5, -1, tone)}</g>
+    <text x="20" y="33.5" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="600" font-size="${n >= 10 ? 23 : 28}" fill="${tone}" stroke="${ink}" stroke-width="1" paint-order="stroke" stroke-linejoin="round">${n}</text>
+    <rect x="9" y="38.6" width="22" height="8.6" rx="1.7" fill="url(#${id}r)" stroke="${rimLine}" stroke-width=".5"/>
+    <text x="20" y="44.9" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="600" font-size="6.2" letter-spacing=".5" fill="${yearInk}">${y}</text>
   </svg>`;
 }
 

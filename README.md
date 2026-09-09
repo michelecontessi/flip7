@@ -10,7 +10,7 @@ e alimenta la **classifica perpetua**: ogni vittoria vale una **Crown** 👑.
 - 🧮 calcolatrice con le carte: numeri, `+2…+10`, `×2`, bonus **Flip 7** e sballo
 - 🕰️ inserimento di **partite vecchie**, giocate prima dell'app
 - 🔁 formazione libera: i giocatori possono cambiare da una partita all'altra
-- 🏅 **stagioni mensili**: chi guida la classifica del mese ne diventa il campione, con il suo scudetto
+- 🏅 **stagioni mensili**: chi guida il mese (con almeno 10 partite giocate) ne diventa il campione e si prende la carta di quel mese
 - 🔔 al tavolo online l'app **avvisa quando tocca a te** (suono, vibrazione, notifica), e chi sparisce
   si **blocca di comune accordo** senza chiudere la partita
 - 💸 **costo zero**: nessun dominio, nessun abbonamento
@@ -238,7 +238,7 @@ la stessa cosa in grande nel proprio riquadro: **ti mancano 69 punti**.
 **Invitare qualcuno a partita in corso**: il pulsante **Invita** in cima al tabellone
 (o l'icona 🔗 nella barra in alto) apre la condivisione del link della stanza.
 
-**Lo Storico** raggruppa le partite per mese (con lo scudetto del **campione del
+**Lo Storico** raggruppa le partite per mese (con la carta del **campione del
 mese**, quando il mese è chiuso) e di ognuna racconta com'è andata senza doverla aprire:
 giorno e **ora**, quanto è **durata**, quanti erano e quante mani sono servite, di
 **quanto ha vinto sul secondo**, e sotto la **classifica della partita** riga per riga —
@@ -317,9 +317,11 @@ bloccato, e quelle mani non contano nelle sue medie.
 turno (o devi scegliere il bersaglio di una carta azione), e — se l'app non è in vista —
 una **notifica di sistema** che riporta al tavolo con un tocco; lo stesso a fine round e
 a fine partita. Si attiva da **Setup → Avvisi del tavolo**: suono, vibrazione e
-notifica si accendono e spengono una per una (la notifica chiede il permesso al browser;
-su iPhone serve l'app aggiunta alla Home e iOS 16.4 o più recente). Niente server: è
-tutto sul telefono, dal service worker.
+notifica si accendono e spengono una per una, e ognuno **si prova appena lo accendi**
+(il suono suona, il telefono vibra, un messaggio conferma che è attivo). Gli interruttori
+che questo dispositivo non può onorare restano spenti e lo dicono: gli iPhone non vibrano
+dal browser, e la notifica chiede il permesso (sempre su iPhone serve l'app aggiunta alla
+Home e iOS 16.4 o più recente). Niente server: è tutto sul telefono, dal service worker.
 
 **I bot hanno tre livelli.** In lobby, un tocco sul bot apre il menu: *facile* si ferma
 presto, *normale* rischia finché il bottino è magro, **conta-carte** calcola la
@@ -369,13 +371,18 @@ fila (qualunque cosa sia: numero, modificatore o azione), i punti del round e la
 restano fermi al valore di prima, e chip, note e riga spenta aspettano il verdetto. Solo
 quando la carta è atterrata scivola al suo posto in ordine, e i punti si aggiornano.
 
-**Il giro si legge dall'alto in basso, turno per turno**: in cima c'è sempre **chi deve
-giocare adesso**, sotto chi viene dopo, e così via nel giro (numero sull'avatar: 1 è chi
-apre, 2 chi viene dopo…). A ogni turno la lista **ruota di un posto**, con le righe che
-scivolano al posto nuovo invece di saltarci. Il **tuo** posto non viene spostato in cima:
-si riconosce ovunque finisca dal filo dorato e dall'etichetta **tu**, così vedi il giro
-com'è davvero e resti comunque riconoscibile. A round chiuso la lista si riordina già sul
-giro successivo, e la striscia dice chi aprirà.
+**Il giro si legge dall'alto in basso, e le righe stanno ferme**: in cima **chi apre la
+mano**, sotto chi viene dopo nel giro (numero sull'avatar: 1 è chi apre, 2 chi viene
+dopo…), e lì restano **per tutto il round**. Le facce non si rincorrono su e giù a ogni
+turno: si impara a colpo d'occhio dove sta ognuno, e chi tocca adesso si riconosce
+dalla riga accesa e dalla striscia in cima. La lista si riordina **una volta sola**, a
+round chiuso, sul prossimo che aprirà — e la striscia lo dice. Il **tuo** posto non viene
+spostato in cima: si riconosce dal filo dorato e dall'etichetta **tu**.
+
+Accanto ai punti di ogni riga c'è il **totale provvisorio**: *210 +30 **= 240***, cioè
+dove si arriva fermandosi adesso. Lo stesso numero sta sul pulsante **Mi fermo** e nella
+corsa al traguardo, dove la barra piena sono i punti incassati e la coda chiara il
+bottino del round in corso.
 
 **Lo spareggio, al tavolo**: se il traguardo viene tagliato in parità la striscia annuncia
 *Pareggio a 210 · spareggio fra Anna e Luca: gli altri restano fuori*, il pulsante diventa
@@ -430,21 +437,29 @@ uno dall'altro invece di una griglia tutta uguale:
 
 **Le stagioni.** Un mese di calendario è una stagione: alla fine del mese, chi guida la
 classifica di quel mese (stessa formula: Crown, quota di vittorie, media) ne diventa il
-**campione** e si prende lo **scudetto** — uno scudo smaltato con la cornice d'oro, il
-mese sulla fascia in alto e l'anno grande al centro (*SET 26*), disegnato apposta. Ogni
-mese ha il suo colore, dal blu ghiaccio di gennaio al verde abete di dicembre, e la fascia
-è avorio negli anni pari e inchiostro in quelli dispari: due stagioni non si confondono
-mai. Lo scudetto resta per sempre accanto al nome in classifica e nella **Bacheca** della
-scheda, dove ogni riquadro prende la tinta del suo mese. Valgono le
-partite dal vivo e quelle online insieme; a parità assoluta il titolo si condivide.
+**campione** e si prende **la carta di quel mese**. Non una medaglia e non una coccarda:
+la carta del mazzo di Flip 7 che porta il numero del mese — maggio è la **5**, dicembre è
+la **12** — col colore che quel numero ha nel gioco, la cornice d'oro da campione e l'anno
+nel cartiglio in basso. La faccia è crema negli anni pari e notte in quelli dispari, così
+due edizioni dello stesso mese non si confondono. La carta resta per sempre accanto al
+nome in classifica e nella **Bacheca** della scheda, dove ogni riquadro prende la tinta
+del suo mese.
+
+Per prendersi il titolo bisogna **aver giocato almeno 10 partite in quel mese**: il
+campione è chi ha fatto la stagione, non chi passa di lì una sera fortunata e vince
+l'unica partita a cui si è seduto. Chi non ci arriva resta in classifica ma fuori dalla
+corsa, e un mese che si chiude senza nessuno a quota 10 resta **senza campione** (l'albo
+d'oro lo dice: *titolo non assegnato*). Valgono le partite dal vivo e quelle online
+insieme; a parità assoluta il titolo si condivide.
 
 La **Classifica si apre sulla stagione in corso**, perché il mese conta più del
 totale di sempre: in cima il mese con i giorni che mancano e la barra del tempo, il
-podio del mese con chi è in testa (e lo scudetto ancora in argento), il **campione in
+podio del mese con chi è in testa (e la carta ancora spenta), chi è in corsa per il titolo, il **campione in
 carica** dell'ultimo mese chiuso, poi la classifica del mese, i record del mese e
 l'**albo d'oro**. Lo switch in alto (**Stagione / Generale**, c'è anche un pulsante in
 fondo) porta al generale: le Crown di sempre con i filtri di periodo e provenienza, i
-record, i primati della stanza, il rating Elo e l'andamento. Toccando un mese dell'albo
+record, i primati della stanza, il rating Elo e l'andamento (**Posizione**, **Media
+punti** e **Rating Elo**: tre letture dello stesso storico, una per pulsante). Toccando un mese dell'albo
 si apre la sua pagina: campione, classifica del mese, record del mese, le partite, e il
 pulsante per condividere l'immagine. Non c'è niente da chiudere a mano: si calcola
 dallo storico.
@@ -496,7 +511,9 @@ una vittoria vale +16 e una sconfitta −16; contro uno più forte di 200 punti 
 giocatori al tavolo la partita è un giro di sfide a due contro ognuno degli altri, i
 punti in gioco si dividono per il numero di avversari (una partita a 5 pesa quanto una
 a 2) e la somma degli spostamenti fa sempre zero. Le partite si contano in ordine di
-data, tutte, senza stagioni. La lista mostra rating, picco e lo spostamento dell'ultima
+data, tutte, senza stagioni. Il grafico **Andamento → Rating Elo** lo racconta nel tempo:
+una linea per giocatore, il rating dopo ogni partita, e si tocca una colonna per leggere
+i valori di quel giorno. La lista mostra rating, picco e lo spostamento dell'ultima
 partita (*+12 ultima*), e il pulsante **Come si calcola** apre questa spiegazione con
 gli esempi; la scheda giocatore ha lo stesso riquadro, e il suo rating si tocca per
 riaprire l'ultima partita che l'ha mosso. La formula è `eloRatings` in

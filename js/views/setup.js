@@ -8,7 +8,7 @@ import * as store from "../store.js";
 import { prefs } from "../prefs.js";
 import { esc, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, openSheet, closeSheet, sheet } from "../ui.js";
 import { isFirebaseConfigured, APP_VERSION } from "../config.js";
-import { NOTIFY_KEYS, wantsSound, wantsVibration, wantsPush, canPush, pushPermission, requestPush, ding, buzz } from "../notify.js";
+import { NOTIFY_KEYS, wantsSound, wantsVibration, wantsPush, canPush, canVibrate, canSound, pushPermission, requestPush, unlockAudio, ding, buzz } from "../notify.js";
 import { icon } from "../icons.js";
 import { applyTheme } from "../theme.js";
 import { avatar, avatarHtml, playerAvatar, loadPhoto, centerCrop, cropToAvatarImage, openAvatarCropper, symbolSvg, AVATAR_SYMBOLS, AVATAR_COLORS } from "../avatar.js";
@@ -222,8 +222,21 @@ export const setupView = {
 
   changes: {
     "theme"(ctx, el) { prefs.set("theme", el.value); applyTheme(); },
-    "notify-sound"(ctx, el) { prefs.set(NOTIFY_KEYS.sound, el.checked); if (el.checked) ding("turn"); },
-    "notify-vibrate"(ctx, el) { prefs.set(NOTIFY_KEYS.vibrate, el.checked); if (el.checked) buzz(); },
+    // il tocco sull'interruttore e' il gesto che serve per sbloccare l'audio:
+    // si prova subito il suono, cosi' si sente che e' attivo davvero
+    "notify-sound"(ctx, el) {
+      prefs.set(NOTIFY_KEYS.sound, el.checked);
+      if (!el.checked) return toast("Suono spento");
+      unlockAudio();
+      ding("turn");
+      toast(canSound() ? "Suono attivo: lo senti quando tocca a te" : "Questo browser non sa produrre suoni", canSound() ? "info" : "warn");
+    },
+    "notify-vibrate"(ctx, el) {
+      prefs.set(NOTIFY_KEYS.vibrate, el.checked);
+      if (!el.checked) return toast("Vibrazione spenta");
+      buzz();
+      toast(canVibrate() ? "Vibrazione attiva: la senti quando tocca a te" : "Questo dispositivo non vibra dal browser", canVibrate() ? "info" : "warn");
+    },
     async "notify-push"(ctx, el) {
       if (!el.checked) { prefs.set(NOTIFY_KEYS.push, false); return; }
       const res = await requestPush();
@@ -321,12 +334,12 @@ function alertsCard() {
     <section class="card">
       <div class="card-head">${icon("bell")}<span class="card-title">Avvisi del tavolo</span></div>
       <p class="muted small">Quando al tavolo online tocca a te, l'app te lo dice: così si gioca anche una mano ogni tanto, senza restare a fissare lo schermo.</p>
-      <label class="switch-row"><span>${icon("sound", "tiny")} Suono</span><input type="checkbox" data-change="notify-sound" ${wantsSound() ? "checked" : ""}></label>
-      <label class="switch-row"><span>${icon("vibrate", "tiny")} Vibrazione</span><input type="checkbox" data-change="notify-vibrate" ${wantsVibration() ? "checked" : ""}></label>
+      <label class="switch-row"><span>${icon("sound", "tiny")} Suono</span><input type="checkbox" data-change="notify-sound" ${wantsSound() && canSound() ? "checked" : ""} ${canSound() ? "" : "disabled"}></label>
+      <label class="switch-row"><span>${icon("vibrate", "tiny")} Vibrazione</span><input type="checkbox" data-change="notify-vibrate" ${wantsVibration() && canVibrate() ? "checked" : ""} ${canVibrate() ? "" : "disabled"}></label>
       <label class="switch-row"><span>${icon("bell", "tiny")} Notifica a schermo spento</span><input type="checkbox" data-change="notify-push" ${wantsPush() && perm === "granted" ? "checked" : ""} ${canPush() && perm !== "denied" ? "" : "disabled"}></label>
       <p class="hint">${!canPush() ? "Le notifiche non sono disponibili in questo browser: su iPhone servono l'app aggiunta alla Home e iOS 16.4 o più recente."
         : perm === "denied" ? "Le notifiche sono bloccate dalle impostazioni del browser per questo sito."
-        : "La notifica arriva solo quando l'app non è in vista; suono e vibrazione anche mentre la guardi."}</p>
+        : "La notifica arriva solo quando l'app non è in vista; suono e vibrazione anche mentre la guardi."}${canVibrate() ? "" : " Questo dispositivo non vibra dal browser (gli iPhone non lo fanno): l'interruttore resta spento."}</p>
     </section>`;
 }
 
