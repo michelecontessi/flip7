@@ -1,13 +1,15 @@
 // ---------------------------------------------------------------------------
-// Vista "Classifica": Crown perpetue. Una vittoria = una Crown.
-// Sotto: l'albo d'oro delle stagioni (un mese = una stagione, il campione
-// prende la coccarda), i record scherzosi, i primati della stanza, il rating
-// Elo e l'andamento nel tempo. Toccando un giocatore si apre la sua scheda.
+// Vista "Classifica". In cima la STAGIONE in corso (un mese = una stagione):
+// il podio del mese, la classifica del mese, i record del mese e l'albo
+// d'oro dei campioni passati. Con lo switch si passa al GENERALE: le Crown
+// perpetue (una vittoria = una Crown) con i filtri, i record, i primati
+// della stanza, il rating Elo e l'andamento nel tempo. Toccando un giocatore
+// si apre la sua scheda.
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { avatar } from "../avatar.js";
 import { icon, crownEmblem, awardEmblem, seasonBadge } from "../icons.js";
-import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList, seasons, seasonTitles, seasonLabel, headToHead, roomRecords, eloRatings, ELO_START, monthKey, MONTHS_IT } from "../stats.js";
+import { leaderboard, sortLeaderboard, leaderboardTrend, playerHighlights, awards, awardRanking, PERIODS, SOURCES, matchesSource, historyList, seasons, seasonTitles, seasonLabel, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, monthKey, MONTHS_IT } from "../stats.js";
 import { openGameSheet } from "./history.js";
 import { getRoom } from "../store.js";
 import { sharePodium } from "../share.js";
@@ -34,7 +36,10 @@ function gameLink(key, r, cls = "rewatch") {
     Vedi ${icon("chevron", "tiny")}</button>`;
 }
 
-const localState = { period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null, showElo: false, showRecords: true, showSeasons: true };
+// `scope`: "season" = il mese in corso (la vista di partenza), "all" = il generale
+const localState = { scope: "season", period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null, showElo: false, showHow: false, showRecords: true, showSeasons: true };
+/** "+12" / "−8" / "±0", per gli spostamenti di rating. */
+const signed = (d) => (d > 0 ? `+${d}` : d < 0 ? `−${Math.abs(d)}` : "±0");
 const filters = () => ({ period: localState.period, source: localState.source });
 
 const COLUMNS = [
@@ -93,10 +98,8 @@ function badgeRow(list, max = 3, cls = "xs") {
  * al centro sotto la corona. Il podio segue sempre le Crown, qualunque
  * ordinamento sia attivo nella lista sotto.
  */
-function renderPodium(rows, gamesCount) {
-  const top = sortLeaderboard(rows.filter((r) => r.crowns > 0), "crowns").slice(0, 3);
-  if (!top.length) return "";
-  const leader = top[0];
+/** I tre gradini, dati i primi tre (gia' ordinati). Serve al generale e alla stagione. */
+function podiumCols(top) {
   const col = (r, place) => r ? `
     <div class="pod-col p${place}">
       ${place === 1 ? `<div class="pod-crown">${crownEmblem("big")}</div>` : ""}
@@ -104,45 +107,169 @@ function renderPodium(rows, gamesCount) {
       <span class="pod-name">${esc(r.name)}</span>
       <div class="pod-step"><span class="pod-tally">${crownEmblem("mini")}<b>${r.crowns}</b></span></div>
     </div>` : "";
+  return `<div class="pod-row">${col(top[1], 2)}${col(top[0], 1)}${col(top[2], 3)}</div>`;
+}
+
+function renderPodium(rows, gamesCount) {
+  const top = sortLeaderboard(rows.filter((r) => r.crowns > 0), "crowns").slice(0, 3);
+  if (!top.length) return "";
+  const leader = top[0];
   return `
     <section class="crown-hero holo podium">
       <span class="holo-sweep" aria-hidden="true"></span>
-      <div class="pod-row">
-        ${col(top[1], 2)}${col(top[0], 1)}${col(top[2], 3)}
-      </div>
+      ${podiumCols(top)}
       <div class="ch-sub">${leader.crowns === 1 ? "1 vittoria" : leader.crowns + " vittorie"} su ${gamesCount === 1 ? "1 partita" : gamesCount + " partite"} · media ${fmtNum(leader.avg, 1)}</div>
     </section>`;
 }
 
+/** Lo switch in cima: la stagione in corso, oppure il generale di sempre. */
+function renderScopeSwitch() {
+  const on = (s) => (localState.scope === s ? "on" : "");
+  return `
+    <div class="scope-switch" role="tablist" aria-label="Classifica">
+      <button class="${on("season")}" role="tab" aria-selected="${localState.scope === "season"}" data-action="lb-scope" data-s="season">${icon("medal", "tiny")} Stagione</button>
+      <button class="${on("all")}" role="tab" aria-selected="${localState.scope === "all"}" data-action="lb-scope" data-s="all">${icon("crownFill", "tiny")} Generale</button>
+    </div>`;
+}
+
+/** L'intestazione delle colonne, con i tasti di ordinamento (condivisi fra stagione e generale). */
+function renderListHead() {
+  return `
+    <div class="lb-head">
+      <span></span>
+      <span>Giocatore</span>
+      ${COLUMNS.map((c) => `
+        <button class="lb-sort ${localState.sort === c.key ? "on" : ""}" data-action="lb-sort" data-k="${c.key}">
+          ${c.icon ? icon(c.icon, "tiny") : c.label}
+          ${localState.sort === c.key ? `<i class="arrow ${localState.dir === -1 ? "down" : "up"}">${icon("chevron", "tiny")}</i>` : ""}
+        </button>`).join("")}
+    </div>`;
+}
+
+/** Una riga della classifica (stessa forma nel generale e nella stagione). */
+function listRow(r, i, me, titles) {
+  return `
+    <li class="lbrow ${r.playerId === me ? "me" : ""} ${r.archived ? "arch" : ""} ${i === 0 ? "top" : ""}"
+        data-action="lb-detail" data-id="${r.playerId}">
+      <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
+      <span class="lbname">
+        ${avatar(r.playerId, r.name, "sm")}
+        <span class="txt">${esc(r.name)}${badgeRow(titles[r.playerId])}
+          <small>rec. ${r.best}</small></span>
+      </span>
+      <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
+      ${winRing(r.winRate)}
+      <span class="col avg">${fmtNum(r.avg, 1)}</span>
+      <span class="col games">${r.games}</span>
+    </li>`;
+}
+
+const sourceSelect = () => `
+  <label class="period-select">
+    <select data-change="lb-source">
+      ${Object.entries(SOURCES).map(([k, v]) => `<option value="${k}" ${localState.source === k ? "selected" : ""}>${v.label}</option>`).join("")}
+    </select>
+    ${icon("chevron", "tiny")}
+  </label>`;
+
 // ---------------------------------------------------------------------------
-// Stagioni: il mese in corso in cima (chi e' in testa), poi l'albo d'oro.
+// La stagione in corso: e' la prima cosa che si vede. In alto il mese con i
+// giorni che mancano e la barra del tempo, il podio del mese e chi e' in
+// testa, il campione in carica (l'ultimo mese chiuso); sotto la classifica
+// del mese, l'albo d'oro e i record del mese.
 // ---------------------------------------------------------------------------
-function renderSeasons(room) {
-  const list = seasons(room.history, room.players, { source: localState.source });
-  if (!list.length) return "";
-  const live = list.find((s) => !s.closed);
+function renderSeasonHome(room, me) {
+  const now = Date.now();
+  const list = seasons(room.history, room.players, { source: localState.source, now });
+  const key = monthKey(now);
+  const live = list.find((s) => s.key === key) || null;
   const closed = list.filter((s) => s.closed);
+  const holder = closed[0] || null;
+  const d = new Date(now);
+  const start = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+  const daysLeft = Math.max(1, Math.ceil((end - now) / 864e5));
+  const pct = Math.max(2, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
+  const monthName = MONTHS_IT[d.getMonth()];
+  const lastDay = new Date(end - 1).getDate();
+  const rows = live ? live.rows : [];
+  const top = rows.filter((r) => r.crowns > 0).slice(0, 3);
+  const leader = live ? live.leader : null;
+  const titles = seasonTitles(room.history, room.players, { source: localState.source, now });
+
+  const hero = `
+    <section class="season-home holo">
+      <span class="holo-sweep" aria-hidden="true"></span>
+      <div class="sn-head">
+        ${seasonBadge(key, { cls: "md", muted: true, title: `${monthName} ${d.getFullYear()}, in corso` })}
+        <div class="sn-title">
+          <span class="sn-kicker">Stagione in corso</span>
+          <b>${monthName} ${d.getFullYear()}</b>
+        </div>
+        <span class="sn-days" title="Il titolo si assegna il ${lastDay} ${monthName}"><b>${daysLeft}</b><small>${daysLeft === 1 ? "giorno" : "giorni"}</small></span>
+      </div>
+      <div class="sn-track" aria-hidden="true"><i style="width:${pct}%"></i></div>
+      ${top.length ? `
+      ${podiumCols(top)}
+      <div class="ch-sub">${leader
+        ? `in testa <b>${esc(leader.name)}</b> con ${leader.crowns === 1 ? "1 Crown" : leader.crowns + " Crown"} su ${live.games === 1 ? "1 partita" : live.games + " partite"}${live.tie ? " · a pari merito" : ""} · il titolo si assegna il ${lastDay}`
+        : ""}</div>` : `
+      <div class="sn-empty">
+        ${crownEmblem("big")}
+        <b>Ancora nessuna partita a ${monthName}</b>
+        <small>La prima Crown del mese è in palio: chi guida la classifica il ${lastDay} ${monthName} diventa il campione e si prende la coccarda.</small>
+      </div>`}
+      ${holder ? `
+      <button class="sn-holder" data-action="season-open" data-key="${holder.key}">
+        ${seasonBadge(holder.key, { cls: "sm" })}
+        <span class="sr-avas">${holder.champions.map((r) => avatar(r.playerId, r.name, "sm")).join("")}</span>
+        <span class="hs-txt">
+          <small>Campion${holder.champions.length > 1 ? "i" : "e"} in carica · ${esc(holder.short)}</small>
+          <b>${esc(holder.champions.map((r) => r.name).join(" e "))}</b>
+        </span>
+        ${icon("chevron", "tiny turn-r")}
+      </button>` : ""}
+    </section>`;
+
+  const table = live ? `
+    <section class="card tight">
+      <div class="card-head">
+        <h2 class="section-title">Classifica di ${monthName}</h2>
+        <span class="muted small">${live.games === 1 ? "1 partita" : live.games + " partite"}</span>
+        <span class="ml-auto"></span>
+        ${sourceSelect()}
+      </div>
+      ${renderListHead()}
+      <ul class="lb-list">${sortRows(rows).map((r, i) => listRow(r, i, me, titles)).join("")}</ul>
+      <p class="foot-note">Il campione del mese è chi guida questa classifica l'ultimo giorno: prima le Crown, poi la quota di vittorie, poi la media.</p>
+    </section>` : "";
+
+  return `
+    ${hero}
+    ${table}
+    ${renderGoldBook(closed)}
+    ${live ? renderAwards(rows, { month: key, title: `I record di ${monthName}` }) : ""}
+    <button class="btn ghost big" data-action="lb-scope" data-s="all">${icon("crownFill", "tiny")} Vedi la classifica generale</button>`;
+}
+
+/** L'albo d'oro: i campioni dei mesi chiusi, dal piu' recente. */
+function renderGoldBook(closed) {
+  if (!closed.length) {
+    return `
+    <section class="card">
+      <div class="card-head"><h2 class="section-title">Albo d'oro</h2></div>
+      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione, e la coccarda resta per sempre nella sua scheda.</p>
+    </section>`;
+  }
   const open = localState.showSeasons;
   return `
     <section class="card">
       <button class="card-head as-button" data-action="lb-toggle" data-k="showSeasons" aria-expanded="${open}">
-        <h2 class="section-title">Stagioni</h2>
-        <span class="muted small ml-auto">${closed.length === 1 ? "1 titolo assegnato" : `${closed.length} titoli assegnati`}</span>
+        <h2 class="section-title">Albo d'oro</h2>
+        <span class="muted small ml-auto">${closed.length === 1 ? "1 titolo" : `${closed.length} titoli`}</span>
         <span class="chev ${open ? "open" : ""}">${icon("chevron")}</span>
       </button>
       ${open ? `
-      ${live ? `
-      <button class="season-live" data-action="season-open" data-key="${live.key}">
-        ${seasonBadge(live.key, { muted: true, title: `${live.label}, in corso` })}
-        <span class="sl-txt">
-          <b>${esc(live.label)} · in corso</b>
-          <small>${live.leader
-            ? `in testa <b>${esc(live.leader.name)}</b> con ${live.leader.crowns === 1 ? "1 Crown" : live.leader.crowns + " Crown"} su ${live.games === 1 ? "1 partita" : live.games + " partite"}${live.tie ? " · a pari merito" : ""}`
-            : "ancora nessuna partita"}</small>
-        </span>
-        ${icon("chevron", "tiny turn-r")}
-      </button>` : ""}
-      ${closed.length ? `
       <ul class="season-list">
         ${closed.map((s) => `
           <li>
@@ -156,7 +283,7 @@ function renderSeasons(room) {
               ${icon("chevron", "tiny turn-r")}
             </button>
           </li>`).join("")}
-      </ul>` : `<p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione.</p>`}
+      </ul>
       <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online. La coccarda resta per sempre nella scheda del campione.</p>` : ""}
     </section>`;
 }
@@ -165,13 +292,13 @@ function renderSeasons(room) {
 // Record: titoli scherzosi (piu' Flip 7, piu' sballi, piu' congelate...). Il nome
 // mostrato e' quello del vincitore; a pari merito compaiono entrambi.
 // ---------------------------------------------------------------------------
-function renderAwards(rows) {
+function renderAwards(rows, { month = "", title = "Record" } = {}) {
   const list = awards(rows);
   if (!list.length) return "";
   return `
     <section class="card">
       <div class="card-head">
-        <h2 class="section-title">Record</h2>
+        <h2 class="section-title">${title}</h2>
       </div>
       <div class="award-grid">
         ${list.map((a) => {
@@ -181,7 +308,7 @@ function renderAwards(rows) {
             : `${names[0]} +${names.length - 1}`;
           const solo = a.winners.length === 1 ? a.winners[0] : null;
           return `
-          <div class="award tone-${a.tone}" data-action="award-detail" data-id="${a.id}">
+          <div class="award tone-${a.tone}" data-action="award-detail" data-id="${a.id}" ${month ? `data-month="${month}"` : ""}>
             ${awardEmblem(a.emblem)}
             <span class="award-title">${a.title}</span>
             <small class="award-desc">${a.desc}</small>
@@ -200,7 +327,7 @@ function renderAwards(rows) {
 // ---------------------------------------------------------------------------
 // I primati della stanza: la partita piu' lunga, il punteggio di sempre...
 // ---------------------------------------------------------------------------
-const RECORD_ICONS = { longest: "clock", shortest: "burst", topscore: "target", widest: "flag", tightest: "swords", crowded: "users", richest: "cardFan", night: "history" };
+const RECORD_ICONS = { longest: "clock", shortest: "burst", topscore: "target", widest: "flag", tightest: "swords", richest: "cardFan" };
 function renderRoomRecords(room) {
   const list = roomRecords(room.history, room.players, { source: localState.source });
   if (!list.length) return "";
@@ -230,15 +357,34 @@ function renderRoomRecords(room) {
 // ---------------------------------------------------------------------------
 // Rating Elo: un'altra lettura della classifica, che pesa CHI hai battuto.
 // ---------------------------------------------------------------------------
+/** Quanto vale, in punti tondi, vincere o perdere un duello a due partendo da 1000 contro 1000 + diff. */
+const swing = (diff, win) => Math.round(Math.abs(eloSwing(ELO_START, ELO_START + diff, win ? 1 : 0)));
+
+/** Il blocco "come si calcola": stesso testo in classifica e nella scheda giocatore. */
+function eloHowBox() {
+  return `
+    <div class="how-box">
+      <p><b>Tutti partono da ${ELO_START}.</b> Il rating non conta <i>quante</i> partite vinci ma <b>chi</b> ti lasci dietro: prima di ogni partita, dalla differenza fra i rating, si stima quanto è probabile che tu finisca davanti a ciascuno degli altri; poi si guarda com'è andata davvero e ci si sposta di conseguenza.</p>
+      <ul class="how-ex">
+        <li><span>Alla pari (${ELO_START} contro ${ELO_START})</span><b>vinci +${swing(0, true)} · perdi −${swing(0, false)}</b></li>
+        <li><span>Contro uno più forte di 200</span><b>vinci +${swing(200, true)} · perdi −${swing(200, false)}</b></li>
+        <li><span>Contro uno più debole di 200</span><b>vinci +${swing(-200, true)} · perdi −${swing(-200, false)}</b></li>
+      </ul>
+      <p>Con più giocatori al tavolo la partita vale come un giro di <b>sfide a due</b> contro ognuno degli altri: davanti = vinta, dietro = persa, pari punti = mezza. I punti in gioco si dividono per il numero di avversari, così una partita a 5 pesa quanto una a 2, e quello che uno guadagna lo perdono gli altri: la somma fa sempre zero.</p>
+      <p>Le partite si contano <b>in ordine di data</b>, tutte quelle dello storico, senza stagioni: il rating è la storia intera di ognuno. Il <b>picco</b> è il valore più alto mai toccato; <b>ultima</b> è quanto ci si è mossi nell'ultima partita giocata.</p>
+    </div>`;
+}
+
 function renderElo(room, me) {
   const list = eloRatings(room.history, room.players, { source: localState.source });
   if (list.length < 2) return "";
   const open = localState.showElo;
+  const how = localState.showHow;
   return `
     <section class="card">
       <button class="card-head as-button" data-action="lb-toggle" data-k="showElo" aria-expanded="${open}">
         <h2 class="section-title">Rating Elo</h2>
-        <span class="muted small ml-auto">parte da ${ELO_START}</span>
+        <span class="muted small ml-auto">chi batte i forti sale di più</span>
         <span class="chev ${open ? "open" : ""}">${icon("chevron")}</span>
       </button>
       ${open ? `
@@ -248,10 +394,14 @@ function renderElo(room, me) {
             <span class="rank ${r.rank <= 3 ? "medal m" + r.rank : ""}">${r.rank}</span>
             ${avatar(r.playerId, r.name, "sm")}
             <span class="elo-name">${esc(r.name)}<small>${r.games === 1 ? "1 partita" : r.games + " partite"} · picco ${r.peak}</small></span>
-            <b class="${r.elo >= ELO_START ? "up" : "down"}">${r.elo}</b>
+            <span class="elo-val">
+              <b class="${r.elo >= ELO_START ? "up" : "down"}">${r.elo}</b>
+              <small class="${r.last > 0 ? "up" : r.last < 0 ? "down" : ""}">${signed(r.last)} ultima</small>
+            </span>
           </li>`).join("")}
       </ul>
-      <p class="foot-note">Batti chi ha un rating più alto del tuo e sali di più; ogni partita conta come uno scontro con ciascuno degli altri.</p>` : ""}
+      <button class="how-toggle" data-action="lb-toggle" data-k="showHow" aria-expanded="${how}">${icon("eye", "tiny")} Come si calcola ${icon("chevron", `tiny ${how ? "turn-u" : ""}`)}</button>
+      ${how ? eloHowBox() : ""}` : ""}
     </section>`;
 }
 
@@ -376,14 +526,47 @@ if (typeof document !== "undefined") {
   });
 }
 
+/** Il generale: le Crown di sempre, con i filtri di periodo e provenienza. */
+function renderGeneral(room, me) {
+  const { rows, gamesCount } = leaderboard(room.history, room.players, filters());
+  const sorted = sortRows(rows);
+  const titles = seasonTitles(room.history, room.players, { source: localState.source });
+  return `
+    ${renderPodium(rows, gamesCount)}
+
+    <section class="card tight">
+      <div class="card-head">
+        <h2 class="section-title">Classifica</h2>
+        <label class="period-select ml-auto">
+          <select data-change="lb-period">
+            ${Object.entries(PERIODS).map(([k, v]) => `<option value="${k}" ${localState.period === k ? "selected" : ""}>${v.label}</option>`).join("")}
+          </select>
+          ${icon("chevron", "tiny")}
+        </label>
+        ${sourceSelect()}
+      </div>
+      ${rows.length ? `
+      ${renderListHead()}
+      <ul class="lb-list">${sorted.map((r, i) => listRow(r, i, me, titles)).join("")}</ul>` : `
+      <p class="muted small">Nessuna partita in questo periodo.</p>`}
+    </section>
+
+    ${renderAwards(rows)}
+
+    ${renderRoomRecords(room)}
+
+    ${renderElo(room, me)}
+
+    ${renderTrend(room, me)}
+
+    <p class="foot-note">Una vittoria = una Crown, e l'anello dorato è la quota di partite vinte.
+      Tocca un giocatore per la sua scheda, un record per la classifica di quella statistica.</p>`;
+}
+
 export const leaderboardView = {
   render(ctx) {
     const { room, me } = ctx;
-    const { rows, gamesCount } = leaderboard(room.history, room.players, filters());
-    const sorted = sortRows(rows);
-    const titles = seasonTitles(room.history, room.players, { source: localState.source });
-
-    if (!rows.length) {
+    if (!Object.keys(room.history || {}).length) {
       return `
         <section class="card empty-state">
           <div class="empty-ico gold">${icon("crownFill")}</div>
@@ -392,67 +575,9 @@ export const leaderboardView = {
           <button class="btn primary" data-action="goto-history">${icon("plus", "tiny")} Aggiungi partita passata</button>
         </section>`;
     }
-
     return `
-      ${renderPodium(rows, gamesCount)}
-
-      <section class="card tight">
-        <div class="card-head">
-          <h2 class="section-title">Classifica</h2>
-          <label class="period-select ml-auto">
-            <select data-change="lb-period">
-              ${Object.entries(PERIODS).map(([k, v]) => `<option value="${k}" ${localState.period === k ? "selected" : ""}>${v.label}</option>`).join("")}
-            </select>
-            ${icon("chevron", "tiny")}
-          </label>
-          <label class="period-select">
-            <select data-change="lb-source">
-              ${Object.entries(SOURCES).map(([k, v]) => `<option value="${k}" ${localState.source === k ? "selected" : ""}>${v.label}</option>`).join("")}
-            </select>
-            ${icon("chevron", "tiny")}
-          </label>
-        </div>
-
-        <div class="lb-head">
-          <span></span>
-          <span>Giocatore</span>
-          ${COLUMNS.map((c) => `
-            <button class="lb-sort ${localState.sort === c.key ? "on" : ""}" data-action="lb-sort" data-k="${c.key}">
-              ${c.icon ? icon(c.icon, "tiny") : c.label}
-              ${localState.sort === c.key ? `<i class="arrow ${localState.dir === -1 ? "down" : "up"}">${icon("chevron", "tiny")}</i>` : ""}
-            </button>`).join("")}
-        </div>
-
-        <ul class="lb-list">
-          ${sorted.map((r, i) => `
-            <li class="lbrow ${r.playerId === me ? "me" : ""} ${r.archived ? "arch" : ""} ${i === 0 ? "top" : ""}"
-                data-action="lb-detail" data-id="${r.playerId}">
-              <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
-              <span class="lbname">
-                ${avatar(r.playerId, r.name, "sm")}
-                <span class="txt">${esc(r.name)}${badgeRow(titles[r.playerId])}
-                  <small>rec. ${r.best}</small></span>
-              </span>
-              <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
-              ${winRing(r.winRate)}
-              <span class="col avg">${fmtNum(r.avg, 1)}</span>
-              <span class="col games">${r.games}</span>
-            </li>`).join("")}
-        </ul>
-      </section>
-
-      ${renderSeasons(room)}
-
-      ${renderAwards(rows)}
-
-      ${renderRoomRecords(room)}
-
-      ${renderElo(room, me)}
-
-      ${renderTrend(room, me)}
-
-      <p class="foot-note">Una vittoria = una Crown, e l'anello dorato è la quota di partite vinte.
-        Tocca un giocatore per la sua scheda, un record per la classifica di quella statistica.</p>`;
+      ${renderScopeSwitch()}
+      ${localState.scope === "season" ? renderSeasonHome(room, me) : renderGeneral(room, me)}`;
   },
 
   actions: {
@@ -462,6 +587,11 @@ export const leaderboardView = {
       else { localState.sort = k; localState.dir = -1; }
     },
     "lb-toggle"(ctx, el) { localState[el.dataset.k] = !localState[el.dataset.k]; },
+    "lb-scope"(ctx, el) {
+      localState.scope = el.dataset.s === "all" ? "all" : "season";
+      localState.trendSel = null;
+      window.scrollTo({ top: 0 });
+    },
     "trend-metric"(ctx, el) { localState.trendMetric = el.dataset.m; localState.trendSel = null; },
     "trend-point"(ctx, el) {
       const box = document.querySelector(".chart-scroll.from-end");
@@ -476,10 +606,13 @@ export const leaderboardView = {
     },
     "goto-history"() { location.hash = "#storico"; },
     "award-detail"(ctx, el) {
-      const { rows } = leaderboard(ctx.room.history, ctx.room.players, filters());
+      // dalla stagione la classifica del record e' quella del mese
+      const month = el.dataset.month || "";
+      const season = month ? seasons(ctx.room.history, ctx.room.players, { source: localState.source }).find((s) => s.key === month) : null;
+      const rows = season ? season.rows : leaderboard(ctx.room.history, ctx.room.players, filters()).rows;
       const detail = awardRanking(rows, el.dataset.id);
       if (!detail || !detail.rows.length) return;
-      openPage(detail, renderAwardPage);
+      openPage({ ...detail, scope: season ? season.label : "" }, renderAwardPage);
       return "page";
     },
     "award-game"(ctx, el) {
@@ -643,6 +776,7 @@ function renderAwardPage(a) {
         ${awardEmblem(a.emblem)}
         <span class="award-title">${a.title}</span>
         <small class="award-desc">${a.desc}</small>
+        ${a.scope ? `<span class="award-scope">${esc(a.scope)}</span>` : ""}
       </section>
 
       <section class="card tight">
@@ -718,27 +852,45 @@ function renderTitles(titles) {
     </section>`;
 }
 
-/** Testa a testa: contro ognuno degli altri, chi e' finito davanti. */
-function renderHeadToHead(h2h) {
+/**
+ * Testa a testa: un duello per ogni avversario. A sinistra il giocatore della
+ * scheda, a destra l'altro, in mezzo quante volte e' finito DAVANTI e quante
+ * DIETRO (scritto sotto i numeri, cosi' non si deve indovinare), il verdetto
+ * e i dettagli: partite insieme, pari, vittorie di ciascuno, medie.
+ */
+function renderHeadToHead(h2h, pid, name) {
   if (!h2h.length) return "";
+  const first = (s) => String(s || "").trim().split(/\s+/)[0] || "?";
+  const mine = first(name);
   return `
     <section class="card">
-      <div class="card-head"><h2 class="section-title">Testa a testa</h2><span class="muted small ml-auto">davanti · pari · dietro</span></div>
+      <div class="card-head"><h2 class="section-title">Testa a testa</h2></div>
+      <p class="h2h-intro">Nelle partite giocate insieme, quante volte ${esc(mine)} ha chiuso <b class="up">davanti</b> e quante <b class="down">dietro</b> a ciascuno degli altri.</p>
       <ul class="h2h-list">
         ${h2h.map((r) => {
           const tot = r.ahead + r.even + r.behind || 1;
+          const v = r.ahead > r.behind ? { cls: "up", txt: r.behind === 0 ? "sempre davanti" : "in vantaggio" }
+            : r.ahead < r.behind ? { cls: "down", txt: r.ahead === 0 ? "sempre dietro" : "in svantaggio" }
+            : { cls: "", txt: "in parità" };
           return `
-          <li data-action="lb-detail" data-id="${r.playerId}">
-            ${avatar(r.playerId, r.name, "sm")}
-            <span class="h2h-txt">
-              <b>${esc(r.name)}</b>
-              <small>${r.games === 1 ? "1 partita insieme" : r.games + " partite insieme"} · Crown ${r.myCrowns}–${r.theirCrowns} · media ${fmtNum(r.myAvg, 0)} contro ${fmtNum(r.theirAvg, 0)}</small>
-              <span class="h2h-bar" aria-hidden="true"><i class="a" style="width:${(r.ahead / tot * 100).toFixed(1)}%"></i><i class="e" style="width:${(r.even / tot * 100).toFixed(1)}%"></i><i class="b" style="width:${(r.behind / tot * 100).toFixed(1)}%"></i></span>
-            </span>
-            <span class="h2h-score ${r.ahead > r.behind ? "up" : r.ahead < r.behind ? "down" : ""}"><b>${r.ahead}</b>${r.even ? `<i>${r.even}</i>` : ""}<b>${r.behind}</b></span>
+          <li data-action="lb-detail" data-id="${r.playerId}" title="Apri la scheda di ${esc(r.name)}">
+            <div class="h2h-duel">
+              <span class="h2h-side me">${avatar(pid, name, "sm")}<small>${esc(mine)}</small></span>
+              <span class="h2h-mid">
+                <span class="h2h-num"><b class="up">${r.ahead}</b><i>–</i><b class="down">${r.behind}</b></span>
+                <span class="h2h-lbl"><small>davanti</small><small>dietro</small></span>
+              </span>
+              <span class="h2h-side">${avatar(r.playerId, r.name, "sm")}<small>${esc(first(r.name))}</small></span>
+            </div>
+            <span class="h2h-bar" aria-hidden="true"><i class="a" style="width:${(r.ahead / tot * 100).toFixed(1)}%"></i><i class="e" style="width:${(r.even / tot * 100).toFixed(1)}%"></i><i class="b" style="width:${(r.behind / tot * 100).toFixed(1)}%"></i></span>
+            <div class="h2h-foot">
+              <span class="h2h-verdict ${v.cls}">${v.txt}</span>
+              <small>${r.games === 1 ? "1 partita insieme" : r.games + " partite insieme"}${r.even ? ` · ${r.even} alla pari` : ""} · vittorie ${r.myCrowns} a ${r.theirCrowns} · media ${fmtNum(r.myAvg, 0)} contro ${fmtNum(r.theirAvg, 0)}</small>
+            </div>
           </li>`;
         }).join("")}
       </ul>
+      <p class="foot-note">"Davanti" vuol dire più punti dell'altro in quella partita, anche senza vincerla. Le vittorie sono le Crown di ciascuno nelle partite fatte insieme.</p>
     </section>`;
 }
 
@@ -794,9 +946,9 @@ function renderPlayerPage(s) {
           <span>di partite vinte<small>${row.crowns} su ${row.games}</small></span>
         </div>
         ${elo ? `
-        <div class="hl tone-silver">
+        <div class="hl tone-silver ${elo.lastGameId ? "tap" : ""}" ${elo.lastGameId ? `data-action="award-game" data-g="${elo.lastGameId}" data-note="${esc(`${signed(elo.last)} di rating in questa partita`)}"` : ""}>
           <b>${elo.elo}</b>
-          <span>rating Elo<small>${elo.rank}º in stanza · picco ${elo.peak}</small></span>
+          <span>rating Elo<small>${elo.rank}º in stanza · ${signed(elo.last)} nell'ultima · picco ${elo.peak}</small></span>
         </div>` : ""}
         ${h.detailedGames ? `
           <div class="hl tone-gold">
@@ -856,7 +1008,17 @@ function renderPlayerPage(s) {
 
       ${renderTitles(titles)}
 
-      ${renderHeadToHead(h2h)}
+      ${renderHeadToHead(h2h, pid, row.name)}
+
+      ${elo ? `
+      <section class="card">
+        <button class="card-head as-button" data-action="lb-toggle" data-k="showHow" aria-expanded="${localState.showHow}">
+          <h2 class="section-title">Il rating, spiegato</h2>
+          <span class="muted small ml-auto">${elo.elo} · ${elo.rank}º</span>
+          <span class="chev ${localState.showHow ? "open" : ""}">${icon("chevron")}</span>
+        </button>
+        ${localState.showHow ? eloHowBox() : ""}
+      </section>` : ""}
 
       ${renderChart(games, pid)}
 

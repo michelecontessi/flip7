@@ -327,10 +327,11 @@ probabilità di sballare dalle carte già uscite (scarti, mani in vista, carta
 parcheggiata) e pesca finché in media conviene — senza sbirciare il mazzo. In due, con
 un conta-carte, la partita regge.
 
-**Modalità allenamento** (dal menu **⋯** del tavolo o da Setup → Avvisi): al tuo turno,
-sotto *Pesca* e *Mi fermo*, vedi il **rischio di sballo** alla prossima carta e quanto
-vale in media pescare, con lo stesso conto del bot. Utile per imparare; per il brivido
-meglio spenta.
+**Modalità allenamento** (dal menu **⋯** del tavolo): al tuo turno, sotto *Pesca* e
+*Mi fermo*, vedi il **rischio di sballo** alla prossima carta e quanto vale in media
+pescare, con lo stesso conto del bot. Esiste solo dove ha senso: a partita in corso e
+con almeno un bot seduto. Fra sole persone la voce non compare e il rischio non si
+mostra mai. Utile per imparare; per il brivido meglio spenta.
 
 **Reazioni.** Sotto le righe del tavolo ci sono sei sticker disegnati (risata, wow,
 pianto, occhiali da sole, fuoco, pollice): un tocco e lo sticker sbuca per qualche
@@ -432,11 +433,18 @@ classifica di quel mese (stessa formula: Crown, quota di vittorie, media) ne div
 **campione** e si prende la **coccarda** — una rosetta dorata con il mese e l'anno
 (*AGO 26*), i nastri del colore dell'anno — disegnata apposta, che resta per sempre
 accanto al suo nome in classifica e nella **Bacheca** della sua scheda. Valgono le
-partite dal vivo e quelle online insieme; a parità assoluta il titolo si condivide. Il
-riquadro **Stagioni** in Classifica mostra il mese in corso (chi è in testa oggi, con
-la coccarda ancora in argento) e sotto l'**albo d'oro**; toccando un mese si apre la sua
-pagina: campione, classifica del mese, record del mese, le partite, e il pulsante per
-condividere l'immagine. Non c'è niente da chiudere a mano: si calcola dallo storico.
+partite dal vivo e quelle online insieme; a parità assoluta il titolo si condivide.
+
+La **Classifica si apre sulla stagione in corso**, perché il mese conta più del
+totale di sempre: in cima il mese con i giorni che mancano e la barra del tempo, il
+podio del mese con chi è in testa (e la coccarda ancora in argento), il **campione in
+carica** dell'ultimo mese chiuso, poi la classifica del mese, i record del mese e
+l'**albo d'oro**. Lo switch in alto (**Stagione / Generale**, c'è anche un pulsante in
+fondo) porta al generale: le Crown di sempre con i filtri di periodo e provenienza, i
+record, i primati della stanza, il rating Elo e l'andamento. Toccando un mese dell'albo
+si apre la sua pagina: campione, classifica del mese, record del mese, le partite, e il
+pulsante per condividere l'immagine. Non c'è niente da chiudere a mano: si calcola
+dallo storico.
 
 Sotto il podio ci sono i **Record**, titoli scherzosi assegnati a chi primeggia in una
 statistica (a pari merito si condividono; toccandone uno si apre la classifica completa).
@@ -471,17 +479,33 @@ cerchiata in oro; lo stesso vale per i riquadri corrispondenti nella scheda gioc
 
 Poi i **Primati della stanza**: non "chi è il migliore in X" ma "la partita più…" — la
 maratona (più mani), la partita lampo, il punteggio di sempre, la passeggiata (vittoria
-più larga) e il fotofinish (la più tirata), il tavolo pieno, la mano d'oro, la serata
-lunga. Ognuno si tocca e riapre quella partita.
+più larga) e il fotofinish (la più tirata), la mano d'oro. Ognuno si tocca e riapre
+quella partita.
 
-Il **Rating Elo** è un'altra lettura della classifica: tutti partono da 1000, ogni
-partita vale come uno scontro con ciascuno degli altri, e battere chi ha un rating più
-alto fa salire di più. Dà un ordine sensato anche a chi ha giocato poche partite, dove
-le Crown ancora non dicono nulla; nella scheda ci sono rating, posizione e picco.
+Il **Rating Elo** è un'altra lettura della classifica, che pesa *chi* ti lasci dietro e
+non quante volte vinci. Tutti partono da **1000**. Prima di ogni partita, per ogni coppia
+di giocatori, dalla differenza dei rating si stima quanto è probabile che uno finisca
+davanti all'altro (alla pari 50%, con 200 punti in più 76%, con 400 in più 91%); poi si
+guarda com'è andata (davanti = 1, pari = 0,5, dietro = 0) e ci si sposta di
+**32 × (risultato − atteso)**, diviso per il numero di avversari. In pratica: alla pari
+una vittoria vale +16 e una sconfitta −16; contro uno più forte di 200 punti vincere vale
++24 e perdere solo −8; contro uno più debole vincere vale +8 e perdere −24. Con più
+giocatori al tavolo la partita è un giro di sfide a due contro ognuno degli altri, i
+punti in gioco si dividono per il numero di avversari (una partita a 5 pesa quanto una
+a 2) e la somma degli spostamenti fa sempre zero. Le partite si contano in ordine di
+data, tutte, senza stagioni. La lista mostra rating, picco e lo spostamento dell'ultima
+partita (*+12 ultima*), e il pulsante **Come si calcola** apre questa spiegazione con
+gli esempi; la scheda giocatore ha lo stesso riquadro, e il suo rating si tocca per
+riaprire l'ultima partita che l'ha mosso. La formula è `eloRatings` in
+[js/stats.js](js/stats.js).
 
-Nella scheda giocatore c'è anche il **Testa a testa**: contro ognuno degli altri, quante
-partite insieme, quante volte è finito **davanti**, pari o **dietro** (con la barra
-verde/grigia/rossa), le Crown incrociate e le medie. E dalle partite che lo sanno: la
+Nella scheda giocatore c'è anche il **Testa a testa**, disegnato come una serie di
+duelli: a sinistra il giocatore della scheda, a destra ogni avversario, in mezzo quante
+volte è finito **davanti** e quante **dietro** (con le due parole scritte sotto i
+numeri, così non c'è niente da indovinare), un verdetto (*in vantaggio*, *sempre
+davanti*, *in parità*…), la barra verde/grigia/rossa e sotto le partite insieme, i pari,
+le vittorie di ciascuno e le medie. "Davanti" vuol dire più punti dell'altro in quella
+partita, anche senza vincerla. E dalle partite che lo sanno: la
 sua **nemesi** (chi lo congela di più), la sua vittima preferita, chi gli tira più Pesca
 Tre, quanti cuori ha regalato, quante volte si è fermato da sé.
 - **Sette Vite**: chi raccoglie più carte col **cuore** (la *Seconda Chance*). Le vite

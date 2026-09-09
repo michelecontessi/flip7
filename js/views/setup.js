@@ -230,7 +230,6 @@ export const setupView = {
       if (res === "granted") { prefs.set(NOTIFY_KEYS.push, true); toast("Notifiche attive: ti avviso quando tocca a te"); }
       else { prefs.set(NOTIFY_KEYS.push, false); toast(res === "unsupported" ? "Questo browser non ha le notifiche (su iPhone servono l'app in Home e iOS 16.4+)" : "Permesso negato: si cambia dalle impostazioni del browser", "warn"); }
     },
-    "training"(ctx, el) { prefs.set("training", el.checked); },
     async "ava-file"(ctx, el) {
       const file = el.files && el.files[0];
       el.value = "";
@@ -328,8 +327,6 @@ function alertsCard() {
       <p class="hint">${!canPush() ? "Le notifiche non sono disponibili in questo browser: su iPhone servono l'app aggiunta alla Home e iOS 16.4 o più recente."
         : perm === "denied" ? "Le notifiche sono bloccate dalle impostazioni del browser per questo sito."
         : "La notifica arriva solo quando l'app non è in vista; suono e vibrazione anche mentre la guardi."}</p>
-      <label class="switch-row"><span>${icon("target", "tiny")} Modalità allenamento</span><input type="checkbox" data-change="training" ${prefs.get("training", false) ? "checked" : ""}></label>
-      <p class="hint">Al tuo turno vedi la probabilità di sballare alla prossima carta, calcolata dalle carte già uscite. Utile per imparare, meno per il brivido.</p>
     </section>`;
 }
 

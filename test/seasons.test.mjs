@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, headToHead, roomRecords, eloRatings, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
+import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
 
 const at = (y, m, d = 10) => new Date(y, m, d, 20).getTime();
 const game = (id, playedAt, totals, extra = {}) => {
@@ -106,12 +106,30 @@ test("record della stanza: maratona, punteggio di sempre, passeggiata e fotofini
   assert.equal(rec.widest.gameId, "g1");
   assert.equal(rec.tightest.value, 1);
   assert.equal(rec.tightest.gameId, "g2");
-  assert.equal(rec.crowded.value, 3);
   assert.equal(rec.richest.value, 12);
   assert.equal(rec.richest.round, 1);
-  assert.equal(rec.night.gameId, "g1");
-  assert.equal(rec.night.unit(rec.night.value), "40 min");
+  // il tavolo pieno e la serata lunga non sono piu' primati
+  assert.equal(rec.crowded, undefined);
+  assert.equal(rec.night, undefined);
   assert.equal(fmtDuration(95 * 6e4), "1 h 35 min");
+});
+
+test("Elo: ogni riga dice quanto si e' mossa nell'ultima partita, e la somma degli spostamenti e' zero", () => {
+  const history = Object.fromEntries([
+    game("g1", at(2026, 7, 3), { ada: 210, bea: 150 }),
+    game("g2", at(2026, 7, 5), { ada: 100, bea: 210, cal: 180 })
+  ]);
+  const elo = eloRatings(history, players);
+  const by = Object.fromEntries(elo.map((r) => [r.playerId, r]));
+  // g1 alla pari: +16 / -16
+  assert.equal(eloSwing(ELO_START, ELO_START, 1), 16);
+  // g2: Ada arriva dietro a entrambi, Bea davanti a entrambi
+  assert.equal(by.ada.lastGameId, "g2");
+  assert.ok(by.ada.last < 0 && by.bea.last > 0);
+  assert.equal(by.ada.last + by.bea.last + by.cal.last <= 1 && by.ada.last + by.bea.last + by.cal.last >= -1, true, "arrotondati a parte, i punti passano di mano");
+  assert.equal(by.cal.lastPlayedAt, at(2026, 7, 5));
+  // gli esempi della spiegazione: contro uno piu' forte di 200 si guadagna piu' di quanto si rischia
+  assert.ok(Math.abs(eloSwing(1000, 1200, 1)) > Math.abs(eloSwing(1000, 1200, 0)));
 });
 
 test("Elo: chi batte i forti sale di piu', e tutti partono da 1000", () => {

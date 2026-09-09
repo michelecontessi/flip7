@@ -343,20 +343,25 @@ function withDate(dateStr, originalMs) {
  * Una linea per giocatore: il totale dopo ogni round. Si vede chi era in
  * testa e quando la partita si e' decisa. `mark` evidenzia un round.
  */
-export function progressChart(g, { mark = -1, height = 150 } = {}) {
+export function progressChart(g, { mark = -1, height = 150, inset = 28 } = {}) {
   const p = gameProgress(g);
   if (p.rounds < 2) return "";
   const target = Number(g.targetScore) || 200;
   const maxV = Math.max(target, ...p.series.map((s) => s.final)) * 1.06;
   const padL = 34, padR = 16, padT = 12, padB = 22;
-  const w = Math.max(280, Math.min(640, 60 + p.rounds * 42));
+  // largo quanto lo spazio che ha (la vista e' al massimo 660px, meno i
+  // bordi indicati da `inset`): con poche mani riempie la riga, con tante
+  // si allarga oltre e scorre nel suo riquadro, mai fuori dal pannello
+  const vpw = (typeof document !== "undefined" && document.documentElement.clientWidth) || 360;
+  const avail = Math.max(240, Math.min(660, vpw) - inset);
+  const w = Math.max(avail, padL + padR + (p.rounds - 1) * 34);
   const h = height;
   const x = (i) => padL + (i / (p.rounds - 1)) * (w - padL - padR);
   const y = (v) => padT + (1 - v / maxV) * (h - padT - padB);
   const grid = [0, Math.round(maxV / 2 / 10) * 10, target].filter((v, i, a) => a.indexOf(v) === i);
   const winners = g.winnerIds || {};
   return `
-    <div class="chart-scroll"><div>
+    <div class="chart-scroll flat"><div>
       <svg class="progress-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Totali dopo ogni round">
         ${grid.map((v) => `<line class="grid ${v === target ? "goal" : ""}" x1="${padL - 4}" y1="${y(v).toFixed(1)}" x2="${(w - padR + 4).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text x="${padL - 8}" y="${(y(v) + 3.5).toFixed(1)}">${v}</text>`).join("")}
         ${Array.from({ length: p.rounds }, (_, i) => `<text class="rx" x="${x(i).toFixed(1)}" y="${h - 6}">${i + 1}</text>`).join("")}
@@ -427,7 +432,11 @@ function renderGameSheet(s) {
     </ol>
 
     ${nRounds ? `
-      ${progressChart(g, { mark: hl.round })}
+      ${nRounds > 1 ? `
+      <div class="calc-section">
+        <div class="calc-label"><span>Il corso della partita</span><span>totali dopo ogni mano</span></div>
+        ${progressChart(g, { mark: hl.round })}
+      </div>` : ""}
       <div class="calc-section">
         <div class="calc-label"><span>Round</span><span>${nRounds} ${nRounds === 1 ? "mano" : "mani"}</span></div>
         <div class="table-scroll">
@@ -453,10 +462,12 @@ function renderGameSheet(s) {
       </div>` : ""}
     ${hl.note ? `<p class="hl-note">${icon("star", "tiny")} ${esc(hl.note)}</p>` : ""}
 
-    <div class="sheet-actions">
-      ${nRounds ? `<button class="btn" data-action="game-replay">${icon("replay", "tiny")} Rivedi</button>` : ""}
-      <button class="btn" data-action="game-share">${icon("share", "tiny")} Podio</button>
-      ${store.isOwner() ? `<button class="btn" data-action="game-edit">${icon("pencil", "tiny")} Modifica</button>` : ""}
+    <div class="sheet-actions stack">
+      <div class="act-row">
+        ${nRounds ? `<button class="btn" data-action="game-replay">${icon("replay", "tiny")} Rivedi</button>` : ""}
+        <button class="btn" data-action="game-share">${icon("share", "tiny")} Podio</button>
+        ${store.isOwner() ? `<button class="btn" data-action="game-edit">${icon("pencil", "tiny")} Modifica</button>` : ""}
+      </div>
       <button class="btn primary" data-action="sheet-close">Chiudi</button>
     </div>`;
 }
@@ -507,7 +518,7 @@ function renderReplayPage(s) {
       </div>
       ${playoff ? `<div class="playoff-strip">${icon("flag", "tiny")}<span><b>Spareggio</b> · la manche la giocano solo ${playoff.map(nameOf).map(esc).join(" e ")}</span></div>` : ""}
       <section class="card">
-        ${progressChart(g, { mark: step, height: 130 })}
+        ${progressChart(g, { mark: step, height: 130, inset: 58 })}
       </section>
       <section class="card">
         <ol class="rp-list">

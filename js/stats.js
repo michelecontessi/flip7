@@ -844,8 +844,7 @@ const nameIn = (g, pid, players) => (players && players[pid] && players[pid].nam
 /**
  * I primati della stanza, ognuno con la partita (e il giocatore) che lo
  * detiene: la partita piu' lunga e la piu' corta, il punteggio piu' alto di
- * sempre, la vittoria piu' larga e quella piu' tirata, il tavolo piu'
- * affollato, la mano piu' ricca, la serata piu' lunga.
+ * sempre, la vittoria piu' larga e quella piu' tirata, la mano piu' ricca.
  */
 export function roomRecords(history, players, opts = {}) {
   const games = Object.entries(history || {})
@@ -880,17 +879,10 @@ export function roomRecords(history, players, opts = {}) {
   if (tight) out.push({ id: "tightest", title: "Il fotofinish", desc: "la vittoria più tirata", unit: (v) => `+${v} sul secondo`,
     value: tight.v, gameId: tight.x.g.id, playedAt: tight.x.g.playedAt || 0, playerId: tight.x.pid, playerName: nameIn(tight.x.g, tight.x.pid, players) });
 
-  pick("crowded", "Il tavolo pieno", "la partita con più giocatori", (v) => `${v} giocatori`,
-    ref(maxBy(games, (g) => Object.keys(g.results || {}).length), () => ({})));
-
   const hands = games.flatMap((g) => Object.entries(g.rounds || {}).flatMap(([pid, rows]) => Object.entries(rows || {}).map(([k, e]) => ({ g, pid, round: Number(String(k).slice(1)), v: computeRound(e).total }))));
   const richest = maxBy(hands, (x) => x.v);
   if (richest) out.push({ id: "richest", title: "La mano d'oro", desc: "più punti in un solo round", unit: (v) => `${v} in una mano`,
     value: richest.v, gameId: richest.x.g.id, playedAt: richest.x.g.playedAt || 0, playerId: richest.x.pid, playerName: nameIn(richest.x.g, richest.x.pid, players), round: richest.x.round });
-
-  const timed = games.filter((g) => g.finishedAt && g.playedAt && g.finishedAt > g.playedAt && g.finishedAt - g.playedAt < 12 * 36e5);
-  pick("night", "La serata lunga", "la partita durata di più", (v) => fmtDuration(v),
-    ref(maxBy(timed, (g) => g.finishedAt - g.playedAt), () => ({})));
   return out;
 }
 
@@ -907,10 +899,30 @@ export function fmtDuration(ms) {
 // Rating Elo: premia chi batte i forti, e da' un ordine sensato anche a chi
 // ha giocato poche partite. Ogni partita vale come un giro di scontri a due
 // fra tutti i presenti (K diviso per il numero di avversari).
+//
+// In parole: tutti partono da 1000. Prima di ogni partita, per ogni coppia
+// di giocatori si stima quanto e' probabile che A finisca davanti a B dalla
+// differenza dei due rating (a parita' e' il 50%; con 200 punti in piu' e'
+// il 76%; con 400 in piu' il 91%). Poi si guarda com'e' andata davvero
+// (davanti = 1, pari = 0.5, dietro = 0) e si sposta il rating di
+// K x (risultato - atteso), con K = 32 diviso per il numero di avversari.
+// Cosi' battere uno piu' forte rende molto, battere uno piu' debole poco,
+// e una partita a 5 muove al massimo quanto una a 2. La somma degli
+// spostamenti di una partita e' sempre zero: i punti passano di mano, non
+// si creano. Le partite si contano in ordine di data, tutte (nessun
+// periodo): il rating e' la storia intera di ognuno.
 // ---------------------------------------------------------------------------
 export const ELO_START = 1000;
+export const ELO_K = 32;
+/** Probabilita' stimata che chi ha rating `a` finisca davanti a chi ha `b`. */
+export const eloExpected = (a, b) => 1 / (1 + Math.pow(10, (b - a) / 400));
+/**
+ * Quanto si muove il rating in un duello a due: `k` per (risultato - atteso).
+ * Utile per gli esempi: a 1000 contro 1000 una vittoria vale +16.
+ */
+export const eloSwing = (a, b, actual, k = ELO_K) => k * (actual - eloExpected(a, b));
 export function eloRatings(history, players, opts = {}) {
-  const K = opts.k || 32;
+  const K = opts.k || ELO_K;
   const games = Object.entries(history || {})
     .map(([id, g]) => ({ id, ...g }))
     .filter((g) => matchesSource(g, opts.source))
@@ -918,6 +930,7 @@ export function eloRatings(history, players, opts = {}) {
   const rating = new Map();
   const played = new Map();
   const peak = new Map();
+  const last = new Map();      // l'ultimo spostamento di ognuno, e in quale partita
   const get = (pid) => (rating.has(pid) ? rating.get(pid) : ELO_START);
   for (const g of games) {
     const ids = Object.keys(g.results || {});
@@ -928,9 +941,8 @@ export function eloRatings(history, players, opts = {}) {
       let d = 0;
       for (const b of ids) {
         if (a === b) continue;
-        const expected = 1 / (1 + Math.pow(10, (get(b) - get(a)) / 400));
         const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
-        d += (K / (ids.length - 1)) * (actual - expected);
+        d += eloSwing(get(a), get(b), actual, K / (ids.length - 1));
       }
       delta[a] = d;
     }
@@ -939,6 +951,7 @@ export function eloRatings(history, players, opts = {}) {
       rating.set(a, next);
       played.set(a, (played.get(a) || 0) + 1);
       peak.set(a, Math.max(peak.get(a) || ELO_START, next));
+      last.set(a, { delta: delta[a], gameId: g.id, playedAt: g.playedAt || 0 });
     }
   }
   return [...rating.entries()]
@@ -947,7 +960,11 @@ export function eloRatings(history, players, opts = {}) {
       name: (players && players[pid] && players[pid].name) || "?",
       elo: Math.round(r),
       peak: Math.round(peak.get(pid) || ELO_START),
-      games: played.get(pid) || 0
+      games: played.get(pid) || 0,
+      // "+12 nell'ultima partita": arrotondato, con la partita da riaprire
+      last: Math.round((last.get(pid) || {}).delta || 0),
+      lastGameId: (last.get(pid) || {}).gameId || null,
+      lastPlayedAt: (last.get(pid) || {}).playedAt || 0
     }))
     .sort((a, b) => b.elo - a.elo || a.name.localeCompare(b.name, "it"))
     .map((r, i) => ({ ...r, rank: i + 1 }));

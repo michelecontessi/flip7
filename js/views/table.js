@@ -1062,9 +1062,18 @@ function blockedBox(g, ctx, me) {
     </div>`;
 }
 
+/**
+ * L'allenamento c'e' solo dove ha senso: a partita in corso e con almeno un
+ * bot al tavolo. Fra sole persone il rischio non si mostra mai, e la voce
+ * nel menu non compare proprio.
+ */
+export function trainingAllowed(g) {
+  if (!g || g.status === "lobby" || g.status === "over") return false;
+  return (g.order || []).some((sid) => g.seats && g.seats[sid] && g.seats[sid].bot);
+}
 /** Il rischio di sballare alla prossima carta (modalita' allenamento). */
 function riskLine(g, sid) {
-  if (!prefs.get("training", false)) return "";
+  if (!trainingAllowed(g) || !prefs.get("training", false)) return "";
   const o = drawOdds(g, sid);
   const pct = Math.round(o.pBust * 100);
   const tone = o.protectedBySc ? "safe" : pct >= 35 ? "hot" : pct >= 18 ? "warm" : "safe";
@@ -1418,7 +1427,7 @@ export const tableView = {
       const choices = [];
       if (me && g.status !== "over" && g.status !== "lobby") choices.push({ id: "leave", label: "Abbandono la partita" });
       if (isTableOwner(g, ctx) || isStale(g)) choices.push({ id: "close", label: "Annulla il tavolo" });
-      choices.push({ id: "training", label: `${prefs.get("training", false) ? "✓ " : ""}Modalità allenamento (rischio di sballo)` });
+      if (trainingAllowed(g)) choices.push({ id: "training", label: `${prefs.get("training", false) ? "✓ " : ""}Modalità allenamento (rischio di sballo)` });
       choices.push({ id: "list", label: "Tavoli aperti (aprine un altro)" });
       const pick = await askChoice("Tavolo", choices, {
         message: me && g.status !== "over" && g.status !== "lobby"
