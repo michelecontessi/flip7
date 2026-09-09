@@ -274,8 +274,13 @@ regole ufficiali del gioco:
 - **Seconda Chance** annulla un doppione (la seconda va regalata a chi non ce l'ha);
 - **Congela** fa incassare e uscire dal round il bersaglio (anche te stesso, e se sono
   tutti fuori il bersaglio sei tu per forza);
-- **Pesca Tre** obbliga il bersaglio a pescare tre carte; le azioni pescate nel mentre
-  si mettono da parte e si risolvono dopo (perse se sballa);
+- **Pesca Tre** obbliga il bersaglio a pescare tre carte, e **Congela o Pesca Tre
+  pescati nel mentre non scattano subito**: si mettono da parte e si assegnano solo a
+  tripla completata (si perdono se il bersaglio sballa o fa Flip 7). Quindi il *Congela*
+  che esce alla prima o alla seconda carta **non ti ferma lì**: peschi comunque tutte e
+  tre, e se sei rimasto l'unico in gioco te lo assegni alla fine, incassando anche le
+  carte appena prese. La **Seconda Chance**, invece, vale all'istante e può salvarti
+  proprio dentro quella tripla;
 - **FLIP 7**: sette numeri diversi → +15 e il round si chiude all'istante per tutti
   (chi era ancora in gioco incassa comunque le proprie carte);
 - punteggio: somma dei numeri, ×2 se hai il ×2, poi i +, come da regolamento;
@@ -312,6 +317,14 @@ lo perde). Se poi torna, trova il riquadro *Sei stato bloccato* con **Rientro da
 prossimo round**: dal round dopo è di nuovo in gioco. Una mossa di chi era fermo
 cancella i voti contro di lui. Nello storico la partita segna da quale round è stato
 bloccato, e quelle mani non contano nelle sue medie.
+
+**Un tocco, una mossa.** I comandi del tavolo (*Pesca*, *Mi fermo*, la scelta del
+bersaglio) portano scritto per quale momento della partita sono stati disegnati: la
+mossa cambia lo stato subito, ma il tavolo si ridisegna al fotogramma dopo, e chi
+schiaccia due o tre volte di fila in fretta userebbe il bottone vecchio sul tavolo
+nuovo — giocando per chi viene dopo (il bot di turno, per dire, che si ritrovava a
+pescare una carta che non aveva chiesto). I tocchi in più adesso non fanno niente:
+esce una carta sola, quella che hai chiesto.
 
 **Quando tocca a te, l'app te lo dice.** Suono breve e vibrazione appena arriva il tuo
 turno (o devi scegliere il bersaglio di una carta azione), e — se l'app non è in vista —

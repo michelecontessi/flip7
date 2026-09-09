@@ -237,6 +237,40 @@ test("Pesca Tre annidato: prima si completa la tripla, poi parte il secondo", ()
   assert.equal(s.flip3.left, 3);
 });
 
+test("Congela pescato dentro un Pesca Tre: si accantona, la tripla va finita", () => {
+  // regolamento ufficiale: Congela e Pesca Tre pescati durante un Pesca Tre si
+  // mettono da parte e si assegnano SOLO a tripla completata (la Seconda
+  // Chance invece vale subito). Qui Ada resta l'unica attiva: a fine tripla il
+  // Congela puo' andare solo su di lei, ma prima incassa tutte e tre le carte.
+  // pescate (dalla fine): n2 (Ada), fl3 (Ada, unica attiva -> a se stessa), n7, frz, n8
+  let s = table(["Ada", "Bea"], ["n8", "frz", "n7", "fl3", "n2"]);
+  s = hit(s, "s0");
+  s = stay(s, "s1");                      // Bea si ferma: resta solo Ada
+  s = hit(s, "s0");                       // Pesca Tre su se stessa
+  assert.equal(s.flip3.left, 3);
+  s = hit(s, "s0");                       // 1a: 7
+  s = hit(s, "s0");                       // 2a: Congela -> accantonato, NON scatta
+  assert.deepEqual(s.flip3.deferred, ["frz"]);
+  assert.equal(s.flip3.left, 1);
+  assert.equal(s.hands.s0.out, null, "il Congela non deve interrompere la tripla");
+  s = hit(s, "s0");                       // 3a: 8 -> tripla finita, ORA il Congela
+  assert.equal(s.hands.s0.out, "frozen");
+  assert.deepEqual(s.hands.s0.nums, [2, 7, 8]);
+  assert.equal(s.seats.s0.total, 17, "congelata dopo: incassa tutte e tre le carte");
+});
+
+test("sballo dentro un Pesca Tre: il Congela accantonato si scarta senza effetto", () => {
+  // pescate (dalla fine): n2 (Ada), fl3 (a se stessa), n7, frz, n7 doppio
+  let s = table(["Ada", "Bea"], ["n7", "frz", "n7", "fl3", "n2"]);
+  s = hit(s, "s0");
+  s = stay(s, "s1");
+  s = hit(s, "s0");
+  s = hit(s, "s0"); s = hit(s, "s0"); s = hit(s, "s0");
+  assert.equal(s.hands.s0.out, "bust");
+  assert.ok(s.discard.includes("frz"));
+  assert.equal(s.seats.s0.total, 0);
+});
+
 test("flip7 durante un Pesca Tre: le azioni accantonate finiscono negli scarti", () => {
   let s = table(["Ada", "Bea"], ["n7", "frz", "fl3"]);
   s.hands.s1.nums = [1, 2, 3, 4, 5, 6];

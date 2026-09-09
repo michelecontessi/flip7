@@ -121,6 +121,15 @@ const controls = (g, ctx, sid) => Boolean(g.seats[sid] && g.seats[sid].uid === c
 /** Posto umano e mio: e' a me che tocca fare qualcosa. */
 const mine = (g, ctx, sid) => Boolean(sid && controls(g, ctx, sid) && !g.seats[sid].bot);
 
+/**
+ * Il bottone vale per il tavolo com'era quando e' stato disegnato (`data-at`
+ * porta l'istante dell'ultima mossa). La mossa cambia lo stato subito, ma il
+ * ridisegno arriva al fotogramma dopo: chi schiaccia Pesca due volte di fila
+ * in fretta userebbe il bottone vecchio sul tavolo nuovo e giocherebbe per
+ * chi e' venuto dopo. Fuori tempo massimo: il secondo tocco non fa niente.
+ */
+const isFresh = (g, el) => !el || el.dataset.at === undefined || el.dataset.at === String(g.updatedAt || 0);
+
 /** Chi ha vinto (a partita finita): lo dice il motore, altrimenti il totale piu' alto. */
 const winnerOf = (g) => (g.winners && g.winners[0] && g.seats[g.winners[0]]) ? g.winners[0]
   : [...g.order].sort((a, b) => (g.seats[b].total || 0) - (g.seats[a].total || 0))[0];
@@ -1130,7 +1139,7 @@ function renderControls(g, ctx, me) {
         <p class="choose-label">${ACTION_META[p.type].ask}</p>
         <div class="pgrid">
           ${p.options.map((sid) => `
-            <button class="pg" data-action="tbl-target" data-id="${sid}">
+            <button class="pg" data-action="tbl-target" data-id="${sid}" data-at="${g.updatedAt || 0}">
               <span class="pg-ava ${sid === p.chooser ? "holo-ring" : ""}" style="--pc:${colorOf(g.seats[sid].name)}">
                 ${avatar(g.seats[sid].playerId, g.seats[sid].name, "lg")}
               </span>
@@ -1155,8 +1164,8 @@ function renderControls(g, ctx, me) {
     const pts = flying ? pointsBefore(g.hands[actor], g.lastDraw) : engine.handPoints(g.hands[actor]);
     return `
       <div class="table-actions">
-        <button class="btn go big" data-action="tbl-hit">Pesca</button>
-        <button class="btn stop big" data-action="tbl-stay">Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
+        <button class="btn go big" data-action="tbl-hit" data-at="${g.updatedAt || 0}">Pesca</button>
+        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}">Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
       </div>${flying ? "" : riskLine(g, actor)}`;
   }
   // fuori dallo spareggio: niente comandi, si guarda e basta
@@ -1475,24 +1484,24 @@ export const tableView = {
       try { return store.commitGame(engine.startGame(g)); }
       catch (e) { toast(e.message, "warn"); }
     },
-    "tbl-hit"(ctx) {
+    "tbl-hit"(ctx, el) {
       const g = pickTable(ctx);
-      if (!g) return;
+      if (!g || !isFresh(g, el)) return;
       const actor = actorOf(g);
-      if (!controls(g, ctx, actor)) return;
+      if (!mine(g, ctx, actor)) return;
       return apply(engine.hit(g, actor), g);
     },
-    "tbl-stay"(ctx) {
+    "tbl-stay"(ctx, el) {
       const g = pickTable(ctx);
-      if (!g) return;
+      if (!g || !isFresh(g, el)) return;
       const actor = actorOf(g);
-      if (!controls(g, ctx, actor)) return;
+      if (!mine(g, ctx, actor)) return;
       return apply(engine.stay(g, actor), g);
     },
     "tbl-target"(ctx, el) {
       const g = pickTable(ctx);
-      if (!g || !g.pending) return;
-      if (!controls(g, ctx, g.pending.chooser)) return;
+      if (!g || !g.pending || !isFresh(g, el)) return;
+      if (!mine(g, ctx, g.pending.chooser)) return;
       return apply(engine.chooseTarget(g, g.pending.chooser, el.dataset.id), g);
     },
     "tbl-nextround"(ctx) {
