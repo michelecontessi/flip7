@@ -712,7 +712,61 @@ export const STICKERS = {
     <rect x="7" y="22" width="9" height="19" rx="2.5" fill="#2270b8" stroke="#123f6b" stroke-width="1.6"/>
     <path d="M17 41V23l6-5c1.5-1.5 3-6 3-10 0-2 1.5-3 3-2.5 2.5 1 3 5 1 11h9.5a3.5 3.5 0 0 1 0 7 3.5 3.5 0 0 1 1 7 3.5 3.5 0 0 1-2 7 3.5 3.5 0 0 1-3 6H26c-3 0-6-1.5-9-3Z" fill="url(#${id})" stroke="#8a5a2a" stroke-width="1.6" stroke-linejoin="round"/>
     <path d="M30 23.5h8M30 30.5h8M30 37.5h6" fill="none" stroke="#8a5a2a" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round"/>`
-  }
+  },
+  // Che culo: il fondoschiena dello Sculone, con quadrifoglio e scintille
+  culo: { label: "Che culo!", draw: (id) => `
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffe4c0"/><stop offset="1" stop-color="#e9a86b"/>
+      </linearGradient>
+    </defs>
+    <g class="ae-spark" fill="#ffc93f">
+      <path d="M6 10l.9-3 .9 3 3 .9-3 .9-.9 3-.9-3-3-.9Z"/>
+      <path d="M42 40l.7-2.3.7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7Z"/>
+    </g>
+    <path d="M14.5 11.5c3-2.8 16-2.8 19 0 3.6 3.2 4.7 9.4 4.1 15.6C37 34 33.8 39 29.5 39c-3.3 0-4.8-3-5.5-7-.7 4-2.2 7-5.5 7C14.2 39 11 34 10.4 27.1 9.8 20.9 10.9 14.7 14.5 11.5Z" fill="url(#${id})" stroke="#8a5a2a" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M24 13c-1.8 6-1.8 13-.1 19" fill="none" stroke="#8a5a2a" stroke-width="1.7" stroke-linecap="round" opacity=".75"/>
+    <path d="M14.6 20c.9-2.4 2.6-4.1 4.7-4.9M29 15.4c2.3.7 4.1 2.3 5 4.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2.2" stroke-linecap="round"/>
+    <g stroke="#0f6b42" stroke-width=".9">
+      <circle cx="38.6" cy="8.4" r="2.4" fill="#3fbd7c"/><circle cx="43" cy="8.4" r="2.4" fill="#3fbd7c"/>
+      <circle cx="38.6" cy="12.8" r="2.4" fill="#3fbd7c"/><circle cx="43" cy="12.8" r="2.4" fill="#3fbd7c"/>
+    </g>
+    <path d="M40.8 13.2c.4 3.2-.5 5.2-2.3 6.4" fill="none" stroke="#0f6b42" stroke-width="1.3" stroke-linecap="round"/>`
+  },
+  // Parolacce: la faccia paonazza e la nuvoletta con i simboli al posto delle parole
+  rage: { label: "Parolacce", draw: (id) => `
+    <defs>
+      <radialGradient id="${id}" cx=".35" cy=".3" r=".9">
+        <stop offset="0" stop-color="#ffa17a"/><stop offset=".55" stop-color="#e8452a"/><stop offset="1" stop-color="#a3200f"/>
+      </radialGradient>
+    </defs>
+    <g fill="#fff" fill-opacity=".9" stroke="#c9d3dd" stroke-width=".9">
+      <circle cx="5.6" cy="16" r="3"/><circle cx="9.8" cy="12.4" r="2.1"/>
+    </g>
+    <circle cx="18" cy="30" r="14" fill="url(#${id})" stroke="#7a1608" stroke-width="1.8"/>
+    <path d="M7.5 25.4l7 3M28.5 25.4l-7 3" fill="none" stroke="#5c1206" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="12.6" cy="31" r="1.9" fill="#4a0f05"/><circle cx="23.4" cy="31" r="1.9" fill="#4a0f05"/>
+    <rect x="10" y="35.2" width="16" height="6.6" rx="2.1" fill="#57120a" stroke="#7a1608" stroke-width="1.2"/>
+    <path d="M10 38.5h16M14 35.2v6.6M18 35.2v6.6M22 35.2v6.6" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.2"/>
+    <path d="M24 2h19a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H29l-6.5 5 1.8-5H24a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Z" fill="#fff8ec" stroke="#7a1608" stroke-width="1.7" stroke-linejoin="round"/>
+    <text x="33.5" y="13.2" text-anchor="middle" font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" font-size="9" fill="#c0261a">#@%!</text>`
+  },
+  // Ciaone: linguaccia e occhiolino, lo sfottò di chi ti ha appena passato
+  tongue: { label: "Ciaone", draw: (id) => FACE(id, `
+    <path d="M13 21.5c2.2-3 5.3-3 7.4 0" fill="none" stroke="#5a3a06" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="31" cy="20.5" r="2.6" fill="#3a2a10"/>
+    <path d="M27.6 15c2-1.5 4.6-1.5 6.6.2" fill="none" stroke="#5a3a06" stroke-width="1.8" stroke-linecap="round" opacity=".65"/>
+    <path d="M14 28h20c-1.5 6-5.5 9-10 9s-8.5-3-10-9Z" fill="#7a2a1a" stroke="#5a3a06" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M19 33c0-1.2 10-1.2 10 0v4.6a5 5 0 0 1-10 0Z" fill="#ff8a94" stroke="#b3505a" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M24 34.6v5.4" fill="none" stroke="#b3505a" stroke-width="1.2" stroke-linecap="round" opacity=".7"/>`) },
+  // Muoviti: la faccia che si addormenta aspettando il tuo turno
+  sleep: { label: "Muoviti", draw: (id) => FACE(id, `
+    <path d="M12.8 21.6c2 2.8 5 2.8 7 0M28.2 21.6c2 2.8 5 2.8 7 0" fill="none" stroke="#5a3a06" stroke-width="2.4" stroke-linecap="round"/>
+    <ellipse cx="22" cy="33" rx="4.2" ry="3.4" fill="#7a2a1a" stroke="#5a3a06" stroke-width="1.5"/>
+    <g font-family="Fredoka, 'Nunito Sans', sans-serif" font-weight="700" fill="#2270b8" stroke="#fff8ec" stroke-width="2" paint-order="stroke" stroke-linejoin="round">
+      <text x="31" y="17" font-size="13">Z</text>
+      <text x="38.5" y="10" font-size="9">Z</text>
+    </g>`) }
 };
 let stickerSeq = 0;
 export function sticker(kind, cls = "") {

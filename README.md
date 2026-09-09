@@ -335,10 +335,14 @@ pescare, con lo stesso conto del bot. Esiste solo dove ha senso: a partita in co
 con almeno un bot seduto. Fra sole persone la voce non compare e il rischio non si
 mostra mai. Utile per imparare; per il brivido meglio spenta.
 
-**Reazioni.** Sotto le righe del tavolo ci sono sei sticker disegnati (risata, wow,
-pianto, occhiali da sole, fuoco, pollice): un tocco e lo sticker sbuca per qualche
-secondo sulla tua riga, visibile a tutti. Niente chat, solo la faccia giusta al momento
-giusto.
+**Reazioni.** Sotto le righe del tavolo ci sono dieci sticker disegnati, due file da
+cinque (risata, wow, pianto, occhiali da sole, fuoco, pollice, *Che culo!*, *Parolacce*,
+*Ciaone*, *Muoviti*): un tocco e lo sticker sbuca per qualche secondo sulla tua riga,
+visibile a tutti. *Che culo!* è il fondoschiena dello Sculone, con quadrifoglio e
+scintille; *Parolacce* è la faccia paonazza che sbraita `#@%!` nella nuvoletta — i
+simboli al posto delle parole, che qui non si scrive niente; *Ciaone* è la linguaccia
+con l'occhiolino e *Muoviti* la faccia che si addormenta aspettando il tuo turno.
+Niente chat, solo la faccia giusta al momento giusto.
 
 **Il tavolo si racconta anche a chi non lo vede**: la striscia in cima ha una regione
 `aria-live`, quindi con VoiceOver o TalkBack ogni cambio di turno e ogni verdetto
