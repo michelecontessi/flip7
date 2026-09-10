@@ -43,8 +43,6 @@ const PATHS = {
   bomb: `<circle cx="12" cy="12" r="8.6"/><path d="m8.8 8.8 6.4 6.4M15.2 8.8l-6.4 6.4"/>`,
   seven: `<rect x="4.2" y="3.4" width="15.6" height="17.2" rx="3.4"/>
           <path d="M9 8.6h6.2L11.4 16.4"/>`,
-  backspace: `<path d="M9.4 4.8H19a2 2 0 0 1 2 2v10.4a2 2 0 0 1-2 2H9.4L2.8 12Z"/>
-              <path d="m11.6 9.4 5 5.2M16.6 9.4l-5 5.2"/>`,
   medal: `<circle cx="12" cy="14.6" r="5.4"/><path d="M8.6 9.6 6 3.2h12l-2.6 6.4"/><path d="m12 12.2.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3Z" stroke-width="1.2"/>`,
   target: `<circle cx="12" cy="12" r="8.4"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1" fill="currentColor"/>`,
   eye: `<path d="M2.4 12S6 5.6 12 5.6 21.6 12 21.6 12 18 18.4 12 18.4 2.4 12 2.4 12Z"/><circle cx="12" cy="12" r="2.8"/>`,

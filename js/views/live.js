@@ -3,6 +3,11 @@
 // Un solo tabellone (Giocatore | Round | Totale) e un solo pulsante alla volta:
 // "Segna i punti" finche' mancano giocatori, poi "Chiudi round".
 // L'inserimento scorre da un giocatore all'altro senza chiudere il pannello.
+// Il pannello punti si compila solo toccando le carte (il tastierino non c'e'
+// piu'), senza titoli sopra le griglie: le carte numero e i modificatori si
+// riconoscono da soli, e cosi' il pannello sta in una schermata sola con i
+// modificatori sempre a portata di dito. In fondo, sopra a tutto, il vassoio
+// con Sballo, Congelato, Vita extra e Salva.
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
@@ -14,7 +19,7 @@ import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter, 
 import { sharePodium } from "../share.js";
 import { fmtDate } from "../ui.js";
 
-const localState = { selected: null, target: null, showRounds: false, mode: "cards" };
+const localState = { selected: null, target: null, showRounds: false };
 
 const activePlayers = (room) => Object.entries(room.players || {})
   .filter(([, p]) => !p.archived)
@@ -417,7 +422,6 @@ export function makeCalcState({ order, roundIndex, playerId, playerName, existin
   const entry = existing
     ? { ...emptyEntry(), ...existing, numbers: [...(existing.numbers || [])], plus: [...(existing.plus || [])] }
     : emptyEntry();
-  if (existing && existing.manual !== null && existing.manual !== undefined) localState.mode = "keypad";
   return {
     type: "score",
     order,
@@ -458,11 +462,10 @@ function buildSheetState(room, live, order, roundIndex, pid) {
   return makeCalcState({ order, roundIndex, playerId: pid, playerName: nameOf(room, live, pid), existing, fullTotal, target: live.targetScore || 200, others });
 }
 
-function keypadValue(entry) {
-  return entry.manual === null || entry.manual === undefined ? "" : String(entry.manual);
-}
-
 function buildHand(e, r) {
+  // una mano vecchia, scritta come totale col tastierino di una volta: non ha
+  // carte da mostrare finche' non la si rifa' toccandole
+  if (r.manual) return `<span class="hand-empty">totale scritto senza carte · tocca le carte per rifare la mano</span>`;
   const cards = [
     ...(e.numbers || []).slice().sort((a, b) => a - b).map((n) => numberCard(n, { on: true })),
     ...(e.doubled ? [modCard("x2", { on: true })] : []),
@@ -476,22 +479,11 @@ function buildHand(e, r) {
   return e.busted ? `<span class="hand-void">${inner}</span><span class="void-flag">SBALLATO · vale 0</span>` : inner;
 }
 
-function noteOf(e, r, isKeypad) {
-  // le vite extra non fanno punti: si dicono in coda, come nota
-  const life = r.hearts ? (r.hearts === 1 ? " · 1 vita extra" : ` · ${r.hearts} vite extra`) : "";
-  if (e.busted) return "sballato" + life;
-  if (isKeypad) return (r.flip7 ? `${r.typed} + 15 di bonus` : "punti del round") + (e.frozen ? " · congelato" : "") + life;
-  return formulaOf(e);
-}
 const displayClass = (e, r) => (e.busted ? "bust" : r.flip7 ? "flip7" : e.frozen ? "frozen" : "");
 
 export function renderScoreSheet(s) {
   const e = s.entry;
   const r = computeRound(e);
-  const isKeypad = localState.mode === "keypad";
-
-  const keys = ["7", "8", "9", "4", "5", "6", "1", "2", "3"];
-  const typed = keypadValue(e);
 
   return `
     <div class="sheet-nav">
@@ -511,52 +503,25 @@ export function renderScoreSheet(s) {
     <div class="score-display ${displayClass(e, r)}">
       <div class="flip7-badge" ${r.flip7 ? "" : 'style="display:none"'}>${wordmark()}<span>+15</span></div>
       <div class="sd-value">${e.busted ? "0" : r.total}</div>
-      <div class="sd-note">${esc(noteOf(e, r, isKeypad))}</div>
+      <div class="sd-note">${esc(formulaOf(e))}</div>
       <div class="sd-running">${runningLine(s, e, r)}</div>
-      ${!isKeypad ? `<div class="sd-hand">${buildHand(e, r)}</div>` : ""}
+      <div class="sd-hand">${buildHand(e, r)}</div>
     </div>
 
-    <div class="mode-switch">
-      <button class="${isKeypad ? "on" : ""}" data-action="calc-mode" data-m="keypad">Tastierino</button>
-      <button class="${!isKeypad ? "on" : ""}" data-action="calc-mode" data-m="cards">Carte</button>
+    <div class="numgrid">
+      ${NUMBER_CARDS.map((n) => `<button class="card-btn" data-action="calc-num" data-n="${n}">${numberCard(n, { on: (e.numbers || []).includes(n) })}<i class="pick">${icon("check")}</i></button>`).join("")}
     </div>
-
-    ${isKeypad ? `
-      <div class="keypad">
-        ${keys.map((k) => `<button class="key" data-action="key" data-k="${k}">${k}</button>`).join("")}
-        <button class="key sub" data-action="key-clear">C</button>
-        <button class="key" data-action="key" data-k="0">0</button>
-        <button class="key sub" data-action="key-back" aria-label="Cancella">${icon("backspace")}</button>
-      </div>
-    ` : `
-      <div class="calc-section">
-        <div class="calc-label"><span>Carte numero</span><span class="count-num">${(e.numbers || []).length}/7</span></div>
-        <div class="numgrid">
-          ${NUMBER_CARDS.map((n) => `<button class="card-btn" data-action="calc-num" data-n="${n}">${numberCard(n, { on: (e.numbers || []).includes(n) })}<i class="pick">${icon("check")}</i></button>`).join("")}
-        </div>
-      </div>
-      <div class="calc-section">
-        <div class="calc-label"><span>Modificatori</span></div>
-        <div class="modgrid">
-          ${PLUS_MODIFIERS.map((p) => `<button class="card-btn" data-action="calc-plus" data-n="${p}">${modCard(p, { on: (e.plus || []).includes(p) })}<i class="pick">${icon("check")}</i></button>`).join("")}
-          <button class="card-btn" data-action="calc-double">${modCard("x2", { on: Boolean(e.doubled) })}<i class="pick">${icon("check")}</i></button>
-        </div>
-      </div>
-    `}
+    <div class="modgrid">
+      ${PLUS_MODIFIERS.map((p) => `<button class="card-btn" data-action="calc-plus" data-n="${p}">${modCard(p, { on: (e.plus || []).includes(p) })}<i class="pick">${icon("check")}</i></button>`).join("")}
+      <button class="card-btn" data-action="calc-double">${modCard("x2", { on: Boolean(e.doubled) })}<i class="pick">${icon("check")}</i></button>
+    </div>
 
     <div class="sheet-actions col">
-      ${isKeypad ? `
-      <div class="quick-row">
-        <button class="quick ${e.flip7 ? "on gold" : ""}" data-action="calc-flip7">${icon("seven", "tiny")} Flip 7 · +15</button>
-        <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballato</button>
-        <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
-      </div>
-      <div class="quick-row">${heartButton(e)}</div>` : `
       <div class="quick-row">
         <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballo</button>
         <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
         ${heartButton(e)}
-      </div>`}
+      </div>
       <div class="frozen-by" ${e.frozen && (s.others || []).length ? "" : 'style="display:none"'}>${frozenByRow(s, e)}</div>
       <div class="act-row">
         <button class="btn" data-action="calc-clear">Azzera</button>
@@ -579,7 +544,6 @@ export function patchCalcSheet(s) {
   if (!root || !s) return;
   const e = s.entry;
   const r = computeRound(e);
-  const isKeypad = localState.mode === "keypad";
 
   root.querySelectorAll('[data-action="calc-num"]').forEach((btn) => {
     btn.querySelector(".fcard").classList.toggle("on", (e.numbers || []).includes(Number(btn.dataset.n)));
@@ -597,16 +561,12 @@ export function patchCalcSheet(s) {
   const val = root.querySelector(".sd-value");
   if (val) val.textContent = e.busted ? "0" : r.total;
   const note = root.querySelector(".sd-note");
-  if (note) note.textContent = noteOf(e, r, isKeypad);
-  const count = root.querySelector(".count-num");
-  if (count) count.textContent = `${(e.numbers || []).length}/7`;
+  if (note) note.textContent = formulaOf(e);
   const hand = root.querySelector(".sd-hand");
   if (hand) hand.innerHTML = buildHand(e, r);
   const running = root.querySelector(".sd-running");
   if (running) running.innerHTML = runningLine(s, e, r);
 
-  const q7 = root.querySelector('[data-action="calc-flip7"]');
-  if (q7) q7.className = "quick " + (e.flip7 ? "on gold" : "");
   const qb = root.querySelector('[data-action="calc-bust"]');
   if (qb) qb.className = "quick " + (e.busted ? "on red" : "");
   const qf = root.querySelector('[data-action="calc-freeze"]');
@@ -804,37 +764,6 @@ export const liveView = {
         : "Round completo: chiudi il round");
     },
 
-    "calc-mode"(ctx, el) {
-      localState.mode = el.dataset.m;
-      return "sheet-full";
-    },
-    "key"(ctx, el) {
-      const e = sheet.state.entry;
-      const cur = keypadValue(e);
-      if (cur.length >= 4) return "sheet";
-      const next = (cur + el.dataset.k).replace(/^0+(?=\d)/, "");
-      e.manual = Number(next);
-      e.busted = false;
-      e.numbers = []; e.plus = []; e.doubled = false;
-      return "sheet";
-    },
-    "key-back"() {
-      const e = sheet.state.entry;
-      const cur = keypadValue(e).slice(0, -1);
-      e.manual = cur === "" ? null : Number(cur);
-      return "sheet";
-    },
-    "key-clear"() {
-      const e = sheet.state.entry;
-      e.manual = null; e.busted = false; e.flip7 = false; e.frozen = false;
-      return "sheet";
-    },
-    "calc-flip7"() {
-      const e = sheet.state.entry;
-      e.flip7 = !e.flip7;
-      if (e.flip7) e.busted = false;
-      return "sheet";
-    },
     "calc-bust"() {
       const e = sheet.state.entry;
       e.busted = !e.busted;

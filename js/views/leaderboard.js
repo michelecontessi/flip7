@@ -26,6 +26,9 @@ const GAME_RECORDS = {
     note: `dopo il round ${r.bestComebackRound + 1} era sotto di ${r.bestComeback} punti, poi ha vinto` })
 };
 
+/** L'etichetta dei record che si fanno solo al tavolo online (Bullo, Generoso). */
+const onlineOnlyTag = () => `<span class="award-only" title="si fa solo al tavolo online">${icon("wifi", "tiny")}solo online</span>`;
+
 /** Pulsante "Vedi" verso la partita del record (vuoto se il record non ne ha una). */
 function gameLink(key, r, cls = "rewatch") {
   const spec = GAME_RECORDS[key];
@@ -329,6 +332,7 @@ function renderAwards(rows, { month = "", title = "Record" } = {}) {
             ${awardEmblem(a.emblem)}
             <span class="award-title">${a.title}</span>
             <small class="award-desc">${a.desc}</small>
+            ${a.online ? onlineOnlyTag() : ""}
             <span class="award-holder">
               ${solo ? avatar(solo.playerId, solo.name, "xs") : ""}
               <b>${esc(label)}</b>
@@ -748,7 +752,7 @@ function renderSeasonPage(st) {
           ${list.map((a) => `
             <li class="tone-${a.tone}">
               ${awardEmblem(a.emblem, "small")}
-              <span class="nm"><span class="award-title">${a.title}</span><small>${esc(a.winners.map((w) => w.name).join(" e "))}</small></span>
+              <span class="nm"><span class="award-title">${a.title}</span>${a.online ? onlineOnlyTag() : ""}<small>${esc(a.winners.map((w) => w.name).join(" e "))}</small></span>
               <b>${a.unit(a.value)}</b>
             </li>`).join("")}
         </ul>
@@ -805,7 +809,7 @@ function renderAwardPage(a) {
         ${awardEmblem(a.emblem)}
         <span class="award-title">${a.title}</span>
         <small class="award-desc">${a.desc}</small>
-        ${a.scope ? `<span class="award-scope">${esc(a.scope)}</span>` : ""}
+        ${a.scope || a.online ? `<span class="award-pills">${a.scope ? `<span class="award-scope">${esc(a.scope)}</span>` : ""}${a.online ? onlineOnlyTag() : ""}</span>` : ""}
       </section>
 
       <section class="card tight">
@@ -819,7 +823,7 @@ function renderAwardPage(a) {
             </li>`).join("")}
         </ul>
       </section>
-      <p class="foot-note">${a.pick === "min" ? "Vince chi ha il valore più basso." : "Vince chi ha il valore più alto."}${a.key === "best" ? "" : " Contano solo le partite segnate round per round."}</p>
+      <p class="foot-note">${a.pick === "min" ? "Vince chi ha il valore più basso." : "Vince chi ha il valore più alto."}${a.key === "best" ? "" : " Contano solo le partite segnate round per round."}${a.online ? " Questo record si fa solo al tavolo online: dal vivo il segnapunti non segna chi ha tirato la carta." : ""}</p>
     </div>`;
 }
 

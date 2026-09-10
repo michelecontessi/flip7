@@ -402,9 +402,12 @@ export const AWARDS = [
     unit: (v) => v === 1 ? "1 vita extra" : `${v} vite extra` },
   { id: "iceman", key: "froze", title: "Iceman", desc: "il Congela lo tira lui, e sempre a qualcun altro", emblem: "iceman", tone: "ice",
     unit: (v) => v === 1 ? "1 congelata tirata" : `${v} congelate tirate` },
-  { id: "bullo", key: "fl3", title: "Bullo", desc: "il Pesca Tre lo rifila agli altri", emblem: "bullo", tone: "fire",
+  // `online`: dal vivo il segnapunti non segna chi tira il Pesca Tre ne' chi
+  // regala la Seconda Chance, quindi questi due si fanno solo al tavolo online
+  // (il Congela invece ha il "congelato da" anche sul pannello punti)
+  { id: "bullo", key: "fl3", title: "Bullo", desc: "il Pesca Tre lo rifila agli altri", emblem: "bullo", tone: "fire", online: true,
     unit: (v) => v === 1 ? "1 Pesca Tre tirato" : `${v} Pesca Tre tirati` },
-  { id: "generoso", key: "gave", title: "Generoso", desc: "regala la Seconda Chance a chi ne ha bisogno", emblem: "generoso", tone: "rose",
+  { id: "generoso", key: "gave", title: "Generoso", desc: "regala la Seconda Chance a chi ne ha bisogno", emblem: "generoso", tone: "rose", online: true,
     unit: (v) => v === 1 ? "1 cuore regalato" : `${v} cuori regalati` }
 ];
 

@@ -47,8 +47,9 @@ export function computeRound(entry = {}) {
     return { total: 0, base: 0, doubledBase: 0, bonus: 0, flip7: false, busted: true, frozen: false, numbers, plus, doubled, cards: numbers.length, hearts };
   }
 
-  // inserimento diretto col tastierino: il numero digitato sono i punti delle carte,
-  // il bonus Flip 7 (+15) si aggiunge con l'apposito interruttore.
+  // mano scritta come totale (col tastierino di una volta, che non c'e' piu'):
+  // il numero sono i punti delle carte, il bonus Flip 7 (+15) stava a parte.
+  // Le mani vecchie restano leggibili cosi' come sono.
   if (entry.manual !== null && entry.manual !== undefined && entry.manual !== "") {
     const typed = Math.max(0, Math.round(Number(entry.manual) || 0));
     const bonus = entry.flip7 ? FLIP7_BONUS : 0;

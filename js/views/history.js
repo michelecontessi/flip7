@@ -481,7 +481,7 @@ function openReplayPage(id, g) {
 /** La mano di un giocatore in un round, disegnata con le carte. */
 function handCards(e) {
   const r = computeRound(e);
-  if (r.manual) return `<span class="rp-typed">${r.typed} punti al tastierino${r.flip7 ? " + 15" : ""}</span>`;
+  if (r.manual) return `<span class="rp-typed">${r.typed} punti scritti come totale${r.flip7 ? " + 15" : ""}</span>`;
   const cards = [
     ...(e.plus || []).slice().sort((a, b) => a - b).map((p) => modCard(p, { on: true, size: "mini" })),
     ...(e.doubled ? [modCard("x2", { on: true, size: "mini" })] : []),

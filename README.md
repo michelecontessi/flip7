@@ -190,8 +190,12 @@ sotto **Avanzate**, chiuse finché non servono.
    - sotto il punteggio della mano c'è il **totale provvisorio**: *totale partita 123 → 157*,
      cioè dove arriverebbe il giocatore salvando questa mano, e quanti punti gli mancano
      al traguardo (o *traguardo tagliato*); si aggiorna a ogni carta toccata
-   - se preferisci fare i conti a mente, la linguetta **Tastierino** ti fa digitare
-     direttamente il totale (lì il Flip 7 si aggiunge col tasto dedicato)
+   - i punti si segnano **solo toccando le carte**: il vecchio *Tastierino* non c'è più e
+     le griglie non hanno titoli sopra, così il pannello sta in una schermata sola e i
+     modificatori restano a portata di pollice (le mani scritte come totale in passato
+     restano leggibili così come sono)
+   - in fondo, sopra a tutto, il **vassoio dei comandi** — Sballo, Congelato, Vita extra,
+     Azzera e Salva — resta fermo anche quando il pannello scorre
 3. Quando tutti hanno il punteggio, il pulsante diventa **Chiudi round** e si passa al successivo.
    Il round in corso è sempre scritto nella pastiglia scura in cima al tabellone
    (*Round 4*), con accanto quanti punteggi mancano.
@@ -499,20 +503,23 @@ cerchiata in oro; lo stesso vale per i riquadri corrispondenti nella scheda gioc
   partenza è `FREEZE_STATS_SINCE` in [js/stats.js](js/stats.js), una riga sola da
   spostare se il conteggio deve cominciare da un altro giorno
 - **Architetto**: le mani mediamente più lunghe (carte numero per mano, senza contare
-  le mani sballate né quelle inserite col tastierino)
+  le mani sballate né quelle scritte come totale, col tastierino di una volta)
 - **Colpo Grosso**: la mano più ricca, cioè il massimo di punti incassati in un solo round
 - **Sculone**: la rimonta più grande, con ferro di cavallo e quadrifoglio come emblema.
   Nelle partite segnate mano per mano, per chi ha vinto si guarda dopo ogni round di
   quanto era sotto al primo in classifica: vale il distacco più grande che ha poi
   ribaltato. Chi non è mai stato sotto non concorre
 - **Doppiogiochista**: chi si è visto arrivare più volte la carta **×2**. Conta solo le
-  mani segnate carta per carta (col tastierino non si sa se il ×2 è arrivato), sballi
+  mani segnate carta per carta (in una mano scritta come totale non si sa se il ×2 è
+  arrivato), sballi
   compresi: la carta l'aveva in mano comunque
 - **Iceman**, **Bullo** e **Generoso**: chi tira più Congela, chi rifila più Pesca Tre,
   chi regala più Seconde Chance. Sono i record "attivi": contano dalle partite online
   giocate da quando il tavolo segna chi ha fatto cosa (`INTERACTIONS_SINCE` in
   [js/stats.js](js/stats.js)) e da quelle dal vivo in cui il segnapunti ha indicato
-  *congelato da*
+  *congelato da*. **Bullo** e **Generoso** portano la pastiglia **solo online**: dal vivo
+  il segnapunti non segna chi tira il Pesca Tre né chi regala la Seconda Chance, quindi
+  quei due si fanno solo al tavolo
 
 Poi i **Primati della stanza**: non "chi è il migliore in X" ma "la partita più…" — la
 maratona (più mani), la partita lampo, il punteggio di sempre, la passeggiata (vittoria

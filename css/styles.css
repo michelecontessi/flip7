@@ -34,6 +34,7 @@
   --c-gold:   #a5720b;
   --c-orange: #c9531a;
   --c-rose: #c4306e;
+  --c-rose-ink: #ffffff;
   --c-silver: #66768a;
 
   --holo: linear-gradient(118deg, #ffd8e6 0%, #ffe7ab 17%, #d6f7c6 34%, #c2ecff 52%, #e0d5ff 70%, #ffd8e6 88%);
@@ -84,6 +85,7 @@
     --c-gold:   #e5b54e;
     --c-orange: #ffa06a;
     --c-rose: #ff8ab8;
+    --c-rose-ink: #2b0d1c;
     --c-silver: #b3c2d2;
 
     --holo: linear-gradient(118deg, #ff9ec4 0%, #ffd166 17%, #8ff0b8 34%, #7fd2ff 52%, #c3a8ff 70%, #ff9ec4 88%);
@@ -124,6 +126,7 @@
   --c-gold:   #e5b54e;
   --c-orange: #ffa06a;
   --c-rose: #ff8ab8;
+  --c-rose-ink: #2b0d1c;
   --c-silver: #b3c2d2;
 
   --holo: linear-gradient(118deg, #ff9ec4 0%, #ffd166 17%, #8ff0b8 34%, #7fd2ff 52%, #c3a8ff 70%, #ff9ec4 88%);
@@ -166,7 +169,7 @@ h1, h2, h3 { margin: 0; font-weight: 700; }
 .section-title, .card-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; letter-spacing: 0; }
 
 /* tutto cio' che e' "punteggio" usa il carattere del gioco, cifre allineate */
-.total-cell b, .rc-val, .sd-value, .you-score > b, .key, .cbar-val, .crown-chip,
+.total-cell b, .rc-val, .sd-value, .you-score > b, .cbar-val, .crown-chip,
 .hdate b, .hg-top b, .stat b, .ch-count b, .wb-name, .wb-score, .profile-name,
 .round-pill, .rank, .col, .fcard b, .empty-title, .dlg-title, .sheet-title,
 .nav-name, .page-title, table.rounds td, .total-cell small {
@@ -857,7 +860,25 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .sheet-title-row { display: flex; align-items: center; gap: 12px; }
 .sheet-title { font-size: 19px; font-weight: 700; }
 .sheet-sub { font-size: 13px; color: var(--muted); }
-.sheet-actions { display: flex; gap: 10px; position: sticky; bottom: -2px; padding: 8px 0 0; background: linear-gradient(180deg, transparent, var(--bg) 45%); }
+/* la barra dei comandi resta incollata in fondo e SOPRA il contenuto che scorre:
+   un vassoio pieno (colore della superficie, non del fondo), filo in alto e
+   ombra verso l'alto, cosi' si capisce che e' sovrapposta e non si confonde
+   con le carte. I margini negativi la portano a filo dei bordi laterali; il
+   pannello che finisce con lei rinuncia al padding in fondo (l'area sicura
+   la copre la barra stessa), altrimenti resterebbe una striscia di fondo sotto */
+.sheet-actions {
+  display: flex; gap: 10px;
+  position: sticky; bottom: 0; z-index: 3;
+  margin: 0 -14px;
+  padding: 10px 14px calc(12px + var(--safe-b));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -12px 28px -14px rgba(20,20,30,.35);
+}
+.sheet:has(> .sheet-actions) { padding-bottom: 0; }
+/* a schermo intero la barra sta in fondo anche se il contenuto e' corto:
+   sticky la trattiene solo quando scorre, non la spinge giu' */
+.sheet.full > .sheet-actions { margin-top: auto; }
 .sheet-actions .btn { flex: 1; min-height: 52px; }
 .sheet-actions .btn.primary { flex: 1.6; }
 .sheet-actions.col { flex-direction: column; gap: 8px; }
@@ -867,7 +888,7 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .sheet-actions.stack .act-row .btn { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 0 10px; font-size: 14.5px; }
 .sheet-actions.stack > .btn.primary { flex: none; width: 100%; }
 .act-row { display: flex; gap: 8px; }
-.act-row .btn { flex: 1; min-height: 52px; }
+.act-row .btn { flex: 1; min-height: 50px; }
 .act-row .btn.primary { flex: 1.5; }
 .act-row .quick.bust3 {
   flex: 1; min-height: 52px; border-radius: var(--radius-sm);
@@ -892,10 +913,10 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 
 .score-display {
   position: relative;
-  border-radius: 14px; padding: 14px;
+  border-radius: 14px; padding: 12px 14px;
   background: var(--surface);
   display: grid; justify-items: center; gap: 6px;
-  min-height: 118px; align-content: center;
+  min-height: 110px; align-content: center;
 }
 .score-display.flip7 { background: var(--holo-soft); }
 .score-display.bust { background: var(--surface-2); }
@@ -930,7 +951,7 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .sd-running small.goal { color: var(--gold); font-weight: 700; }
 .score-display.flip7 .sd-running, .score-display.bust .sd-running { background: rgba(255,255,255,.55); }
 /* niente altezza fissa: le carte su desktop sono piu' alte e verrebbero tagliate */
-.sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 4px; min-height: 52px; align-items: center; max-width: 100%; overflow-x: auto; padding: 2px; }
+.sd-hand { position: relative; display: flex; flex-wrap: nowrap; justify-content: safe center; gap: 6px; margin-top: 2px; min-height: 48px; align-items: center; max-width: 100%; overflow-x: auto; padding: 2px; }
 .hand-void { display: inline-flex; gap: 6px; filter: grayscale(1) opacity(.4); }
 .void-flag {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-5deg);
@@ -941,23 +962,9 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .sd-hand .fcard { width: 34px; }
 .hand-empty { font-size: 12.5px; color: var(--dim); }
 
-.mode-switch { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 12px; }
-.mode-switch button { min-height: 38px; padding: 0 4px; border: 0; background: transparent; color: var(--muted); border-radius: 9px; font-size: 13.5px; font-weight: 650; }
-.mode-switch button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
-
-.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.key {
-  min-height: 56px; border-radius: 12px;
-  border: 0; background: var(--surface);
-  font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;
-  box-shadow: var(--shadow-1);
-}
-.key:active { background: var(--surface-2); }
-.key.sub { font-size: 17px; color: var(--muted); display: grid; place-items: center; }
-
 .quick-row { display: flex; gap: 8px; }
 .quick {
-  flex: 1; min-height: 50px; border-radius: 12px;
+  flex: 1; min-height: 46px; border-radius: 12px;
   border: 0; background: var(--surface-2); color: var(--text);
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-weight: 650; font-size: 14.5px;
@@ -965,16 +972,17 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .quick.on.gold { background: var(--holo); color: #2a1c02; }
 .quick.on.red { background: var(--red); color: #fff; }
 .quick.on.ice { background: #2f8fd8; color: #fff; }
-/* vite extra: non fanno punti, quindi il tasto resta piu' quieto degli altri
-   (e non si confonde con il rosso dello Sballo) */
+/* vite extra: acceso si riempie di rosa pieno come gli altri due (un fondo
+   velato sembrava un tasto trasparente); il rosa lo distingue dal rosso dello Sballo */
 .quick.heart { color: var(--c-rose); }
-.quick.on.rose { background: rgba(220,70,130,.14); color: var(--c-rose); box-shadow: inset 0 0 0 1.5px var(--c-rose); }
+.quick.on.rose { background: var(--c-rose); color: var(--c-rose-ink); }
 .quick-row .quick { min-width: 0; padding: 0 6px; font-size: 13.5px; }
 
+.numgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px 7px; padding: 2px; }
 .calc-section { display: flex; flex-direction: column; gap: 8px; }
 .calc-label { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--dim); }
-.numgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px 7px; padding: 2px; }
-.modgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px 7px; padding: 2px; }
+/* stesse colonne delle carte numero: modificatori della stessa taglia, riga piu' bassa */
+.modgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px 7px; padding: 2px; }
 
 /* ---------- carte ----------
    Ricalcano il mazzo vero in stile art déco: faccia crema, cornice sottile
@@ -1623,9 +1631,19 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .award-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .award {
   border-radius: 16px; padding: 18px 12px 15px;
-  display: grid; justify-items: center; text-align: center; gap: 3px; min-width: 0;
+  display: grid; justify-items: center; align-content: start; text-align: center; gap: 3px; min-width: 0;
   cursor: pointer;
 }
+/* i record che si fanno solo al tavolo online (Bullo, Generoso): stessa
+   pastiglia verde-acqua dell'etichetta "online" nello storico */
+.award-only {
+  display: inline-flex; align-items: center; gap: 3px; margin-top: 4px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 7px 3px 6px; border-radius: 999px;
+  background: rgba(26,162,160,.15); color: #1a9b99; white-space: nowrap;
+}
+.award-only .ico { width: 11px; height: 11px; stroke-width: 2.4; }
+.aw-list .award-only { margin: 0 0 0 6px; padding: 2px 6px 2px 5px; font-size: 8.5px; vertical-align: middle; }
 .award-emblem { width: 66px; height: 61px; display: block; margin-bottom: 5px; }
 .award-title { font-family: var(--font-display); font-size: 19px; font-weight: 600; line-height: 1.1; }
 .award-desc { font-size: 11px; color: var(--dim); font-weight: 500; line-height: 1.25; }
@@ -1668,7 +1686,10 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 }
 .award-hero .award-emblem { width: 88px; height: 81px; margin-bottom: 7px; }
 .award-hero .award-title { font-size: 25px; }
-.award-scope { margin-top: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 4px 11px; border-radius: 999px; background: rgba(255,255,255,.55); color: var(--muted); }
+.award-pills { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+.award-scope { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 4px 11px; border-radius: 999px; background: rgba(255,255,255,.55); color: var(--muted); }
+.award-hero .award-only { margin-top: 0; font-size: 11px; padding: 4px 10px 4px 8px; }
+.award-hero .award-only .ico { width: 13px; height: 13px; }
 .tone-gold  .award-title { color: var(--c-gold); }
 .tone-red   .award-title { color: var(--c-red); }
 .tone-blue  .award-title { color: var(--c-blue); }
