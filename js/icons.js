@@ -2,6 +2,7 @@
 // Icone SVG disegnate a mano (niente emoji) + facce delle carte Flip 7.
 // Tutte usano currentColor, cosi' ereditano il colore del contesto.
 // ---------------------------------------------------------------------------
+import { VC, LABEL as V_LABEL } from "./vengeance.js";
 
 const PATHS = {
   // tab
@@ -67,7 +68,24 @@ const PATHS = {
   vibrate: `<rect x="8" y="3.6" width="8" height="16.8" rx="2"/><path d="M4.4 8.4v7.2M19.6 8.4v7.2M2 10v4M22 10v4"/>`,
   smile: `<circle cx="12" cy="12" r="8.4"/><path d="M8.6 14.2a4.2 4.2 0 0 0 6.8 0"/><circle cx="9.3" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="14.7" cy="10" r="1" fill="currentColor" stroke="none"/>`,
   trophy: `<path d="M7 4.6h10v5.2a5 5 0 0 1-10 0Z"/><path d="M7 6.4H4.2v1.8a3 3 0 0 0 3 3M17 6.4h2.8v1.8a3 3 0 0 1-3 3"/><path d="M12 14.8v3M8.6 19.6h6.8"/>`,
-  swords: `<path d="m4 4 6.4 6.4M20 4l-6.4 6.4M4 20l4.2-4.2M20 20l-4.2-4.2"/><path d="m8.6 12.2 3.2 3.2M15.4 12.2l-3.2 3.2"/><path d="M4 4h3M4 4v3M20 4h-3M20 4v3"/>`
+  swords: `<path d="m4 4 6.4 6.4M20 4l-6.4 6.4M4 20l4.2-4.2M20 20l-4.2-4.2"/><path d="m8.6 12.2 3.2 3.2M15.4 12.2l-3.2 3.2"/><path d="M4 4h3M4 4v3M20 4h-3M20 4v3"/>`,
+
+  // With a Vengeance: le azioni nuove e i simboli delle carte speciali
+  four: `<rect x="0.9" y="7.4" width="6.8" height="10.8" rx="1.7" transform="rotate(-24 4.3 12.8)"/>
+         <rect x="6.3" y="4.9" width="6.8" height="11.6" rx="1.7" transform="rotate(-8 9.7 10.7)"/>
+         <rect x="10.9" y="4.9" width="6.8" height="11.6" rx="1.7" transform="rotate(8 14.3 10.7)"/>
+         <rect x="16.3" y="7.4" width="6.8" height="10.8" rx="1.7" transform="rotate(24 19.7 12.8)"/>`,
+  oneMore: `<rect x="6.6" y="3.4" width="10.8" height="17.2" rx="2.2"/><path d="M12 8.6v6.8M8.6 12h6.8"/>`,
+  swap: `<path d="M4.4 8.4h13.4l-3.6-3.6"/><path d="M19.6 15.6H6.2l3.6 3.6"/>`,
+  steal: `<path d="M7.4 12.6V7a1.5 1.5 0 0 1 3 0v4.4M10.4 11V5.4a1.5 1.5 0 0 1 3 0v5.4M13.4 10.8V6.6a1.5 1.5 0 0 1 3 0v6"/>
+          <path d="M16.4 12.6a1.5 1.5 0 0 1 3 0v3.2a5.4 5.4 0 0 1-5.4 5.4h-2a5.4 5.4 0 0 1-4.4-2.2l-3-4.2a1.5 1.5 0 0 1 2.4-1.8l1.4 1.8"/>`,
+  discard: `<rect x="6.6" y="3.4" width="10.8" height="17.2" rx="2.2"/><path d="m9.4 9.4 5.2 5.2M14.6 9.4l-5.2 5.2"/>`,
+  skull: `<path d="M12 3.2a7 7 0 0 0-7 7c0 2.6 1.3 4.4 3 5.6v3.2h8v-3.2c1.7-1.2 3-3 3-5.6a7 7 0 0 0-7-7Z"/>
+          <circle cx="9.3" cy="10.8" r="1.7" fill="currentColor" stroke="none"/><circle cx="14.7" cy="10.8" r="1.7" fill="currentColor" stroke="none"/>
+          <path d="M10.6 19v1.8M13.4 19v1.8"/>`,
+  clover: `<circle cx="12" cy="7.4" r="3.3"/><circle cx="7.4" cy="11.6" r="3.3"/><circle cx="16.6" cy="11.6" r="3.3"/><circle cx="12" cy="15.8" r="3.3"/>
+           <path d="M12 16.4c.2 1.8 1 3.2 2.6 4.4"/>`,
+  bolt: `<path d="M13.6 2.8 5.4 13.6h5.4l-1.8 7.6 8.4-11h-5.4Z"/>`
 };
 
 /** Restituisce l'SVG dell'icona. `cls` aggiunge classi (es. "big", "gold"). */
@@ -527,7 +545,7 @@ export function wordmark(cls = "") {
   return `<span class="wordmark ${cls}"><b>FLIP</b><i class="w7">7</i></span>`;
 }
 
-const CARD_WORDS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE"];
+const CARD_WORDS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN"];
 
 /**
  * Faccia di una carta numero (0-12) come nel gioco vero: fondo chiaro,
@@ -583,6 +601,29 @@ export function heartCard({ on = true, size = "", attrs = "" } = {}) {
 /** Dorso della carta (il mazzo del tavolo online). */
 export function cardBack({ size = "" } = {}) {
   return `<span class="fcard back ${size}"><b>FLIP<i>7</i></b></span>`;
+}
+
+// ---------------------------------------------------------------------------
+// With a Vengeance: le carte del mazzo nuovo, ricalcate su quelle vere.
+//   - The Zero e Lucky 13: faccia crema come i numeri, cifra iridescente
+//   - Unlucky 7: cifra a righe d'acciaio, col teschio nell'angolo
+//   - modificatori (÷2, -2...-10): faccia rossa, cifra bianca contornata
+//   - azioni: ognuna col suo colore (celeste, giallo, lime, arancio, pervinca),
+//     saetta e simbolo al centro, nome nel cartiglio
+// ---------------------------------------------------------------------------
+const V_ICON = { jom: "oneMore", fl4: "four", swp: "swap", stl: "steal", dsc: "discard" };
+const V_SHORT = { jom: "ONE MORE", fl4: "FLIP FOUR", swp: "SWAP", stl: "STEAL", dsc: "DISCARD" };
+
+/** Faccia di una carta Vengeance (per i numeri comuni vale numberCard). */
+export function vCard(c, { on = true, size = "", attrs = "" } = {}) {
+  const base = `fcard ${on ? "on" : ""} ${size}`;
+  if (c === "z0") return `<span class="${base} n0 vsp vz" data-face="0" ${attrs}><b>0</b><small>THE ZERO</small></span>`;
+  if (c === "u7") return `<span class="${base} n7 vsp vu" data-face="7" ${attrs}><i class="vbadge">${icon("skull")}</i><b>7</b><small>UNLUCKY</small></span>`;
+  if (c === "l13") return `<span class="${base} n13 vsp vl" data-face="13" ${attrs}><i class="vbadge">${icon("clover")}</i><b>13</b><small>LUCKY</small></span>`;
+  if (VC.isMod(c)) return `<span class="${base} vmod ${c === "d2" ? "vdiv" : ""}" data-face="${V_LABEL[c]}" ${attrs}><b>${V_LABEL[c]}</b></span>`;
+  if (VC.isAction(c)) return `<span class="${base} vact va-${c}" data-face="${V_LABEL[c]}" ${attrs}><i class="vbolt">${icon("bolt")}</i><i class="acard">${icon(V_ICON[c])}</i><small>${V_SHORT[c]}</small></span>`;
+  if (VC.isNum(c)) return numberCard(VC.num(c), { on, size, attrs });
+  return `<span class="${base}" ${attrs}><b>?</b></span>`;
 }
 
 // ---------------------------------------------------------------------------

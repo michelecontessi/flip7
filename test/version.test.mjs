@@ -14,5 +14,5 @@ test("APP_VERSION (js/config.js) e CACHE (sw.js) portano lo stesso numero", () =
 
 test("i file nuovi stanno nella shell del service worker", () => {
   const sw = readFileSync(new URL("../sw.js", import.meta.url), "utf8");
-  for (const f of ["./js/notify.js", "./js/share.js", "./js/game.js", "./js/views/table.js"]) assert.ok(sw.includes(`"${f}"`), f);
+  for (const f of ["./js/notify.js", "./js/share.js", "./js/game.js", "./js/vengeance.js", "./js/views/table.js"]) assert.ok(sw.includes(`"${f}"`), f);
 });

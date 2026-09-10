@@ -950,6 +950,8 @@ export function reactAt(id, sticker) {
  * nelle statistiche esattamente come in una partita segnata a mano.
  */
 export function saveOnlineGame(state) {
+  // With a Vengeance e' in beta: si prova e basta, lo storico non lo vede
+  if (state && state.mode === "vengeance") return Promise.reject(new Error("Le partite With a Vengeance sono di prova: non entrano nello storico"));
   const keyOf = (sid) => (state.seats[sid] && state.seats[sid].playerId) || sid;
   // i riferimenti ad altri posti (chi ha congelato, chi ha regalato il cuore...)
   // diventano id di giocatore, cosi' nello storico si leggono anche se il

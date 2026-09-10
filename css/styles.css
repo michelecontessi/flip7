@@ -1800,7 +1800,14 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
   .t-side {
     grid-area: side; position: sticky; top: 74px;
     max-height: calc(100dvh - 170px); overflow-y: auto; padding: 14px 15px;
+    /* quando i comandi cambiano (bottoni -> riquadro azione) il browser non deve
+       "ancorare" lo scorrimento sul banco e nascondere la striscia in cima */
+    overflow-anchor: none;
   }
+  /* se il riquadro azione e' alto la colonna scorre, ma striscia, comandi e
+     banco NON si schiacciano (la striscia, con overflow hidden, si ridurrebbe
+     a una riga tagliata) */
+  .t-side > * { flex-shrink: 0; }
   .t-seats { grid-area: seats; padding: 6px 14px; }
   .race { display: flex; flex-direction: column; gap: 7px; padding-top: 2px; }
   /* il banco si adatta agli schermi bassi: mai piu' alto di un decimo scarso */
@@ -2216,3 +2223,171 @@ table.rounds tr.hl-row th { color: var(--text); font-weight: 800; }
 .mini-list li.tap { cursor: pointer; }
 .mini-list li.tap:active { background: var(--tint); }
 .hl.tone-silver { background: rgba(120,140,165,.12); }
+
+/* ==========================================================================
+   Flip 7: With a Vengeance (tavolo online, beta)
+   Le carte del mazzo nuovo, ricalcate su quelle vere; la modalita' "tocca la
+   carta" per Steal / Swap / Discard; il conto passo per passo a fine round;
+   le carte che si spostano da una fila all'altra.
+   ========================================================================== */
+
+/* il 13 e' indaco, come sul mazzo */
+.n13 { --cn: #4a63cf; }
+
+/* carte speciali: cifra iridescente per The Zero e Lucky 13 (come sul mazzo
+   vero), a righe d'acciaio per l'Unlucky 7; il simbolo sta nell'angolo */
+.fcard.vz, .fcard.vl { --cn: #c9a227; }
+.fcard.vz b, .fcard.vl b {
+  background: linear-gradient(135deg, #ff6f91 0%, #ffb340 24%, #ffe45c 40%, #5ad07a 58%, #3fb6ff 76%, #b46bff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.fcard.vz { --cn: #7d86a6; --sc: #7d86a6; }
+.fcard.vu { --cn: #8f97a6; --sc: #8f97a6; }
+.fcard.vu b {
+  background: repeating-linear-gradient(135deg, #7f8898 0 2.2px, #d9dde4 2.2px 4.4px);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.fcard.vsp small { letter-spacing: .1em; }
+.vbadge { position: absolute; top: 4%; right: 5%; width: 24%; color: var(--cn); opacity: .9; z-index: 1; display: block; }
+.vbadge .ico { width: 100%; height: auto; }
+.fcard.vu .vbadge { color: #4f5766; }
+.fcard.vl .vbadge { color: #2f9d4a; }
+
+/* modificatori: faccia rossa e cifra bianca contornata, cornice chiara */
+.fcard.vmod {
+  --cn: #fff; --sc: rgba(255,255,255,.75);
+  background: #dc4838; color: #fff;
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.65), 0 1px 3px rgba(20,20,30,.22), 0 0 0 1px var(--card-ring);
+}
+.fcard.vmod b { color: #fff; -webkit-text-stroke: .045em #5a1a12; font-size: clamp(11px, 3.6vw, 15px); }
+.fcard.vmod.vdiv { background: #d33f43; }
+
+/* azioni: ognuna col suo colore, saetta in alto e simbolo al centro */
+.fcard.vact {
+  --sc: rgba(255,255,255,.85);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.6), 0 1px 3px rgba(20,20,30,.22), 0 0 0 1px var(--card-ring);
+}
+.fcard.va-jom { --cn: #1c5a74; background: #7fcbea; color: #1c5a74; }
+.fcard.va-fl4 { --cn: #5a4200; background: #f5d33e; color: #5a4200; }
+.fcard.va-swp { --cn: #2f4d0c; background: #bcd63c; color: #2f4d0c; }
+.fcard.va-stl { --cn: #5a2e00; background: #f3a63b; color: #5a2e00; }
+.fcard.va-dsc { --cn: #fff; --sc: rgba(255,255,255,.6); background: #6d7ed6; color: #fff; }
+.fcard.vact .acard { width: 48%; margin-top: 4%; }
+.fcard.vact small { font-size: clamp(3.6px, 1.1vw, 5.5px); letter-spacing: .08em; padding: 1px 3px; }
+.fcard.va-dsc small { background: rgba(255,255,255,.9); }
+.vbolt { position: absolute; top: 3%; left: 5%; width: 22%; opacity: .55; z-index: 1; display: block; color: var(--cn); }
+.vbolt .ico { width: 100%; height: auto; }
+.fcard.va-dsc .vbolt { color: #fff; }
+@supports (font-size: 1cqw) {
+  .fcard.vmod b { font-size: 38cqw; }
+  .fcard.vact small { font-size: 8.4cqw; }
+}
+
+/* "tocca la carta": con Steal / Swap / Discard in mano le carte colpibili si
+   alzano un filo e hanno il bordo tratteggiato; quella scelta (prima carta
+   dello Swap) ha l'anello scuro; quella che ti farebbe sballare, o che ti
+   fa buttare tutto, lo dice con un bollino rosso */
+.cards-row .fcard.pick { cursor: pointer; outline: 2px dashed var(--primary); outline-offset: 2px; transform: translateY(-3px); }
+.cards-row .fcard.pick:active { transform: scale(.94); }
+.cards-row .fcard.picked { outline: 3px solid var(--primary); outline-offset: 2px; transform: translateY(-5px); box-shadow: 0 8px 18px -8px rgba(20,20,30,.5); }
+.fcard .pick-warn {
+  position: absolute; right: -6px; top: -6px; z-index: 2;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--red); color: #fff; display: grid; place-items: center;
+  border: 2px solid var(--surface);
+}
+.fcard .pick-warn .ico { width: 10px; height: 10px; }
+.seat.pickable { background: var(--tint); }
+/* i posti che NON si possono toccare restano un po' indietro */
+.picking .seat:not(.pickable) .cards-row .fcard { opacity: .55; }
+
+/* una carta che sta lasciando la fila (rubata, scambiata, scartata, buttata
+   dall'Unlucky 7): resta come segnaposto invisibile finche' la copia in volo
+   non e' partita, poi si chiude senza far saltare la fila */
+.cards-row .fcard.ghost { visibility: hidden; transition: width .2s ease, flex-basis .2s ease, margin .2s ease; }
+.cards-row .fcard.ghost.gone { width: 0 !important; flex-basis: 0 !important; margin-right: -5px; border-width: 0; }
+.fly-card .fcard.mini { width: 100%; flex: none; }
+
+/* il conto della mano, passo per passo: si legge sotto le carte quando ci sono
+   modificatori o The Zero, e a fine round dice come si e' arrivati al totale */
+.seat-calc {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px;
+  font-size: 11px; font-weight: 650; color: var(--muted); line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.seat-calc b { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; color: var(--text); }
+.seat-calc i { font-style: normal; color: var(--dim); }
+.seat-calc .sc-neg { color: var(--red); }
+.seat-calc .sc-div { color: #b0392e; }
+.seat-calc .sc-zero { color: var(--c-violet); }
+.seat-calc .sc-bonus { color: var(--c-gold); }
+.seat-calc .sc-tot { color: var(--green); }
+.seat.out-bust .seat-calc { display: none; }
+
+/* stati del posto nuovi: fermo ma colpibile, ultima carta, quattro carte */
+.seat-state.s-stay { background: rgba(60,140,220,.13); color: var(--c-blue); }
+.seat-state.s-mustdraw { background: rgba(130,90,220,.14); color: var(--c-violet); }
+.seat-state.s-flip4 { background: rgba(224,160,20,.18); color: #8a5a00; }
+
+/* riquadri azione per le carte nuove: il colore della carta */
+.action-box.act-jom { --ab: #7fcbea; --ab-bg: rgba(127,203,234,.16); --ab-soft: rgba(127,203,234,.5); }
+.action-box.act-fl4 { --ab: #e5c02a; --ab-bg: rgba(245,211,62,.16); --ab-soft: rgba(229,192,42,.45); }
+.action-box.act-swp { --ab: #a8c22e; --ab-bg: rgba(188,214,60,.16); --ab-soft: rgba(168,194,46,.45); }
+.action-box.act-stl { --ab: #f3a63b; --ab-bg: rgba(243,166,59,.15); --ab-soft: rgba(243,166,59,.45); }
+.action-box.act-dsc { --ab: #6d7ed6; --ab-bg: rgba(109,126,214,.14); --ab-soft: rgba(109,126,214,.45); }
+.action-box.act-mod { --ab: #dc4838; --ab-bg: rgba(220,72,56,.11); --ab-soft: rgba(220,72,56,.4); }
+.action-box.act-fl4 .ab-ico, .action-box.act-swp .ab-ico, .action-box.act-jom .ab-ico { color: #303356; }
+.ab-ico .fcard { width: 30px; }
+.ab-ico.has-card { background: transparent; }
+.ab-actions { display: flex; flex-direction: column; gap: 6px; }
+.ab-pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.ab-pick .fcard { width: 30px; flex: none; }
+.ab-pick b { color: var(--text); }
+
+/* verdetti in grande per le carte nuove */
+.flash-banner.fb-zero { background: #4b4f6b; }
+.flash-banner.fb-unlucky { background: #3a3f4e; }
+.flash-banner.fb-lucky { background: var(--holo); color: #3b2703; }
+.flash-banner.fb-lucky .fb-ico { background: rgba(59,39,3,.12); }
+.flash-banner.fb-steal { background: #c9782a; }
+.flash-banner.fb-swap { background: #7a9a1a; }
+.flash-banner.fb-discard { background: #5a6ac6; }
+
+/* etichetta beta e nota del tavolo Vengeance */
+.tag.beta { background: rgba(220,72,56,.12); color: #b0392e; }
+.mode-pill {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 3px 9px 3px 5px; border-radius: 999px;
+  background: rgba(220,72,56,.10); color: #b0392e;
+  font-family: var(--font-display); font-size: 11px; font-weight: 600; letter-spacing: .04em;
+}
+.mode-pill .fcard { width: 15px; border-width: 1px; border-radius: 3px; }
+.mode-pill .fcard b, .mode-pill .fcard small, .mode-pill .vbolt, .mode-pill .vbadge { display: none; }
+.beta-note { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 12px; background: rgba(220,72,56,.08); font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.beta-note .tag { flex: none; margin-top: 1px; }
+
+/* le regole in un foglio: ogni carta con la sua faccia e due righe */
+.vrules { display: flex; flex-direction: column; gap: 10px; }
+.vrule { display: grid; grid-template-columns: 44px 1fr; gap: 11px; align-items: center; }
+.vrule .fcard { width: 44px; }
+.vrule b { display: block; font-size: 14px; font-weight: 750; }
+.vrule small { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.vrule-fan { display: flex; gap: 3px; }
+.vrule-fan .fcard { width: 20px; border-width: 1px; border-radius: 4px; }
+.vrule-fan .fcard b { font-size: 9px; }
+.vrule-fan .fcard small { display: none; }
+.vr-title { font-family: var(--font-display); font-size: 14px; font-weight: 600; margin: 8px 0 0; color: var(--muted); }
+.vr-steps { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* scelta del mazzo all'apertura del tavolo */
+.deck-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.deck-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 10px 10px; border-radius: 14px; border: 0;
+  background: var(--surface-2); color: inherit; font: inherit; text-align: center;
+}
+.deck-opt.on { box-shadow: inset 0 0 0 2px var(--primary); background: var(--holo-soft); }
+.deck-opt .fan { height: 60px; }
+.deck-opt .fan .fcard { width: 36px; }
+.deck-opt b { font-size: 14px; }
+.deck-opt small { font-size: 11.5px; color: var(--muted); line-height: 1.3; }

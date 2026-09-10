@@ -21,22 +21,46 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime, fmtDate } from "../ui.js";
+import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime, fmtDate, openSheet, closeSheet } from "../ui.js";
 import { avatar } from "../avatar.js";
-import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card, sticker, STICKERS } from "../icons.js";
+import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card, vCard, sticker, STICKERS } from "../icons.js";
 import * as engine from "../game.js";
+import * as V from "../vengeance.js";
+
+// "tocca la carta" (Steal / Swap / Discard): la prima carta scelta per lo
+// Swap e l'apertura del riquadro "passa la carta", su QUESTO dispositivo
+let swapPick = null;
+let giveOpen = false;
 import { alertUser, pushLocal } from "../notify.js";
 import { sharePodium } from "../share.js";
 
 // "stay" copre anche chi viene chiuso d'ufficio a fine round (flip7 altrui,
 // carte finite): "ha incassato" e' vero in entrambi i casi, "si e' fermato" no
 const OUT_LABEL = { stay: "ha incassato", frozen: "congelato", bust: "sballato", flip7: "FLIP 7", excluded: "fuori" };
+// in Vengeance chi si ferma non ha ancora incassato: resta un bersaglio
+const isVg = (g) => Boolean(g) && g.mode === "vengeance";
+const outLabel = (g, out) => (isVg(g) && out === "stay" ? "fermo" : OUT_LABEL[out]);
 // le carte azione hanno un riquadro tutto loro: nome, colore e cosa fare
 const ACTION_META = {
   frz: { name: "Congela", ico: "snow", ask: "Chi vuoi congelare?", doing: "sceglie chi congelare" },
   fl3: { name: "Pesca Tre", ico: "cardFan", ask: "Chi deve pescare tre carte?", doing: "sceglie chi pescherà tre carte" },
-  sc:  { name: "Seconda Chance", ico: "heartFill", ask: "A chi regali la Seconda Chance?", doing: "sceglie a chi regalare la Seconda Chance" }
+  sc:  { name: "Seconda Chance", ico: "heartFill", ask: "A chi regali la Seconda Chance?", doing: "sceglie a chi regalare la Seconda Chance" },
+  // With a Vengeance
+  fl4: { name: "Flip Four", ico: "four", ask: "Chi deve pescare quattro carte? (anche tu, anche chi è fermo)", doing: "sceglie chi pescherà quattro carte" },
+  jom: { name: "Just One More", ico: "oneMore", ask: "Chi pesca un'ultima carta e poi si ferma? (anche tu)", doing: "sceglie a chi tocca l'ultima carta" },
+  stl: { name: "Steal", ico: "steal", ask: "Tocca la carta da rubare, nella fila di un altro", doing: "sceglie quale carta rubare" },
+  swp: { name: "Swap", ico: "swap", ask: "Tocca le due carte da scambiare, di due giocatori diversi", doing: "sceglie due carte da scambiare" },
+  dsc: { name: "Discard", ico: "discard", ask: "Tocca la carta da far scartare (anche una tua)", doing: "sceglie quale carta far scartare" }
 };
+/** Nome, icona e istruzioni di una carta da assegnare o da usare (modificatori compresi). */
+function metaOf(type) {
+  if (ACTION_META[type]) return ACTION_META[type];
+  if (V.VC.isMod(type)) {
+    const lab = V.cardLabel(type);
+    return { name: lab, ico: null, mod: true, ask: `A chi dai il ${lab}? (anche a te, anche a chi è fermo)`, doing: `sceglie a chi dare il ${lab}` };
+  }
+  return { name: engine.cardLabel(type), ico: "star", ask: "Scegli", doing: "sceglie" };
+}
 const BOT_NAMES = ["Bot Ada", "Bot Bruno", "Bot Carla", "Bot Dina"];
 // i livelli dei bot: da chi si ferma presto a chi conta le carte uscite
 const BOT_LEVELS = {
@@ -93,6 +117,10 @@ function syncTable(g) {
   spoilerHold = false;
   parkedCard = null;
   resolveTargetSid = null;
+  lastMoveKey = null;
+  moveHold = null;
+  swapPick = null;
+  giveOpen = false;
   podiumKey = null;
   wasMyTurn = null;
   lastAlertKey = null;
@@ -167,12 +195,13 @@ const fmtStall = (ms) => { const s = Math.floor(ms / 1000); return s < 60 ? `${s
  */
 function unseenCounts(g) {
   const counts = {};
-  for (const c of engine.fullDeck()) counts[c] = (counts[c] || 0) + 1;
+  for (const c of engine.deckOf(g)) counts[c] = (counts[c] || 0) + 1;
   const take = (c) => { if (counts[c] > 0) counts[c] -= 1; };
   for (const c of g.discard) take(c);
   for (const sid of g.order) {
     const h = g.hands[sid];
     if (!h) continue;
+    if (Array.isArray(h.cards)) { for (const c of h.cards) take(c); continue; }
     for (const n of h.nums) take("n" + n);
     for (const p of h.plus) take("p" + p);
     if (h.x2) take("x2");
@@ -183,7 +212,29 @@ function unseenCounts(g) {
     for (const c of ((g.pending.thenDeferred && g.pending.thenDeferred.cards) || [])) take(c);
   }
   if (g.flip3) for (const c of g.flip3.deferred) take(c);
+  for (const seg of g.cont || []) for (const c of seg.cards) take(c);
   return counts;
+}
+
+/** Lo stesso, col mazzo Vengeance: sballa un numero che hai gia' (il secondo 13 no, col Lucky). */
+function drawOddsV(g, sid) {
+  const h = g.hands[sid];
+  const counts = unseenCounts(g);
+  let total = 0, dup = 0, gain = 0;
+  const now = engine.handPoints(h);
+  const st = V.scoreSteps(h);
+  for (const [c, n] of Object.entries(counts)) {
+    if (!n) continue;
+    total += n;
+    if (!V.VC.isNum(c)) continue; // azioni e modificatori non fanno sballare (e di solito si danno via)
+    if (V.wouldBust(h, c)) { dup += n; continue; }
+    const v = c === "u7" ? 7 - st.sum : V.VC.num(c) / (st.div ? 2 : 1);
+    gain += n * (v + (st.count === 6 ? 15 : 0));
+  }
+  const pBust = total ? dup / total : 0;
+  const safeGain = total - dup ? gain / (total - dup) : 0;
+  const ev = (1 - pBust) * safeGain - pBust * now;
+  return { pBust, pDup: pBust, ev, unseen: total, now, protectedBySc: false };
 }
 
 /**
@@ -193,6 +244,7 @@ function unseenCounts(g) {
  * doppione non fa sballare.
  */
 export function drawOdds(g, sid) {
+  if (isVg(g)) return drawOddsV(g, sid);
   const h = g.hands[sid];
   const counts = unseenCounts(g);
   let total = 0, dup = 0, gain = 0;
@@ -219,6 +271,7 @@ export function drawOdds(g, sid) {
 // --- bot -----------------------------------------------------------------------
 /** Il bersaglio dei bot: Congela e Pesca Tre al piu' ricco, il cuore al primo libero. */
 function botTarget(g, sid) {
+  if (isVg(g)) return V.botTarget(g, sid, g.pending.type, g.pending.options);
   const others = g.pending.options.filter((x) => x !== sid);
   const pool = others.length ? others : g.pending.options;
   return g.pending.type === "sc" ? pool[0]
@@ -229,26 +282,39 @@ function botTarget(g, sid) {
 
 /** Il bot decide: pesca o si ferma, secondo il suo livello. */
 function botMove(g, sid) {
-  if (g.pending && g.pending.chooser === sid) return engine.chooseTarget(g, sid, botTarget(g, sid));
+  if (g.pending && g.pending.chooser === sid) {
+    // Steal / Swap / Discard: il bot tocca le carte che gli rendono di piu' (mai le passa)
+    if (g.pending.kind === "use") {
+      const picks = V.botPick(g, sid, g.pending.type);
+      return picks ? engine.pickCards(g, sid, picks) : g;
+    }
+    return engine.chooseTarget(g, sid, botTarget(g, sid));
+  }
   if (g.flip3 && g.flip3.target === sid) return engine.hit(g, sid);
   if (g.turn === sid && !g.hands[sid].out) {
     const h = g.hands[sid];
+    if (isVg(g) && V.hasZero(h)) return engine.hit(g, sid); // con The Zero si pesca per forza
     const level = (g.seats[sid] && g.seats[sid].level) || "normale";
     const pts = engine.handPoints(h);
     let stop;
-    if (level === "facile") stop = pts >= 14 || h.nums.length >= 4;
+    if (level === "facile") stop = pts >= 14 || numCount(h) >= 4;
     else if (level === "contacarte") {
       const odds = drawOdds(g, sid);
+      const nn = numCount(h);
       // rischia finche' conviene in media; con sette carte in vista tenta il Flip 7
-      stop = h.nums.length < 7 && odds.ev <= 0 && !(h.nums.length === 6 && odds.pBust < 0.35);
-    } else stop = pts >= 21 || h.nums.length >= 5;
+      stop = nn < 7 && odds.ev <= 0 && !(nn === 6 && odds.pBust < 0.35);
+    } else stop = pts >= 21 || numCount(h) >= 5;
     return stop ? engine.stay(g, sid) : engine.hit(g, sid);
   }
   return g;
 }
 
-/** La mano e' completamente vuota? (inizio del proprio turno nel round) */
-const emptyHand = (h) => !h.nums.length && !h.plus.length && !h.x2;
+/** Quanti numeri ha in mano (in Vengeance le carte stanno in un elenco unico). */
+const numCount = (h) => (Array.isArray(h.cards) ? V.numsOf(h).length : h.nums.length);
+/** La prima carta del round non e' ancora arrivata? (arriva da sola, come dal mazziere) */
+const emptyHand = (h) => (Array.isArray(h.cards) ? !h.dealt : !h.nums.length && !h.plus.length && !h.x2);
+/** Puo' ricevere una pescata forzata: in Vengeance anche chi si e' fermato (Flip Four / Just One More). */
+const canForceDraw = (g, sid) => (isVg(g) ? V.inRound(g, sid) : !g.hands[sid].out);
 
 /**
  * Mosse che partono da sole: quelle dei bot, le pescate del Pesca Tre
@@ -257,7 +323,7 @@ const emptyHand = (h) => !h.nums.length && !h.plus.length && !h.x2;
 function needsAuto(g, sid) {
   const seat = g.seats[sid];
   if (seat.bot) return true;
-  if (g.flip3 && g.flip3.target === sid && !g.hands[sid].out) return true;
+  if (g.flip3 && g.flip3.target === sid && canForceDraw(g, sid)) return true;
   return !g.pending && !g.flip3 && g.turn === sid && !g.hands[sid].out && emptyHand(g.hands[sid]);
 }
 
@@ -325,8 +391,8 @@ function alertOnChanges(g, ctx) {
   const myTurn = Boolean(actor && mine(g, ctx, actor) && !(hold && hold !== actor));
   const first = wasMyTurn === null;
   if (myTurn && wasMyTurn === false) {
-    const what = g.pending && g.pending.chooser === actor ? `hai pescato ${ACTION_META[g.pending.type].name}: scegli il bersaglio`
-      : g.flip3 && g.flip3.target === actor ? "Pesca Tre: le carte arrivano" : "pesca o fermati";
+    const what = g.pending && g.pending.chooser === actor ? `hai pescato ${metaOf(g.pending.type).name}: ${g.pending.kind === "use" ? "tocca le carte" : "scegli il bersaglio"}`
+      : g.flip3 && g.flip3.target === actor ? (g.flip3.jom ? "Just One More: l'ultima carta arriva" : isVg(g) ? "Flip Four: le carte arrivano" : "Pesca Tre: le carte arrivano") : "pesca o fermati";
     alertUser("turn", "Tocca a te!", `${g.owner && g.owner.name ? `Tavolo di ${g.owner.name} · ` : ""}${what}`, { tag: "flip7-turn" });
   }
   wasMyTurn = myTurn;
@@ -345,8 +411,9 @@ function alertOnChanges(g, ctx) {
 
 /** Una carta in mano o nel banco. `key` la identifica nel ridisegno
     incrementale, cosi' la stessa carta resta lo stesso elemento. */
-function miniCard(c, cls = "mini", key = "", sid = "") {
-  const attrs = key ? `data-key="${key}"${sid ? ` data-flip="card:${sid}:${key}"` : ""}` : "";
+function miniCard(c, cls = "mini", key = "", sid = "", extra = "") {
+  const attrs = (key ? `data-key="${key}"${sid ? ` data-flip="card:${sid}:${key}"` : ""}` : "") + (extra ? " " + extra : "");
+  if (V.isVCard(c)) return vCard(c, { on: true, size: cls, attrs });
   if (engine.CARD.isNum(c)) return numberCard(engine.CARD.num(c), { on: true, size: cls, attrs });
   if (engine.CARD.isPlus(c)) return modCard(engine.CARD.plus(c), { on: true, size: cls, attrs });
   if (engine.CARD.isX2(c)) return modCard("x2", { on: true, size: cls, attrs });
@@ -377,7 +444,12 @@ let resolveTargetSid = null;
     se chip e comandi passassero subito al prossimo, la carta in volo
     sembrerebbe di un'altra persona. Ad atterraggio avvenuto un re-render
     (chiamato da openLanding) fa comparire il turno vero. */
-const flightHold = (g) => landingActive && g.status === "playing" && g.lastDraw && g.seats[g.lastDraw.seat] ? g.lastDraw.seat : null;
+const flightHold = (g) => {
+  if (g.status !== "playing") return null;
+  if (landingActive && g.lastDraw && g.seats[g.lastDraw.seat]) return g.lastDraw.seat;
+  if (moveHold && g.lastMove && g.seats[g.lastMove.by]) return g.lastMove.by;
+  return null;
+};
 
 const reducedMotion = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -402,7 +474,7 @@ function flashBanner(kind, title, sub) {
   document.querySelectorAll(".flash-banner").forEach((el) => el.remove());
   const el = document.createElement("div");
   el.className = `flash-banner fb-${kind}`;
-  const ico = kind === "bust" ? "bomb" : kind === "flip7" ? "seven" : "heartFill";
+  const ico = { bust: "bomb", flip7: "seven", saved: "heartFill", zero: "target", unlucky: "skull", lucky: "clover", steal: "steal", swap: "swap", discard: "discard" }[kind] || "star";
   el.innerHTML = `<span class="fb-ico">${icon(ico)}</span>
     <div class="fb-txt"><b>${title}</b><small>${sub}</small></div>`;
   document.body.appendChild(el);
@@ -414,7 +486,9 @@ function flashBanner(kind, title, sub) {
 function announceDraw() {
   const g = current();
   const last = g && g.lastDraw;
-  if (!last || !g.seats[last.seat] || !engine.CARD.isNum(last.card)) return;
+  if (!last || !g.seats[last.seat]) return;
+  if (isVg(g)) return announceDrawV(g, last);
+  if (!engine.CARD.isNum(last.card)) return;
   const h = g.hands[last.seat];
   const n = engine.CARD.num(last.card);
   const name = esc(shortName(g.seats[last.seat]));
@@ -425,6 +499,34 @@ function announceDraw() {
   } else if (h && h.out === "flip7" && h.nums.includes(n)) {
     flashBanner("flip7", "FLIP 7!", `${name} ha sette numeri diversi: +15 e round chiuso per tutti`);
   }
+}
+
+/** Vengeance: sballo, Unlucky 7, The Zero, Lucky 13 e FLIP 7 nell'istante in cui la carta si gira. */
+function announceDrawV(g, last) {
+  const h = g.hands[last.seat];
+  const c = last.card;
+  const name = esc(shortName(g.seats[last.seat]));
+  if (h && h.out === "bust" && h.bustCard === c) flashBanner("bust", "SBALLATO", `${name} pesca un altro ${V.cardLabel(c)}: il round vale 0`);
+  else if (c === "u7") flashBanner("unlucky", "UNLUCKY 7", `${name} butta via tutte le carte: gli resta solo il 7`);
+  else if (c === "z0") flashBanner("zero", "THE ZERO", `${name} vale 0 finché non fa Flip 7, e deve pescare per forza`);
+  else if (h && h.out === "flip7" && V.VC.isNum(c)) flashBanner("flip7", "FLIP 7!", `${name} ha sette numeri: +15 e round chiuso per tutti`);
+  else if (c === "l13") flashBanner("lucky", "LUCKY 13", `${name} può tenere un secondo 13 senza sballare`);
+}
+
+/** Vengeance: la carta rubata, lo scambio, lo scarto o l'Unlucky 7 ricevuto, quando la carta atterra. */
+function announceMove(g) {
+  const m = g && g.lastMove;
+  if (!m || !m.moves || !m.moves.length || m.type === "unlucky") return;
+  const nm = (sid) => (g.seats[sid] ? esc(shortName(g.seats[sid])) : "?");
+  const lab = (c) => V.cardLabel(c);
+  const busted = g.order.filter((sid) => g.hands[sid].out === "bust" && m.moves.some((mv) => mv.to === sid && g.hands[sid].bustCard === mv.card));
+  const flipped = g.order.filter((sid) => g.hands[sid].out === "flip7" && m.moves.some((mv) => mv.to === sid));
+  if (busted.length) flashBanner("bust", busted.length > 1 ? "SBALLANO IN DUE" : "SBALLATO", `${busted.map(nm).join(" e ")}: doppione arrivato con ${m.type === "swap" ? "lo Swap" : "la Steal"}, il round vale 0`);
+  else if (m.wipe) flashBanner("unlucky", "UNLUCKY 7", `${nm(m.wipe.seat)} riceve l'Unlucky 7 e butta via tutto`);
+  else if (flipped.length) flashBanner("flip7", "FLIP 7!", `${flipped.map(nm).join(" e ")}: settimo numero, +15 e round chiuso`);
+  else if (m.type === "steal") flashBanner("steal", "RUBATA", `${nm(m.by)} ruba il ${lab(m.moves[0].card)} a ${nm(m.moves[0].from)}`);
+  else if (m.type === "swap") flashBanner("swap", "SCAMBIO", `il ${lab(m.moves[0].card)} di ${nm(m.moves[0].from)} per il ${lab(m.moves[1].card)} di ${nm(m.moves[1].from)}`);
+  else if (m.type === "discard") flashBanner("discard", "SCARTATA", m.moves[0].from === m.by ? `${nm(m.by)} scarta il suo ${lab(m.moves[0].card)}` : `${nm(m.by)} fa scartare il ${lab(m.moves[0].card)} a ${nm(m.moves[0].from)}`);
 }
 
 /** requestAnimationFrame non scatta a pagina nascosta: fallback su timer,
@@ -443,7 +545,7 @@ function revealSpoilers() {
 function openLanding(token) {
   if (token !== landingToken) return; // e' gia' partita un'altra pescata
   landingActive = false;
-  document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
+  document.querySelectorAll(".t-seats .fcard.landing.dl").forEach((el) => el.classList.remove("landing", "dl"));
 }
 
 function runDrawAnim(card, token) {
@@ -457,7 +559,7 @@ function runDrawAnim(card, token) {
   const m = deckEl.getBoundingClientRect();
   if (!a.width) return settle();
   // la destinazione e' il segnaposto gia' aperto nella mano: si misura e basta
-  const dest = document.querySelector(".t-seats .fcard.landing") || document.querySelector(".t-seats .fcard.fly-dest");
+  const dest = document.querySelector(".t-seats .fcard.landing.dl") || document.querySelector(".t-seats .fcard.fly-dest");
   const b = dest ? dest.getBoundingClientRect() : null;
 
   // parte DAL mazzo, di dorso: una carta sola che ruota fino a 90 gradi,
@@ -548,7 +650,7 @@ function runResolveFly(card, token, targetSid) {
   const open = () => {
     if (token !== landingToken) return;
     resolveTargetSid = null;
-    document.querySelectorAll(".t-seats .fcard.landing").forEach((el) => el.classList.remove("landing"));
+    document.querySelectorAll(".t-seats .fcard.landing.rl").forEach((el) => el.classList.remove("landing", "rl"));
   };
   const settle = () => { open(); store.refresh(); };
   const slot = document.querySelector(".bank .bank-slot .fcard");
@@ -560,7 +662,7 @@ function runResolveFly(card, token, targetSid) {
   if (targetSid) {
     const row = document.querySelector(`.seat[data-sid="${targetSid}"]`);
     if (row) {
-      dest = row.querySelector(".fcard.landing");
+      dest = row.querySelector(".fcard.landing.rl");
       landingDest = Boolean(dest);
       if (!dest) dest = row;
     }
@@ -595,6 +697,105 @@ function runResolveFly(card, token, targetSid) {
   setTimeout(finish, 800);
 }
 
+// --- carte che cambiano fila (Vengeance) -------------------------------------
+// Steal, Swap, Discard e l'Unlucky 7 spostano carte gia' in vista. La carta
+// parte dalla fila dov'era, vola in quella nuova (o verso il mazzo, se e'
+// scartata) e solo allora la fila di arrivo la mostra per davvero. Finche'
+// vola, la fila di partenza tiene il suo posto (prima la carta vera, poi un
+// segnaposto invisibile che si chiude piano) e quella di arrivo un
+// segnaposto tratteggiato: niente scatti, e si vede DA DOVE e' arrivata.
+let lastMoveKey = null;
+let moveHold = null; // { moves, wipe, rects, token, started, by }
+let moveToken = 0;
+
+function scheduleMoveAnim(g) {
+  const m = g.lastMove;
+  // la chiave e' l'istante scritto dal motore nella mossa: un voto o un blocco
+  // riscrivono il tavolo (updatedAt cambia) ma non devono rigiocare il volo
+  const key = m && m.moves && m.moves.length ? `${m.at || 0}:${m.type}:${m.by}` : "nessuna";
+  if (lastMoveKey === null) { lastMoveKey = key; return; } // il primo render fotografa e basta
+  if (key === lastMoveKey) return;
+  lastMoveKey = key;
+  if (key === "nessuna") return;
+  if (reducedMotion()) { announceMove(g); return; }
+  // da dove partono: si misura ADESSO, sul tavolo com'era prima della mossa
+  const rects = new Map();
+  const wipeMoves = m.wipe ? m.wipe.cards.map((card) => ({ card, from: m.wipe.seat, to: null })) : [];
+  for (const mv of [...m.moves, ...wipeMoves]) {
+    if (!mv.from) continue;
+    const el = document.querySelector(`.seat[data-sid="${mv.from}"] .cards-row .fcard[data-key="${mv.card}"]`);
+    if (el) rects.set(mv.from + ":" + mv.card, el.getBoundingClientRect());
+  }
+  const token = ++moveToken;
+  moveHold = { moves: m.moves, wipe: m.wipe || null, rects, token, started: false, by: m.by };
+  // lo sballo (o il Flip 7) portato da una carta rubata resta segreto finche' non atterra
+  if (m.moves.some((mv) => mv.to && g.hands[mv.to] && (g.hands[mv.to].out === "bust" || g.hands[mv.to].out === "flip7"))) spoilerHold = true;
+  // se nello stesso colpo vola ancora la pescata (l'Unlucky 7 appena girato) o la
+  // carta azione parcheggiata, la carta deve prima atterrare: si parte dopo
+  const delay = landingActive ? DRAW_MS + 60 : 220;
+  deferFrame(() => setTimeout(() => runMoveAnim(token), delay));
+}
+
+function runMoveAnim(token) {
+  const hold = moveHold;
+  if (!hold || hold.token !== token) return;
+  const flies = [];
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    if (moveHold === hold) {
+      // prima la fila di arrivo mostra le carte vere, poi i segnaposti di partenza si chiudono
+      document.querySelectorAll(".t-seats .fcard.landing.ml").forEach((el) => el.classList.remove("landing", "ml"));
+      document.querySelectorAll(".t-seats .fcard.ghost").forEach((el) => el.classList.add("gone"));
+      moveHold = null;
+      revealSpoilers();
+      announceMove(current());
+      setTimeout(() => store.refresh(), 230);
+    }
+    for (const f of flies) deferFrame(() => f.remove());
+  };
+  hold.started = true;
+  // le carte di partenza diventano segnaposti invisibili: al loro posto vola la copia
+  document.querySelectorAll(".t-seats .fcard.leaving").forEach((el) => el.classList.add("ghost"));
+  const deckEl = document.querySelector(".deck-stack .fcard");
+  const wipeMoves = hold.wipe ? hold.wipe.cards.map((card, i) => ({ card, from: hold.wipe.seat, to: null, i })) : [];
+  const all = [...hold.moves.map((mv) => ({ ...mv, i: 0 })), ...wipeMoves];
+  let maxEnd = 0;
+  for (const mv of all) {
+    const a = mv.from ? hold.rects.get(mv.from + ":" + mv.card) : null;
+    if (!a || !a.width) continue; // partenza non in vista: la fila si aggiorna e basta
+    let b = null, fade = false;
+    if (mv.to) {
+      const dest = document.querySelector(`.seat[data-sid="${mv.to}"] .cards-row .fcard.landing.ml`);
+      if (dest) b = dest.getBoundingClientRect();
+    }
+    if (!b) {
+      // verso gli scarti: plana sul mazzo e svanisce
+      const d = deckEl ? deckEl.getBoundingClientRect() : null;
+      b = d ? { left: d.left, top: d.top, width: d.width } : { left: a.left, top: a.top - 40, width: a.width * 0.8 };
+      fade = true;
+    }
+    const fly = document.createElement("div");
+    fly.className = "fly-card";
+    fly.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;z-index:60;pointer-events:none;will-change:transform;`;
+    fly.innerHTML = miniCard(mv.card, "drawn");
+    document.body.appendChild(fly);
+    flies.push(fly);
+    const dx = b.left - a.left, dy = b.top - a.top, sc = b.width / a.width;
+    const delay = mv.i * 70;
+    const dur = 460;
+    maxEnd = Math.max(maxEnd, delay + dur);
+    // un piccolo arco: la carta si alza, poi plana sul posto nuovo
+    fly.animate([
+      { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0 },
+      { transform: `translate(${dx / 2}px,${dy / 2 - 28}px) scale(${(1 + sc) / 2 + 0.08})`, opacity: 1, offset: 0.5 },
+      { transform: `translate(${dx}px,${dy}px) scale(${sc})`, opacity: fade ? 0 : 1, offset: 1 }
+    ], { duration: dur, delay, easing: "cubic-bezier(.3,.6,.25,1)", fill: "forwards" });
+  }
+  setTimeout(finish, (maxEnd || 200) + 30);
+}
+
 // --- intro / elenco tavoli / lobby -------------------------------------------
 function renderIntro(ctx) {
   return `
@@ -604,6 +805,7 @@ function renderIntro(ctx) {
       <p class="muted">Qui si gioca a Flip 7 per davvero, ognuno dal suo telefono:
         pesca o fermati, con sballi, Congela, Pesca Tre e Seconda Chance.
         Chi vince prende la Crown come nelle partite dal vivo.</p>
+      <p class="muted small">Novità in prova: il mazzo <b>With a Vengeance</b> (Steal, Swap, Discard, Flip Four, ÷2 e negativi). Si sceglie all'apertura del tavolo; in beta non entra nello storico.</p>
       <button class="btn primary big" data-action="tbl-open">Apri un tavolo</button>
       <p class="hint">Il tavolo lo chiude chi l'ha aperto: gli altri, se vogliono, ne aprono uno loro.</p>
     </section>`;
@@ -641,7 +843,7 @@ function renderTables(list, ctx) {
               <span class="tl-avas">${seats.slice(0, 4).map((seat) => avatar(seat.playerId, seat.name, "xs")).join("")}
                 ${seats.length > 4 ? `<i class="tl-more">+${seats.length - 4}</i>` : ""}</span>
               <span class="tl-txt">
-                <b>${g.owner && g.owner.name ? `Tavolo di ${esc(g.owner.name)}` : "Tavolo aperto"}</b>
+                <b>${g.owner && g.owner.name ? `Tavolo di ${esc(g.owner.name)}` : "Tavolo aperto"}${isVg(g) ? ` <span class="tag beta">Vengeance</span>` : ""}</b>
                 <small>${seats.length} ${seats.length === 1 ? "seduto" : "seduti"}${on ? ` · <i class="dot-on"></i>${on} ${on === 1 ? "collegato" : "collegati"}` : ""} · ${tableState(g)} · traguardo ${g.target}</small>
               </span>
               <span class="tl-go ${meIn ? "here" : ""}">${go}${icon("arrowLeft", "flip tiny")}</span>
@@ -660,6 +862,7 @@ function tableBar(g, list) {
     <div class="table-bar">
       <button class="ghost-btn" data-action="tbl-list">${icon("arrowLeft", "tiny")} Tavoli aperti (${list.length})</button>
       <span class="tb-name">${g.owner && g.owner.name ? `Tavolo di ${esc(g.owner.name)}` : "Tavolo aperto"}</span>
+      ${isVg(g) ? modePill() : ""}
     </div>`;
 }
 
@@ -667,10 +870,11 @@ function renderLobby(g, ctx) {
   const seated = mySeat(g, ctx);
   return `
     <section class="card">
-      <div class="card-head">${icon("cardFan")}<span class="card-title">Tavolo aperto</span>
+      <div class="card-head">${icon("cardFan")}<span class="card-title">Tavolo aperto</span>${isVg(g) ? modePill() : ""}
         <span class="count-pill ml-auto">${g.order.length} ${g.order.length === 1 ? "seduto" : "seduti"}</span></div>
       <p class="muted small">Ognuno si siede dal proprio telefono. Servono almeno 2 giocatori;
-        vince chi arriva per primo a <b>${g.target}</b> punti.</p>
+        vince chi arriva per primo a <b>${g.target}</b> punti.${isVg(g) ? ` Mazzo <b>With a Vengeance</b>: The Zero, Unlucky 7, Lucky 13, ÷2 e negativi, Flip Four, Just One More, Swap, Steal e Discard. Chi si ferma non è al sicuro.` : ""}</p>
+      ${isVg(g) ? betaNote() : ""}
       <div class="pgrid">
         ${g.order.map((sid) => {
           const seat = g.seats[sid];
@@ -700,6 +904,7 @@ function renderLobby(g, ctx) {
         <p class="hint">Stai guardando: siediti per giocare, oppure apri un tavolo tuo.</p>`}
       <div class="board-links">
         ${seated ? `<button class="ghost-btn" data-action="tbl-stand">${icon("close", "tiny")} Mi alzo</button>` : ""}
+        ${isVg(g) ? `<button class="ghost-btn" data-action="tbl-vrules">${icon("eye", "tiny")} Regole in breve</button>` : ""}
         <button class="ghost-btn" data-action="tbl-list">${icon("cardFan", "tiny")} Tavoli aperti</button>
         ${isTableOwner(g, ctx) ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi il tavolo</button>` : ""}
       </div>
@@ -749,6 +954,7 @@ function roundEndReason(g) {
   if (f7) return `FLIP 7 di ${shortName(g.seats[f7])}: +15 e round chiuso per tutti`;
   if (g.endReason === "deck") return "le carte sono finite: chi era in gioco incassa d'ufficio";
   if (buster) return `lo sballo di ${shortName(g.seats[buster])} chiude il giro: punti incassati`;
+  if (isVg(g)) return "tutti fermi o sballati: si contano le carte rimaste in fila";
   return "tutti fermi, congelati o sballati: punti incassati";
 }
 
@@ -791,26 +997,30 @@ function statusStrip(g, ctx, me) {
       sub = "la carta sta arrivando…";
     } else if (g.pending) {
       const p = g.pending;
-      const meta = ACTION_META[p.type];
-      cls = mine(g, ctx, p.chooser) ? "you" : "";
-      title = mine(g, ctx, p.chooser) ? `Hai pescato ${meta.name}` : `${nm(p.chooser)} ha pescato ${meta.name}`;
-      sub = mine(g, ctx, p.chooser) ? meta.ask : `${meta.doing}…`;
+      const meta = metaOf(p.type);
+      const isMine = mine(g, ctx, p.chooser);
+      cls = isMine ? "you" : "";
+      if (p.givenBy && g.seats[p.givenBy]) title = isMine ? `${nm(p.givenBy)} ti ha passato ${meta.name}` : `${nm(p.givenBy)} passa ${meta.name} a ${nm(p.chooser)}`;
+      else title = isMine ? `Hai pescato ${meta.name}` : `${nm(p.chooser)} ha pescato ${meta.name}`;
+      sub = isMine ? (p.type === "swp" && swapPick ? "ora tocca la seconda carta, di un altro giocatore" : meta.ask) : `${meta.doing}…`;
       veil = spoilerHold && g.lastDraw && g.lastDraw.card === p.type ? " spoiler-veil" : "";
     } else if (g.flip3) {
       const t = g.flip3.target;
-      const left = g.flip3.left === 1 ? "ancora una carta" : `ancora ${g.flip3.left} carte`;
+      const jom = Boolean(g.flip3.jom);
+      const left = jom ? "l'ultima carta" : g.flip3.left === 1 ? "ancora una carta" : `ancora ${g.flip3.left} carte`;
       cls = mine(g, ctx, t) ? "you" : "";
       title = mine(g, ctx, t) ? `Peschi ${left}` : `${nm(t)} pesca ${left}`;
-      sub = "Pesca Tre: le carte arrivano da sole";
+      sub = jom ? "Just One More: poi si ferma" : isVg(g) ? "Flip Four: le carte arrivano da sole" : "Pesca Tre: le carte arrivano da sole";
     } else if (actor && g.seats[actor]) {
       const first = emptyHand(g.hands[actor]);
+      const zero = isVg(g) && V.hasZero(g.hands[actor]);
       if (mine(g, ctx, actor)) {
         cls = "you";
         title = "Tocca a te";
-        sub = first ? "la prima carta arriva da sola…" : "pesca o fermati";
+        sub = first ? "la prima carta arriva da sola…" : zero ? "hai The Zero: devi pescare" : "pesca o fermati";
       } else {
         title = `Tocca a ${nm(actor)}`;
-        sub = first ? "la prima carta arriva da sola…" : "deve pescare o fermarsi";
+        sub = first ? "la prima carta arriva da sola…" : zero ? "ha The Zero: deve pescare" : "deve pescare o fermarsi";
         // fermo da un po': lo dice la striscia, prima ancora del riquadro del blocco
         const ms = stalledFor(g);
         if (ms >= 20e3) { sub = `fermo da ${fmtStall(ms)}`; cls = ms >= STALL_MS ? "stalled" : cls; }
@@ -832,7 +1042,7 @@ function statusStrip(g, ctx, me) {
 function bankRow(g) {
   const last = g.lastDraw;
   // il doppione appena pescato ha fatto sballare: va urlato
-  const bustNow = last && g.hands[last.seat] && g.hands[last.seat].out === "bust" && engine.CARD.isNum(last.card);
+  const bustNow = last && g.hands[last.seat] && g.hands[last.seat].out === "bust" && (isVg(g) ? g.hands[last.seat].bustCard === last.card : engine.CARD.isNum(last.card));
   const noteCls = (bustNow ? "bust-note" : last && last.saved ? "saved-note" : "") + (spoilerHold && last ? " spoiler-veil" : "");
   const note = last
     ? bustNow
@@ -909,35 +1119,35 @@ function renderSeatRow(g, sid, ctx, max, me) {
   // una fila sola: prima azioni e modificatori, poi i numeri in ordine
   const specials = [];
   if (h.x2) {
-    if (flying === "x2") tail = mc("x2", "x2", "mini just landing");
+    if (flying === "x2") tail = mc("x2", "x2", "mini just landing dl");
     else specials.push(mc("x2", "x2"));
   }
   const plus = h.plus.slice().sort((a, b) => a - b);
   let skipPlus = flying && engine.CARD.isPlus(flying) ? engine.CARD.plus(flying) : null;
   for (const p of plus) {
-    if (skipPlus === p) { skipPlus = null; tail = mc("p" + p, "p" + p, "mini just landing"); continue; }
+    if (skipPlus === p) { skipPlus = null; tail = mc("p" + p, "p" + p, "mini just landing dl"); continue; }
     specials.push(mc("p" + p, "p" + p));
   }
   // la Seconda Chance bruciata non sparisce: resta in mano spenta
   // ("consumata") per tutto il round. Durante il giro della carta e'
   // ancora accesa (niente spoiler), si spegne al momento del verdetto.
   if (h.sc) {
-    if (flying === "sc") tail = mc("sc", "sc", "mini just landing");
-    else specials.push(mc("sc", "sc", resolvedHere ? "mini landing" : cls("sc")));
+    if (flying === "sc") tail = mc("sc", "sc", "mini just landing dl");
+    else specials.push(mc("sc", "sc", resolvedHere ? "mini landing rl" : cls("sc")));
   } else if (savedHere && spoilerHold) specials.push(mc("sc", "sc", "mini spoiler-burn"));
   else if (h.scUsed) specials.push(mc("sc", "sc", "mini burned"));
   // chi e' stato congelato mostra la carta Congela ricevuta
-  if (h.out === "frozen") specials.push(mc("frz", "frz", resolvedHere ? "mini landing" : "mini"));
+  if (h.out === "frozen") specials.push(mc("frz", "frz", resolvedHere ? "mini landing rl" : "mini"));
   const nums = [];
   for (const n of h.nums.slice().sort((a, b) => a - b)) {
-    if (flyNum === n && !bustFly && !savedFly) { tail = mc("n" + n, "n" + n, "mini just landing"); continue; }
+    if (flyNum === n && !bustFly && !savedFly) { tail = mc("n" + n, "n" + n, "mini just landing dl"); continue; }
     nums.push(mc("n" + n, "n" + n));
   }
   // il bonus del Flip 7 compare quando la settima carta e' atterrata
   if (h.out === "flip7" && !flying) nums.push(flip7Card({ size: "mini", attrs: `data-key="f7" data-flip="card:${sid}:f7"` }));
   // il doppione che ha sballato resta in vista, marcato in rosso
   if (h.out === "bust" && h.bustCard !== null && h.bustCard !== undefined) {
-    if (bustFly) tail = mc("n" + h.bustCard, "dup", "mini dup landing");
+    if (bustFly) tail = mc("n" + h.bustCard, "dup", "mini dup landing dl");
     else nums.push(mc("n" + h.bustCard, "dup", "mini dup"));
   }
   if (specials.length && (nums.length || tail)) specials[specials.length - 1] = specials[specials.length - 1].replace('class="fcard', 'class="fcard gap-after');
@@ -994,17 +1204,247 @@ function renderSeatRow(g, sid, ctx, max, me) {
     </li>`;
 }
 
+// ---------------------------------------------------------------------------
+// With a Vengeance: la riga del posto. Stessa struttura della riga classica,
+// ma le carte stanno in un elenco unico (modificatori prima, numeri poi),
+// si possono TOCCARE quando hai in mano Steal / Swap / Discard, tengono il
+// posto mentre volano da una fila all'altra, e sotto c'e' il conto passo
+// per passo quando ci sono ÷2, negativi o The Zero.
+// ---------------------------------------------------------------------------
+const MARK_ICO = { fl4: "four", jom: "oneMore", stl: "steal", swp: "swap", dsc: "discard" };
+
+/** Toccando quella carta ci si fa male? (doppione che sballa, Unlucky 7 o The Zero che arrivano a te) */
+function pickWarn(g, p, sid, c) {
+  const me = p.chooser;
+  const hurts = (hand, card) => card === "u7" || card === "z0" || V.wouldBust(hand, card);
+  if (p.type === "stl") return hurts(g.hands[me], c);
+  if (p.type === "swp" && swapPick) {
+    // la seconda carta va a chi ha dato la prima; la prima va a chi possiede la seconda
+    const toFirst = { ...g.hands[swapPick.sid], cards: V.removeCard(g.hands[swapPick.sid].cards, swapPick.card) };
+    const toSecond = { ...g.hands[sid], cards: V.removeCard(g.hands[sid].cards, c) };
+    return (swapPick.sid === me && hurts(toFirst, c)) || (sid === me && hurts(toSecond, swapPick.card));
+  }
+  return false;
+}
+
+/** Il conto della mano in una riga: "numeri 48 · ÷2 → 24 · −4 → 20 · +15 Flip 7 · = 35". */
+function calcLine(h) {
+  if (h.out === "bust" || !h.cards.length) return "";
+  const st = V.scoreSteps(h);
+  const zero = V.hasZero(h);
+  if (!st.div && !st.neg && !zero && !st.flip7) return "";
+  const parts = [`<i>numeri</i> <b>${st.sum}</b>`];
+  if (st.div) parts.push(`<span class="sc-div">÷2 → ${st.afterDiv}</span>`);
+  if (st.neg) parts.push(`<span class="sc-neg">−${st.neg} → ${Math.max(0, st.afterNeg)}</span>`);
+  if (st.floored) parts.push(`<i>mai sotto 0</i>`);
+  if (zero && !st.flip7) parts.push(`<span class="sc-zero">The Zero: vale 0${h.out ? "" : ", deve pescare"}</span>`);
+  if (st.flip7) parts.push(`<span class="sc-bonus">+15 Flip 7</span>`);
+  parts.push(`<span class="sc-tot">= ${st.total}</span>`);
+  return parts.join("<i>·</i>");
+}
+
+function renderSeatRowV(g, sid, ctx, max, me) {
+  const seat = g.seats[sid];
+  const h = g.hands[sid];
+  let isTurn = g.status === "playing" && !g.pending && !g.flip3 && g.turn === sid && !h.out;
+  let isFlip3 = Boolean(g.flip3 && g.flip3.target === sid);
+  let isChoosing = Boolean(g.pending && g.pending.chooser === sid);
+  const hold = flightHold(g);
+  if (hold) { isChoosing = false; isFlip3 = isFlip3 && sid === hold; isTurn = sid === hold && !h.out && !isFlip3; }
+  const last = g.lastDraw;
+  const flying = landingActive && last && last.seat === sid && !g.pending ? last.card : null;
+  const bustFly = Boolean(flying) && h.out === "bust" && h.bustCard === flying;
+  // carte in arrivo o in partenza per uno spostamento in corso (Steal, Swap, Discard, Unlucky 7)
+  const mh = moveHold;
+  const incoming = mh ? mh.moves.filter((mv) => mv.to === sid).map((mv) => mv.card) : [];
+  const leaving = mh ? [...mh.moves.filter((mv) => mv.from === sid).map((mv) => mv.card), ...(mh.wipe && mh.wipe.seat === sid ? mh.wipe.cards : [])] : [];
+  const holding = Boolean(flying) || incoming.length > 0 || leaving.length > 0;
+  // finche' le carte volano si vede la mano com'era prima, punti compresi
+  const shown = holding ? { ...h, out: null, cards: [...h.cards.filter((c) => c !== flying && !incoming.includes(c)), ...leaving] } : h;
+  const ptsNow = h.out === "bust" || g.endReason === "left" ? 0 : engine.handPoints(h);
+  const pts = holding ? engine.handPoints(shown) : ptsNow;
+  const verdictHidden = holding && (h.out === "bust" || h.out === "flip7");
+  const bustHidden = verdictHidden && h.out === "bust";
+  const resolvedHere = resolveTargetSid === sid;
+  let just = last && last.seat === sid && !flying ? last.card : null;
+  if (h.out === "bust" && just === h.bustCard) just = null;
+  // "tocca la carta": con Steal / Swap / Discard in mano, le carte colpibili si toccano
+  const p = g.pending;
+  const picking = Boolean(p && p.kind === "use" && !hold && mine(g, ctx, p.chooser) && !giveOpen);
+  const pickables = picking ? V.pickable(g, p.chooser, p.type, swapPick) : [];
+  const canPick = (c) => pickables.some((x) => x.sid === sid && x.card === c);
+  // una fila sola: prima i modificatori (÷2, poi i negativi), poi i numeri in ordine
+  const order = (c) => (V.VC.isMod(c) ? (c === "d2" ? -100 : -50 + V.VC.neg(c)) : V.VC.num(c) + (c === "l13" ? -0.5 : 0));
+  const list = shown.cards.slice().sort((a, b) => order(a) - order(b));
+  const lastMod = list.reduce((k, c, i) => (V.VC.isMod(c) ? i : k), -1);
+  let html = "";
+  list.forEach((c, i) => {
+    const gone = leaving.includes(c);
+    let cls = "mini";
+    if (i === lastMod && i < list.length - 1) cls += " gap-after";
+    if (c === just && !gone) cls += " just";
+    if (gone) cls += " leaving" + (mh && mh.started ? " ghost" : "");
+    if (resolvedHere && !flying && g.lastAction && g.lastAction.type === c) cls += " landing rl";
+    let extra = "";
+    const pickable = picking && !gone && canPick(c);
+    if (pickable) {
+      cls += " pick" + (swapPick && swapPick.sid === sid && swapPick.card === c ? " picked" : "");
+      extra = `data-action="tbl-pick" data-sid="${sid}" data-card="${c}" data-at="${g.updatedAt || 0}" role="button" tabindex="0"`;
+    }
+    let card = miniCard(c, cls, c, sid, extra);
+    if (pickable && pickWarn(g, p, sid, c)) card = card.replace(/<\/span>$/, `<i class="pick-warn" title="così sballi, o butti tutto">${icon("bomb")}</i></span>`);
+    html += card;
+  });
+  // in arrivo: la pescata in volo o la carta che arriva da un'altra fila, come segnaposto in coda
+  if (flying && !bustFly && h.cards.includes(flying)) html += miniCard(flying, "mini just landing dl", flying, sid);
+  if (bustFly) html += miniCard(flying, "mini dup landing dl", "dup", sid);
+  for (const c of incoming) {
+    if (h.out === "bust" && h.bustCard === c) html += miniCard(c, "mini dup landing ml", "dup", sid);
+    else if (h.cards.includes(c)) html += miniCard(c, "mini landing ml", c, sid);
+  }
+  if (h.out === "flip7" && !holding) html += flip7Card({ size: "mini", attrs: `data-key="f7" data-flip="card:${sid}:f7"` });
+  if (h.out === "bust" && h.bustCard && !bustFly && !incoming.includes(h.bustCard)) html += miniCard(h.bustCard, "mini dup", "dup", sid);
+  const outShown = h.out && !resolvedHere && !verdictHidden;
+  const stalled = isStalled(g) && actorOf(g) === sid && !seat.blocked;
+  const zero = !h.out && V.hasZero(shown);
+  const state = seat.blocked ? `<i class="seat-state s-blocked">bloccato</i>`
+    : stalled ? `<i class="seat-state s-stalled">fermo da ${fmtStall(stalledFor(g))}</i>`
+    : isFlip3 ? `<i class="seat-state s-flip4">${g.flip3.jom ? "ultima carta" : `pesca ancora ${g.flip3.left}`}${h.out === "stay" ? " · fermo" : ""}</i>`
+    : isChoosing ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? (p.kind === "use" ? "tocca le carte" : "scegli tu") : "sta scegliendo"}</i>`
+    : outShown ? `<i class="seat-state s-${h.out}${bustHidden ? " spoiler-veil" : ""}">${outLabel(g, h.out)}</i>`
+    : isTurn ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>`
+    : g.status === "playing" ? (zero ? `<i class="seat-state s-mustdraw">deve pescare</i>` : `<i class="seat-state s-wait">in attesa</i>`) : "";
+  const total = seat.total || 0;
+  const color = colorOf(seat.name);
+  const orderRow = playingSeats(g);
+  const pos = orderRow.indexOf(sid) + 1;
+  const opens = orderRow[0] === sid && g.status !== "over";
+  const benched = pos === 0;
+  const on = isOnline(g, seat.uid, ctx.status.uid);
+  const rx = reactionOf(g, seat);
+  // chi gli ha tirato cosa: le ultime due note
+  const byName = (x) => (g.seats[x] ? esc(shortName(g.seats[x])) : null);
+  const notes = (h.marks || []).slice(-2).filter((m) => byName(m.by)).map((m) =>
+    `${icon(MARK_ICO[m.type] || "minus", "tiny")} ${V.VC.isMod(m.type) ? V.cardLabel(m.type) : metaOf(m.type).name}${m.card ? ` (${V.cardLabel(m.card)})` : ""} da ${byName(m.by)}`);
+  const calc = holding ? "" : calcLine(h);
+  return `
+    <li class="seat ${isTurn || isFlip3 || isChoosing ? "turn" : ""} ${outShown ? "out-" + h.out : ""} ${seat.blocked ? "blocked" : ""} ${stalled ? "stalled" : ""} ${bustHidden ? "spoiler-hold" : ""} ${sid === me ? "me" : ""} ${picking && pickables.some((x) => x.sid === sid) ? "pickable" : ""}" data-sid="${sid}" data-key="${sid}" data-flip="seat:${sid}" style="--pc:${color}">
+      <div class="seat-head">
+        <span class="seat-ava" title="${benched ? "fuori dal giro" : pos + "º nel giro"}">${avatar(seat.playerId, seat.name, "sm")}${benched ? "" : `<i class="seat-no ${pos === 1 ? "first" : ""}">${pos}</i>`}</span>
+        <b class="seat-name">${esc(seat.name)}</b>
+        ${seat.bot ? "" : `<i class="presence ${on ? "on" : "off"}" title="${on ? "collegato" : "non collegato"}"></i>`}
+        ${sid === me ? `<i class="seat-you">tu</i>` : ""}
+        ${opens && !seat.blocked ? `<i class="seat-opens">${g.status === "roundEnd" ? "apre il prossimo" : "apre"}</i>` : ""}
+        ${state}
+        <span class="seat-pts">
+          <b>${total}</b>
+          <small class="${h.out === "bust" && !holding ? "bust" : pts > 0 ? "up" : ""}">+${pts}</small>
+          ${pts > 0 && g.status === "playing" ? `<i class="seat-tot" title="Totale se il round finisse adesso">${total + pts}</i>` : ""}
+        </span>
+      </div>
+      <span class="seat-rail" aria-hidden="true">
+        <i style="width:${((total / max) * 100).toFixed(1)}%"></i>${pts ? `<i class="prov" style="width:${((pts / max) * 100).toFixed(1)}%"></i>` : ""}
+      </span>
+      <div class="cards-row">${html || '<span class="hand-empty">nessuna carta in fila</span>'}${h.out === "bust" && h.bustCard && !(incoming.includes(h.bustCard) || bustFly)
+          ? `<span class="dup-note${bustHidden ? " spoiler-veil" : ""}">${icon("bomb", "tiny")} doppio ${V.cardLabel(h.bustCard)}: il round vale 0</span>` : ""}${notes.length
+          ? `<span class="by-note">${notes.join(" · ")}</span>` : ""}</div>
+      ${calc ? `<div class="seat-calc" data-key="calc">${calc}</div>` : ""}
+      ${rx ? `<span class="reaction-bubble" data-key="rx-${rx.at}">${sticker(rx.s)}</span>` : ""}
+    </li>`;
+}
+
+/** Il corpo del riquadro per Steal / Swap / Discard: istruzioni, la prima carta dello Swap, "passa la carta". */
+function useBody(g, p) {
+  const meta = metaOf(p.type);
+  const nm = (sid) => esc(shortName(g.seats[sid]));
+  const give = p.canGive && (p.options || []).length > 0;
+  if (giveOpen && give) {
+    return `
+      <p class="choose-label">A chi la passi? Dovrà usarla lui, subito</p>
+      <div class="pgrid">
+        ${p.options.map((sid) => `
+          <button class="pg" data-action="tbl-give" data-id="${sid}" data-at="${g.updatedAt || 0}">
+            <span class="pg-ava" style="--pc:${colorOf(g.seats[sid].name)}">${avatar(g.seats[sid].playerId, g.seats[sid].name, "lg")}</span>
+            <span class="pg-name">${esc(g.seats[sid].name)}</span>
+          </button>`).join("")}
+      </div>
+      <button class="ghost-btn" data-action="tbl-give-open">${icon("arrowLeft", "tiny")} No, la uso io</button>`;
+  }
+  const hint = p.type === "stl" ? "La carta rubata entra nella tua fila: un doppione ti fa sballare, l'Unlucky 7 ti fa buttare tutto."
+    : p.type === "swp" ? "Le due carte si scambiano di posto: chi riceve un doppione sballa, chi riceve l'Unlucky 7 butta tutto."
+    : "La carta scartata sparisce dal round: anche un ÷2 o un negativo tuo.";
+  return `
+    <p class="choose-label">${meta.ask}</p>
+    ${p.type === "swp" && swapPick && g.seats[swapPick.sid] ? `
+      <div class="ab-pick">${miniCard(swapPick.card, "drawn")}<span>prima carta: <b>${V.cardLabel(swapPick.card)}</b> di <b>${nm(swapPick.sid)}</b> · ora la seconda, di un altro giocatore</span>
+        <button class="ghost-btn" data-action="tbl-pick-cancel">annulla</button></div>` : ""}
+    <p class="hint">${hint}</p>
+    ${give ? `<button class="ghost-btn" data-action="tbl-give-open">${icon("share", "tiny")} Oppure passala a un altro giocatore</button>` : ""}`;
+}
+
+/** L'etichetta del mazzo Vengeance, accanto al titolo del tavolo. */
+const modePill = () => `<span class="mode-pill" title="Flip 7: With a Vengeance (beta)">${vCard("m6")} Vengeance</span>`;
+const betaNote = () => `<div class="beta-note"><span class="tag beta">beta</span><span>Partita di prova con il mazzo <b>With a Vengeance</b>: non entra nello storico e non vale Crown.</span></div>`;
+
+/** Il foglio "con che mazzo?" all'apertura di un tavolo. */
+function renderDeckSheet() {
+  return `
+    <div class="sheet-head">
+      <div><div class="sheet-title">Con che mazzo?</div><div class="sheet-sub">Ogni tavolo ha il suo</div></div>
+      <button class="icon-btn" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
+    </div>
+    <div class="deck-pick">
+      <button class="deck-opt" data-action="tbl-open-deck" data-mode="classic">
+        ${fanArt()}<b>Flip 7</b><small>il mazzo classico: Congela, Pesca Tre, Seconda Chance. Vale per lo storico e le Crown.</small>
+      </button>
+      <button class="deck-opt" data-action="tbl-open-deck" data-mode="vengeance">
+        <span class="fan" aria-hidden="true">${vCard("u7")}${vCard("stl")}${vCard("m6")}</span>
+        <b>With a Vengeance <span class="tag beta">beta</span></b><small>Steal, Swap, Discard, Flip Four, ÷2 e negativi: nessuno è al sicuro. Partita di prova, non entra nello storico.</small>
+      </button>
+    </div>`;
+}
+
+/** Le regole di With a Vengeance in un foglio, carta per carta. */
+function renderVRules() {
+  const row = (card, title, text) => `<div class="vrule">${vCard(card)}<div><b>${title}</b><small>${text}</small></div></div>`;
+  return `
+    <div class="sheet-head">
+      <div><div class="sheet-title">With a Vengeance</div><div class="sheet-sub">Le regole in breve · beta, non entra nello storico</div></div>
+      <button class="icon-btn" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
+    </div>
+    <div class="vrules">
+      <p class="muted small">Come in Flip 7: pesca o fermati, il doppione fa sballare, sette numeri diversi fanno Flip 7 (+15 e round chiuso). Ma qui <b>chi si ferma non è al sicuro</b>: azioni e modificatori si giocano su chiunque non abbia sballato, fermi compresi. Nel mazzo c'è anche il 13 (tredici copie).</p>
+      <p class="vr-title">Carte speciali: fanno effetto appena arrivano, anche rubate o scambiate</p>
+      ${row("z0", "The Zero", "La mano vale 0 finché non fai Flip 7 (allora conta tutto). Finché ce l'hai devi pescare. Conta come numero per il Flip 7.")}
+      ${row("u7", "Unlucky 7", "Appena arriva butti via numeri e modificatori: ti resta solo il 7. Non sballi mai ricevendolo, nemmeno con un 7 in mano; un altro 7 dopo, sì.")}
+      ${row("l13", "Lucky 13", "Puoi tenere un secondo 13 senza sballare: valgono entrambi e contano per il Flip 7. Col terzo 13 sballi.")}
+      <p class="vr-title">Modificatori: si danno a chi vuoi, anche a te, anche a chi è fermo</p>
+      ${row("d2", "÷2", "A fine round la somma dei numeri si dimezza (per difetto), prima dei negativi.")}
+      ${row("m6", "−2 … −10", "Si tolgono dalla somma. Il round non va mai sotto zero. Non fanno mai sballare e non contano per il Flip 7.")}
+      <p class="vr-title">Azioni: si risolvono subito</p>
+      ${row("fl4", "Flip Four", "Chi la riceve pesca quattro carte una alla volta, anche se era fermo. Azioni e modificatori pescati si risolvono in ordine DOPO, se non ha sballato. Sballo o Flip 7 fermano le pescate.")}
+      ${row("jom", "Just One More", "Chi la riceve pesca un'ultima carta (se è un'azione la risolve) e poi si ferma.")}
+      ${row("stl", "Steal", "Prendi una carta scoperta dalla fila di un altro e la metti nella tua: un doppione ti fa sballare, l'Unlucky 7 fa effetto su di te.")}
+      ${row("swp", "Swap", "Scambi due carte scoperte di due giocatori diversi: una tua con una loro, o due degli altri. Chi riceve un doppione sballa.")}
+      ${row("dsc", "Discard", "Scegli una carta scoperta di chiunque, anche tua, e si scarta.")}
+      <p class="muted small">Steal, Swap e Discard le usa chi le pesca, oppure le passa a un altro che dovrà usarle lui. Senza carte da colpire si scartano. Flip Four, Just One More e i modificatori si assegnano a chi non ha sballato: se sei l'unico, a te.</p>
+      <p class="vr-title">Il conto a fine round</p>
+      <ol class="vr-steps"><li>somma dei numeri</li><li>÷2 se hai il ÷2 (per difetto)</li><li>meno i negativi, mai sotto zero</li><li>+15 se hai fatto Flip 7</li></ol>
+      <p class="muted small">Esempio del regolamento: 3+11+5+7+10+8+4 = 48 → ÷2 = 24 → −4 = 20 → +15 = 35.</p>
+    </div>`;
+}
+
 /** Riquadro bene in vista per le carte azione: chi guarda capisce al volo
     cosa sta succedendo, chi deve scegliere ha tutto lì dentro. */
 function actionBox(g, type, sub, body = "") {
-  const meta = ACTION_META[type];
+  const meta = metaOf(type);
   // se la carta azione e' quella che sta ancora girando accanto al mazzo,
   // il riquadro aspetta la fine del giro: niente spoiler
   const veil = spoilerHold && g.lastDraw && g.lastDraw.card === type ? " spoiler-veil" : "";
   return `
-    <div class="action-box act-${type}${body ? " mine" : ""}${veil}">
+    <div class="action-box act-${meta.mod ? "mod" : type}${body ? " mine" : ""}${veil}">
       <div class="ab-head">
-        <span class="ab-ico">${icon(meta.ico)}</span>
+        <span class="ab-ico${meta.ico ? "" : " has-card"}">${meta.ico ? icon(meta.ico) : miniCard(type, "drawn")}</span>
         <div class="ab-txt"><b>${meta.name}</b><small>${sub}</small></div>
       </div>
       ${body}
@@ -1134,9 +1574,13 @@ function renderControls(g, ctx, me) {
 
   if (g.pending) {
     const p = g.pending;
+    if (iAct && p.kind === "use") {
+      const from = p.givenBy && g.seats[p.givenBy] ? `${esc(shortName(g.seats[p.givenBy]))} te l'ha passata: ora devi usarla tu` : "Hai pescato una carta azione: si usa toccando le carte qui sotto";
+      return actionBox(g, p.type, from, useBody(g, p));
+    }
     if (iAct) {
-      return actionBox(g, p.type, "Hai pescato una carta azione: decidi tu", `
-        <p class="choose-label">${ACTION_META[p.type].ask}</p>
+      return actionBox(g, p.type, metaOf(p.type).mod ? "Hai pescato un modificatore: decidi a chi va" : "Hai pescato una carta azione: decidi tu", `
+        <p class="choose-label">${metaOf(p.type).ask}</p>
         <div class="pgrid">
           ${p.options.map((sid) => `
             <button class="pg" data-action="tbl-target" data-id="${sid}" data-at="${g.updatedAt || 0}">
@@ -1147,26 +1591,30 @@ function renderControls(g, ctx, me) {
             </button>`).join("")}
         </div>`);
     }
-    return actionBox(g, p.type, `${esc(shortName(g.seats[p.chooser]))} ${ACTION_META[p.type].doing}…`) + stallBox(g, ctx, me);
+    return actionBox(g, p.type, `${esc(shortName(g.seats[p.chooser]))} ${metaOf(p.type).doing}…`) + stallBox(g, ctx, me);
   }
 
   if (g.flip3) {
     const t = g.flip3.target;
-    const left = g.flip3.left === 1 ? "ancora 1 carta" : `ancora ${g.flip3.left} carte`;
-    return actionBox(g, "fl3", mine(g, ctx, t)
-      ? `Peschi ${left}: arrivano da sole…`
-      : `${esc(shortName(g.seats[t]))} pesca ${left}: arrivano da sole…`) + stallBox(g, ctx, me);
+    const jom = Boolean(g.flip3.jom);
+    const left = jom ? "l'ultima carta" : g.flip3.left === 1 ? "ancora 1 carta" : `ancora ${g.flip3.left} carte`;
+    const type = jom ? "jom" : isVg(g) ? "fl4" : "fl3";
+    const tail = jom ? ": poi si ferma" : ": arrivano da sole…";
+    return actionBox(g, type, mine(g, ctx, t)
+      ? `Peschi ${left}${tail}`
+      : `${esc(shortName(g.seats[t]))} pesca ${left}${tail}`) + stallBox(g, ctx, me);
   }
 
   if (iAct && !g.hands[actor].out && !emptyHand(g.hands[actor])) {
     // la mia carta sta ancora volando: il bottone mostra il valore di prima
     const flying = landingActive && g.lastDraw && g.lastDraw.seat === actor && !g.pending;
     const pts = flying ? pointsBefore(g.hands[actor], g.lastDraw) : engine.handPoints(g.hands[actor]);
+    const zero = isVg(g) && V.hasZero(g.hands[actor]);
     return `
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit" data-at="${g.updatedAt || 0}">Pesca</button>
-        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}">Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
-      </div>${flying ? "" : riskLine(g, actor)}`;
+        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}" ${zero ? "disabled" : ""}>Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
+      </div>${zero ? `<p class="hint">Hai <b>The Zero</b>: la mano vale 0 finché non fai Flip 7, e non puoi fermarti.</p>` : flying ? "" : riskLine(g, actor)}`;
   }
   // fuori dallo spareggio: niente comandi, si guarda e basta
   if (me && g.seats[me] && g.seats[me].blocked) return blockedBox(g, ctx, me) + stallBox(g, ctx, me);
@@ -1217,6 +1665,12 @@ const seatOrder = (g) => {
  */
 function pointsBefore(h, last) {
   const card = last.card;
+  if (Array.isArray(h.cards)) {
+    const b = { ...h, out: null, cards: h.cards.filter((c) => c !== card) };
+    // l'Unlucky 7 appena girato ha buttato il resto: prima valevano quelle carte
+    if (card === "u7" && moveHold) b.cards = moveHold.moves.filter((mv) => mv.from === last.seat).map((mv) => mv.card);
+    return engine.handPoints(b);
+  }
   const b = { nums: h.nums, plus: h.plus, x2: h.x2, out: null };
   if (engine.CARD.isNum(card)) {
     const n = engine.CARD.num(card);
@@ -1246,9 +1700,9 @@ function renderTable(g, ctx) {
         ${bankRow(g)}
         ${raceBoard(g, me)}
       </section>
-      <section class="card t-seats">
+      <section class="card t-seats${isVg(g) && g.pending && g.pending.kind === "use" && mine(g, ctx, g.pending.chooser) && !giveOpen ? " picking" : ""}">
         <ul class="seats">
-          ${seatOrder(g).map((sid) => renderSeatRow(g, sid, ctx, max, me)).join("")}
+          ${seatOrder(g).map((sid) => (isVg(g) ? renderSeatRowV : renderSeatRow)(g, sid, ctx, max, me)).join("")}
         </ul>
         ${reactionBar(g, me)}
       </section>
@@ -1269,7 +1723,7 @@ function renderOver(g, ctx) {
       <span class="holo-sweep" aria-hidden="true"></span>
       <span class="confetti" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => `<i style="--i:${i}"></i>`).join("")}</span>
       <div class="wb-crown">${crownEmblem("big")}</div>
-      <div class="wb-label">Vince al tavolo online</div>
+      <div class="wb-label">${isVg(g) ? "Vince · With a Vengeance (beta)" : "Vince al tavolo online"}</div>
       <div class="wb-name">${esc(winner.name)}</div>
       <div class="wb-score">${winner.total} punti</div>
       <div class="wb-mark">${wordmark()}</div>
@@ -1287,7 +1741,7 @@ function renderOver(g, ctx) {
       </ol>
       ${g.endReason === "left" ? `<p class="hint">Partita chiusa da <b>${esc(g.endedBy || "un giocatore")}</b>:
         valgono i punteggi di quel momento, la mano in corso non conta.</p>` : ""}
-      ${me ? `
+      ${isVg(g) ? betaNote() : me ? `
         <button class="btn primary big" data-action="tbl-save">Salva nello storico (vale una Crown)</button>` : ""}
       <div class="board-links">
         <button class="ghost-btn" data-action="tbl-share">${icon("share", "tiny")} Condividi il podio</button>
@@ -1329,9 +1783,11 @@ export const tableView = {
     keepTicking(g, ctx);
     if (!g) return list.length ? renderTables(list, ctx) : renderIntro(ctx);
     if (g.status === "playing") scheduleAuto(g, ctx);
+    if (!g.pending || g.pending.kind !== "use") { swapPick = null; giveOpen = false; }
     // anche l'ultima pescata della partita si anima: la fine si vede, non si intuisce
     if (g.status !== "lobby") scheduleDrawAnim(g);
     checkPendingFlight(g);
+    if (isVg(g) && g.status !== "lobby") scheduleMoveAnim(g);
     if (g.status !== "lobby") alertOnChanges(g, ctx);
     // con piu' tavoli aperti serve sapere dove si e' e come si torna indietro
     const head = (list.length > 1 ? tableBar(g, list) : "") + staleNotice(g);
@@ -1341,8 +1797,14 @@ export const tableView = {
   },
 
   actions: {
-    /** Apre un tavolo nuovo, anche se ce n'è già uno: e' mio, lo chiudo io. */
-    "tbl-open"(ctx) {
+    /** Apre un tavolo nuovo, anche se ce n'è già uno: prima si sceglie il mazzo. */
+    "tbl-open"() {
+      openSheet({ type: "deck" }, renderDeckSheet);
+    },
+    /** ...e' mio, lo chiudo io. */
+    "tbl-open-deck"(ctx, el) {
+      const mode = el.dataset.mode === "vengeance" ? "vengeance" : "classic";
+      closeSheet();
       const id = "t" + store.newId();
       const mine = ctx.me && ctx.room.players[ctx.me];
       // se non sono collegato a un giocatore vale il nome con cui gioco altrove
@@ -1351,8 +1813,46 @@ export const tableView = {
       viewingId = id;
       browsing = false;
       podiumKey = null;
-      return store.commitGame(engine.createLobby(ctx.room.meta.targetScore || 200, { id, owner }));
+      return store.commitGame(engine.createLobby(ctx.room.meta.targetScore || 200, { id, owner, mode }));
     },
+    // --- With a Vengeance: tocca la carta, passa la carta, regole ---
+    async "tbl-pick"(ctx, el) {
+      const g = pickTable(ctx);
+      if (!g || !g.pending || g.pending.kind !== "use" || !isFresh(g, el)) return;
+      const p = g.pending;
+      if (!mine(g, ctx, p.chooser)) return;
+      const pick = { sid: el.dataset.sid, card: el.dataset.card };
+      const confirmHurt = async () => {
+        if (!pickWarn(g, p, pick.sid, pick.card)) return true;
+        return askConfirm("Così ti fai male", { message: "Quella carta ti fa sballare, oppure ti fa buttare tutto (Unlucky 7) o azzera la mano (The Zero). Vuoi farlo lo stesso?", confirmLabel: "Sì, lo faccio", danger: true });
+      };
+      if (p.type === "swp") {
+        if (!swapPick) { if (V.pickable(g, p.chooser, "swp").some((x) => x.sid === pick.sid && x.card === pick.card)) swapPick = pick; return; }
+        if (swapPick.sid === pick.sid && swapPick.card === pick.card) { swapPick = null; return; } // toccata di nuovo: si deseleziona
+        if (swapPick.sid === pick.sid) { swapPick = pick; return; }                                // stessa fila: cambia la prima
+        const picks = [swapPick, pick];
+        if (!V.validPicks(g, p.chooser, "swp", picks)) return toast("Scegli due carte di due giocatori diversi", "warn");
+        if (!(await confirmHurt())) return;
+        const g2 = pickTable(ctx);
+        if (!g2 || !g2.pending || g2.updatedAt !== g.updatedAt) return;
+        swapPick = null;
+        return apply(engine.pickCards(g2, p.chooser, picks), g2);
+      }
+      if (!V.validPicks(g, p.chooser, p.type, [pick])) return;
+      if (!(await confirmHurt())) return;
+      const g2 = pickTable(ctx);
+      if (!g2 || !g2.pending || g2.updatedAt !== g.updatedAt) return;
+      return apply(engine.pickCards(g2, p.chooser, [pick]), g2);
+    },
+    "tbl-pick-cancel"() { swapPick = null; },
+    "tbl-give-open"() { giveOpen = !giveOpen; swapPick = null; },
+    "tbl-give"(ctx, el) {
+      const g = pickTable(ctx);
+      if (!g || !g.pending || !isFresh(g, el) || !mine(g, ctx, g.pending.chooser)) return;
+      giveOpen = false;
+      return apply(engine.giveAction(g, g.pending.chooser, el.dataset.id), g);
+    },
+    "tbl-vrules"() { openSheet({ type: "vrules" }, renderVRules); },
     /** Entra in un tavolo dell'elenco (o torna a guardarlo). */
     "tbl-watch"(ctx, el) {
       viewingId = el.dataset.id;
@@ -1445,6 +1945,7 @@ export const tableView = {
       if (me && g.status !== "over" && g.status !== "lobby") choices.push({ id: "leave", label: "Abbandono la partita" });
       if (isTableOwner(g, ctx) || isStale(g)) choices.push({ id: "close", label: "Annulla il tavolo" });
       if (trainingAllowed(g)) choices.push({ id: "training", label: prefs.get("training", false) ? "✓ Modalità allenamento — tocca per spegnerla" : "Modalità allenamento (rischio di sballo)" });
+      if (isVg(g)) choices.push({ id: "vrules", label: "Regole di With a Vengeance" });
       choices.push({ id: "list", label: "Tavoli aperti (aprine un altro)" });
       const pick = await askChoice("Tavolo", choices, {
         message: me && g.status !== "over" && g.status !== "lobby"
@@ -1452,6 +1953,7 @@ export const tableView = {
           : "Lo storico non si tocca in nessun caso."
       });
       if (pick === "list") { viewingId = null; browsing = true; return; }
+      if (pick === "vrules") { openSheet({ type: "vrules" }, renderVRules); return; }
       if (pick === "training") { prefs.set("training", !prefs.get("training", false)); toast(prefs.get("training") ? "Allenamento acceso: al tuo turno vedi il rischio di sballo — si spegne da questo stesso menu" : "Allenamento spento"); return; }
       if (pick === "leave") return tableView.actions["tbl-leave"](ctx);
       if (pick === "close") return tableView.actions["tbl-close"](ctx);
@@ -1572,6 +2074,7 @@ export const tableView = {
     async "tbl-save"(ctx) {
       const g = pickTable(ctx);
       if (!g || g.status !== "over") return;
+      if (isVg(g)) return toast("Partita di prova (beta): non si salva nello storico", "warn");
       await store.saveOnlineGame(g);
       toast("Partita salvata: Crown assegnata");
       location.hash = "#classifica";

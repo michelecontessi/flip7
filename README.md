@@ -428,6 +428,56 @@ le transizioni partono davvero e la carta in volo non salta. Mentre la pescata v
 suo posto in fila è già riservato da un segnaposto tratteggiato della stessa taglia:
 la carta atterra lì sopra e la riga non si allarga di scatto.
 
+### 5.1 Flip 7: With a Vengeance (beta)
+
+All'apertura di un tavolo si sceglie il mazzo: quello classico oppure **With a
+Vengeance**, il seguito ufficiale (The Op, 2026). È **in beta**: si gioca per provarlo,
+la partita **non entra nello storico** e non vale Crown; il podio lo dice chiaro e il
+tavolo si chiude e basta. Le regole vengono dal regolamento ufficiale
+(*Ruleset Edition 1*) e dalle FAQ di The Op, e stanno in [js/vengeance.js](js/vengeance.js)
+(mazzo, carte, conti, bot) e nel flusso di turno di [js/game.js](js/game.js):
+
+- **108 carte**: 92 numeri (un 1, due 2… dodici 12, **tredici 13**; l'unico 0 è *The
+  Zero*, il settimo 7 è l'*Unlucky 7*, il tredicesimo 13 è il *Lucky 13*), sei
+  modificatori (**÷2, −2, −4, −6, −8, −10**, uno ciascuno) e dieci azioni (**Just One
+  More, Flip Four, Swap, Steal, Discard**, due ciascuna). Niente Congela, Pesca Tre né
+  Seconda Chance;
+- **chi si ferma non è al sicuro**: azioni e modificatori si giocano su chiunque non
+  abbia sballato, fermi compresi; se sei l'unico non sballato, te li tieni tu;
+- **The Zero**: la mano vale 0 finché non fai Flip 7 (allora conta tutto), e finché ce
+  l'hai **devi pescare**: il pulsante *Mi fermo* si spegne. Conta come numero per il Flip 7;
+- **Unlucky 7**: appena arriva butti numeri e modificatori e ti resta solo il 7. Non
+  sballi mai ricevendolo (nemmeno con un 7 in mano); un altro 7 dopo, sì. Dentro un
+  Flip Four butti quello pescato prima e continui con le carte che restano;
+- **Lucky 13**: puoi tenere un secondo 13, valgono entrambi e contano per il Flip 7;
+  col terzo sballi;
+- le carte speciali **fanno effetto appena arrivano**, anche rubate o scambiate, e
+  smettono appena se ne vanno;
+- **modificatori**: si assegnano a chi vuoi (anche a te). A fine round: somma dei numeri
+  → **÷2** (per difetto) → meno i negativi, **mai sotto zero** → **+15** col Flip 7. Non
+  fanno mai sballare e non contano per il Flip 7;
+- **Flip Four**: il bersaglio pesca quattro carte una alla volta (anche se era fermo:
+  pesca e resta fermo). Azioni e modificatori pescati si accantonano e si risolvono
+  **in ordine, dopo**; se sballa si perdono; sballo o Flip 7 fermano le pescate;
+- **Just One More**: il bersaglio pesca un'ultima carta (se è un'azione la risolve) e
+  poi **si ferma**, The Zero o no;
+- **Steal, Swap, Discard**: le usa chi le pesca **toccando le carte sul tavolo** (la
+  carta da rubare; due carte di due giocatori diversi da scambiare; la carta da far
+  scartare, anche una propria), oppure le **passa** a un altro, che dovrà usarle lui.
+  Un doppione che arriva fa sballare, l'Unlucky 7 fa buttare tutto: l'app lo segnala
+  con un bollino e chiede conferma. Senza carte da colpire, la carta si scarta da sola;
+- il **settimo numero** che arriva con una Steal o uno Swap è un Flip 7 a tutti gli effetti.
+
+Al tavolo le carte nuove sono ricalcate su quelle vere (cifra iridescente per The Zero e
+Lucky 13, 7 d'acciaio col teschio per l'Unlucky, modificatori rossi, azioni ognuna col
+suo colore), le carte che cambiano fila **volano davvero** da una riga all'altra (o verso
+il mazzo, se scartate) tenendo il posto finché non atterrano, e ogni verdetto ha il suo
+avviso grande: SBALLATO, UNLUCKY 7, THE ZERO, LUCKY 13, RUBATA, SCAMBIO, SCARTATA, FLIP 7.
+**Come si chiude il conto** si legge sotto le carte di ogni riga quando ci sono ÷2,
+negativi o The Zero (*numeri 48 · ÷2 → 24 · −4 → 20 · +15 Flip 7 · = 35*), e le regole
+in breve stanno nel menu del tavolo (**Regole di With a Vengeance**). I bot giocano anche
+qui: toccano le carte che rendono di più, senza mai sbirciare il mazzo.
+
 ## 6. Classifica e Crown
 
 Una **vittoria = una Crown**, punto. Nessuna formula strana: in classifica le Crown
