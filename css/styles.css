@@ -972,10 +972,6 @@ table.rounds.edit td.tot { padding: 4px 9px; }
 .quick.on.gold { background: var(--holo); color: #2a1c02; }
 .quick.on.red { background: var(--red); color: #fff; }
 .quick.on.ice { background: #2f8fd8; color: #fff; }
-/* vite extra: acceso si riempie di rosa pieno come gli altri due (un fondo
-   velato sembrava un tasto trasparente); il rosa lo distingue dal rosso dello Sballo */
-.quick.heart { color: var(--c-rose); }
-.quick.on.rose { background: var(--c-rose); color: var(--c-rose-ink); }
 .quick-row .quick { min-width: 0; padding: 0 6px; font-size: 13.5px; }
 
 .numgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px 7px; padding: 2px; }

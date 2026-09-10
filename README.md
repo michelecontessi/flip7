@@ -185,11 +185,10 @@ sotto **Avanzate**, chiuse finché non servono.
      *congelato da …*. È solo un appunto: al tavolo vero non si sa davvero chi tira a
      chi, quindi il record *Iceman* e la *nemesi* della scheda giocatore contano solo
      le partite online
-   - **Vita extra** conta le carte col **cuore** (la *Seconda Chance*) finite in mano
-     in quel round: **non danno punti**, restano come appunto nel dettaglio della
-     partita. Ogni tocco ne aggiunge una — *1 vita extra*, *2 vite extra* — e dopo la
-     terza si torna a zero. Il record *Sette Vite* non le guarda: dal vivo ci si
-     dimentica di segnarle, e conta solo le partite online
+   - le carte col **cuore** (la *Seconda Chance*) dal vivo **non si segnano**: non danno
+     punti, e il record *Sette Vite* conta solo le partite online, dove il cuore lo
+     segna il mazzo. Le vite extra segnate in passato col vecchio tasto restano
+     visibili nel dettaglio della partita
    - sotto il punteggio della mano c'è il **totale provvisorio**: *totale partita 123 → 157*,
      cioè dove arriverebbe il giocatore salvando questa mano, e quanti punti gli mancano
      al traguardo (o *traguardo tagliato*); si aggiorna a ogni carta toccata
@@ -197,8 +196,8 @@ sotto **Avanzate**, chiuse finché non servono.
      le griglie non hanno titoli sopra, così il pannello sta in una schermata sola e i
      modificatori restano a portata di pollice (le mani scritte come totale in passato
      restano leggibili così come sono)
-   - in fondo, sopra a tutto, il **vassoio dei comandi** — Sballo, Congelato, Vita extra,
-     Azzera e Salva — resta fermo anche quando il pannello scorre
+   - in fondo, sopra a tutto, il **vassoio dei comandi** — Sballo, Congelato, Azzera e
+     Salva — resta fermo anche quando il pannello scorre
 3. Quando tutti hanno il punteggio, il pulsante diventa **Chiudi round** e si passa al successivo.
    Il round in corso è sempre scritto nella pastiglia scura in cima al tabellone
    (*Round 4*), con accanto quanti punteggi mancano.
@@ -563,7 +562,7 @@ Tre, quanti cuori ha regalato, quante volte si è fermato da sé.
   extra non danno punti: si contano e basta, sia quelle pescate sia quelle **regalate**
   da un altro giocatore, e valgono anche se poi vengono spese per annullare un doppione.
   Anche questo è **solo online**: al tavolo online il cuore lo segna il mazzo, dal vivo
-  il tasto *Vita extra* a volte si dimentica e farebbe torto a chi le segna sempre
+  non si segna proprio (il pannello punti non ha più il tasto *Vita extra*)
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;

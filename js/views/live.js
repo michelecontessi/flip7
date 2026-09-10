@@ -7,14 +7,16 @@
 // piu'), senza titoli sopra le griglie: le carte numero e i modificatori si
 // riconoscono da soli, e cosi' il pannello sta in una schermata sola con i
 // modificatori sempre a portata di dito. In fondo, sopra a tutto, il vassoio
-// con Sballo, Congelato, Vita extra e Salva.
+// con Sballo, Congelato e Salva. Le vite extra dal vivo non si segnano: il
+// record Sette Vite conta solo il tavolo online, dove il cuore lo segna il
+// mazzo (le mani vecchie che ce l'hanno lo mostrano ancora).
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
 import { esc, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
 import { avatar } from "../avatar.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card, heartCard } from "../icons.js";
-import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry, heartsOf, MAX_HEARTS } from "../scoring.js";
+import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry, heartsOf } from "../scoring.js";
 import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter, roundPlayers, tiebreakOf } from "../stats.js";
 import { sharePodium } from "../share.js";
 import { fmtDate } from "../ui.js";
@@ -520,7 +522,6 @@ export function renderScoreSheet(s) {
       <div class="quick-row">
         <button class="quick ${e.busted ? "on red" : ""}" data-action="calc-bust">${icon("bomb", "tiny")} Sballo</button>
         <button class="quick ${e.frozen ? "on ice" : ""}" data-action="calc-freeze">${icon("snow", "tiny")} Congelato</button>
-        ${heartButton(e)}
       </div>
       <div class="frozen-by" ${e.frozen && (s.others || []).length ? "" : 'style="display:none"'}>${frozenByRow(s, e)}</div>
       <div class="act-row">
@@ -576,25 +577,6 @@ export function patchCalcSheet(s) {
     fb.style.display = e.frozen && (s.others || []).length ? "" : "none";
     fb.innerHTML = frozenByRow(s, e);
   }
-  const qh = root.querySelector('[data-action="calc-heart"]');
-  if (qh) {
-    const n = heartsOf(e);
-    qh.className = "quick heart " + (n ? "on rose" : "");
-    qh.innerHTML = `${icon("heartFill", "tiny")} ${heartLabel(n)}`;
-    qh.setAttribute("aria-label", `Vite extra: ${n}. Tocca per aggiungerne una`);
-  }
-}
-
-/** L'etichetta del tasto delle vite extra: dice quante ne ha prese. */
-function heartLabel(n) {
-  return n === 0 ? "Vita extra" : n === 1 ? "1 vita extra" : `${n} vite extra`;
-}
-
-/** Il tasto delle vite extra: un tocco ne aggiunge una, dopo l'ultima si azzera. */
-function heartButton(e) {
-  const n = heartsOf(e);
-  return `<button class="quick heart ${n ? "on rose" : ""}" data-action="calc-heart"
-    aria-label="Vite extra: ${n}. Tocca per aggiungerne una">${icon("heartFill", "tiny")} ${heartLabel(n)}</button>`;
 }
 
 function nextLabel(s) {
@@ -610,6 +592,7 @@ export function normalizeEntry(e) {
     busted: Boolean(e.busted),
     frozen: Boolean(e.frozen) && !e.busted,
     flip7: Boolean(e.flip7),
+    // il tasto per segnarle non c'e' piu': resta solo cio' che una mano vecchia gia' aveva
     hearts: heartsOf(e),
     manual: e.manual === null || e.manual === undefined || e.manual === "" ? null : Number(e.manual),
     // chi ha tirato il Congela, se il segnapunti l'ha detto (alimenta i record "attivi")
@@ -781,13 +764,6 @@ export const liveView = {
     "calc-frozen-by"(ctx, el) {
       const e = sheet.state.entry;
       e.frozenBy = e.frozenBy === el.dataset.id ? null : el.dataset.id;
-      return "sheet";
-    },
-    // le vite extra non danno punti: si segnano solo per la statistica,
-    // e un tocco di troppo torna a zero (niente tasto "meno" da cercare)
-    "calc-heart"() {
-      const e = sheet.state.entry;
-      e.hearts = (heartsOf(e) + 1) % (MAX_HEARTS + 1);
       return "sheet";
     },
     "calc-clear"() { sheet.state.entry = emptyEntry(); return "sheet"; },

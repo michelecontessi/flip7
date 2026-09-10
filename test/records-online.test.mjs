@@ -77,6 +77,11 @@ test("il Pesca Tre o il Congela tirati a se stessi non fanno Bullo ne' Iceman", 
   assert.deepEqual(h.bully, { playerId: "bea", n: 1 });
 });
 
+test("il pannello dal vivo non segna le vite extra, ma tiene Congelato e il congelato da", () => {
+  assert.ok(!liveSrc.includes("calc-heart"), "niente tasto Vita extra");
+  assert.ok(liveSrc.includes('data-action="calc-freeze"') && liveSrc.includes('data-action="calc-frozen-by"'), "Congelato e congelato da restano");
+});
+
 test("niente tastierino nel pannello punti, ma le mani scritte come totale valgono ancora", () => {
   assert.ok(!liveSrc.includes("calc-mode") && !liveSrc.includes('class="keypad"'), "niente linguetta Tastierino ne' tasti numerici");
   assert.equal(computeRound({ manual: 40 }).total, 40);
