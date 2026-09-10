@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Vista "Partita".
+// Vista "Segnapunti" (route #partita): le partite dal vivo, col mazzo vero.
 // Un solo tabellone (Giocatore | Round | Totale) e un solo pulsante alla volta:
 // "Segna i punti" finche' mancano giocatori, poi "Chiudi round".
 // L'inserimento scorre da un giocatore all'altro senza chiudere il pannello.
@@ -13,13 +13,14 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, colorOf, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
-import { avatar } from "../avatar.js";
+import { esc, toast, openSheet, closeSheet, askText, askConfirm, askChoice, sheet } from "../ui.js";
+import { avatar, playerColor } from "../avatar.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, roundCard, modCard, flip7Card, heartCard } from "../icons.js";
 import { NUMBER_CARDS, PLUS_MODIFIERS, computeRound, formulaOf, emptyEntry, isBlankEntry, heartsOf } from "../scoring.js";
 import { liveStandings, orderedPlayerIds, roundKey, roundsPlayed, roundStarter, roundPlayers, tiebreakOf } from "../stats.js";
 import { sharePodium } from "../share.js";
 import { fmtDate } from "../ui.js";
+import { eloReportCard } from "./elo-report.js";
 
 const localState = { selected: null, target: null, showRounds: false };
 
@@ -72,24 +73,25 @@ function renderIdle(room, me) {
       ${whoAmIBanner(room, me)}
       <section class="card empty-state">
         ${fanArt()}
-        <h2 class="empty-title">Nessuna partita in corso</h2>
-        <p class="muted">Il tabellone comparirà qui appena il segnapunti la avvia.</p>
+        <h2 class="empty-title">Nessuna partita dal vivo in corso</h2>
+        <p class="muted">Qui si seguono i punti delle partite col mazzo vero: il tabellone compare appena il segnapunti la avvia.
+          Per giocare ognuno dal suo telefono c'è <a href="#tavolo">Gioca online</a>.</p>
       </section>`;
   }
 
   return `
     ${whoAmIBanner(room, me)}
     <section class="card">
-      <div class="card-head">${icon("cards")}<span class="card-title">Nuova partita</span>
+      <div class="card-head">${icon("scorepad")}<span class="card-title">Nuova partita dal vivo</span>
         <span class="count-pill ml-auto">${localState.selected.size}</span></div>
-      <p class="muted small">Toccali <b>nell'ordine in cui siete seduti</b>: dopo il sorteggio
-        di chi apre, le mani girano in quella sequenza.</p>
+      <p class="muted small">Per le partite col mazzo vero: tu segni i punti, gli altri seguono il tabellone in diretta.
+        Toccali <b>nell'ordine in cui siete seduti</b>: dopo il sorteggio di chi apre, le mani girano in quella sequenza.</p>
       <div class="pgrid">
         ${list.map(([id, p]) => {
           const seat = [...localState.selected].indexOf(id) + 1;
           return `
           <button class="pg ${seat ? "on" : ""}" data-action="toggle-lineup" data-id="${id}">
-            <span class="pg-ava" style="--pc:${colorOf(p.name)}">
+            <span class="pg-ava" style="--pc:${playerColor(id, p.name)}">
               ${avatar(id, p.name, "lg")}
               <i class="pg-check num">${seat || ""}</i>
             </span>
@@ -145,7 +147,7 @@ function whoAmIBanner(room, me) {
       <div class="pgrid">
         ${list.map(([id, p]) => `
           <button class="pg" data-action="set-me" data-id="${id}">
-            <span class="pg-ava" style="--pc:${colorOf(p.name)}">
+            <span class="pg-ava" style="--pc:${playerColor(id, p.name)}">
               ${avatar(id, p.name, "lg")}
             </span>
             <span class="pg-name">${esc(p.name)}</span>
@@ -188,7 +190,7 @@ function renderYouCard(live, standings, me, selfId) {
           })()}
         </span>
       </div>
-      <div class="you-bar"><i style="width:${pct}%; background:${colorOf(mine.name)}"></i></div>
+      <div class="you-bar"><i style="width:${pct}%; background:${playerColor(mine.playerId, mine.name)}"></i></div>
       <div class="you-foot">
         <span class="${mine.total >= target ? "goal" : ""}">
           ${mine.total >= target ? `traguardo tagliato` : `ti mancano <b>${target - mine.total}</b> punti`}
@@ -308,7 +310,7 @@ function renderBoard(room, live, standings, me, { editable, selfId = null }) {
                 <b>${row.total}</b>
                 <small class="${left === 0 ? "goal" : ""}">${left === 0 ? "arrivato" : "−" + left}</small>
               </span>
-              <span class="track" aria-hidden="true"><i style="width:${pct}%;background:${colorOf(row.name)}"></i></span>
+              <span class="track" aria-hidden="true"><i style="width:${pct}%;background:${playerColor(row.playerId, row.name)}"></i></span>
             </li>`;
         }).join("")}
       </ol>
@@ -401,8 +403,25 @@ function renderFinished(room, live, standings, me) {
         <div class="board-links"><span></span><button class="ghost-btn" data-action="share-live-podium">${icon("share", "tiny")} Condividi il podio</button><span></span></div>
       </section>`}
 
+    ${liveEloReport(room, live, standings, me)}
     ${renderBoard(room, live, standings, me, { editable: false })}
     ${renderRoundsTable(room, live)}`;
+}
+
+/**
+ * L'Elo della partita appena finita, prima ancora di salvarla: la partita
+ * entra "per finta" nello storico sotto il suo id, e si vede come muove il
+ * rating di ognuno e contro chi.
+ */
+function liveEloReport(room, live, standings, me) {
+  const gid = live.gameId || "__live";
+  const pending = {
+    playedAt: live.startedAt || Date.now(),
+    source: "live",
+    results: Object.fromEntries(standings.map((r) => [r.playerId, { name: r.name, total: r.total }])),
+    winnerIds: live.winnerIds || null
+  };
+  return eloReportCard({ ...(room.history || {}), [gid]: pending }, gid, room.players, { me, pending: true });
 }
 
 // ---------------------------------------------------------------------------

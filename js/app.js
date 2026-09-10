@@ -10,6 +10,8 @@ import { historyView } from "./views/history.js";
 import { setupView } from "./views/setup.js";
 import { tableView } from "./views/table.js";
 import { openNewRoomPage } from "./views/rooms.js";
+import { profileView } from "./views/profile.js";
+import { eloReportView } from "./views/elo-report.js";
 import { morph } from "./morph.js";
 import { DEFAULTS } from "./config.js";
 import { icon, wordmark, fanArt, googleG } from "./icons.js";
@@ -18,30 +20,34 @@ import { applyTheme, watchSystemTheme } from "./theme.js";
 import { APP_VERSION } from "./config.js";
 import "./notify.js"; // sblocca l'audio al primo tocco
 
+// "partita" e "tavolo" restano le chiavi (link, notifiche), ma i nomi dicono
+// cosa sono: il segnapunti delle partite dal vivo e il gioco online
 const VIEWS = {
-  partita:    { title: "Partita",    ico: "cards",   view: liveView },
-  tavolo:     { title: "Tavolo",     ico: "cardFan", view: tableView },
+  partita:    { title: "Segnapunti",   ico: "scorepad", view: liveView },
+  tavolo:     { title: "Gioca online", ico: "cardFan",  view: tableView },
   classifica: { title: "Classifica", ico: "crown",   view: leaderboardView },
   storico:    { title: "Storico",    ico: "history", view: historyView },
   setup:      { title: "Setup",      ico: "sliders", view: setupView }
 };
 const ORDER = ["partita", "tavolo", "classifica", "storico", "setup"];
+// azioni che valgono da qualsiasi schermata: il profilo e l'Elo della partita
+const SHARED = [profileView, eloReportView];
 
 let route = "partita";
 
 function ctx() {
-  const room = store.getRoom();
-  const status = store.getStatus();
-  const bound = (room.bindings || {})[status.uid];
   return {
-    room,
-    status,
-    // il giocatore "mio": il collegamento fisso account -> giocatore vince
-    // sulla scelta locale (che resta come ripiego in modalita' locale)
-    me: (bound && room.players[bound]) ? bound : prefs.get("me"),
+    room: store.getRoom(),
+    status: store.getStatus(),
+    me: store.currentPlayerId(),
     isScorekeeper: store.isScorekeeper()
   };
 }
+
+/** Le tab che si vedono: il Setup e' solo di chi gestisce la stanza. */
+const visibleTabs = () => ORDER.filter((key) => key !== "setup" || store.isOwner());
+/** La vista da disegnare: chi non gestisce la stanza non apre il Setup nemmeno da un vecchio link. */
+const shownRoute = () => (visibleTabs().includes(route) ? route : "partita");
 
 // --- chrome (topbar + tabbar) ------------------------------------------------
 function renderTopbar(c) {
@@ -66,7 +72,7 @@ function renderTopbar(c) {
     <div class="top-actions">
       ${store.canRetryOnline() ? `<button class="top-btn warn" data-action="retry-online" aria-label="Riprova il collegamento">${icon("refresh")}</button>` : ""}
       ${store.isOwner() ? `<button class="top-btn" data-action="share-top" aria-label="Condividi la stanza">${icon("link")}</button>` : ""}
-      <button class="me-btn" data-action="go-setup" aria-label="Chi sono">
+      <button class="me-btn" data-action="open-profile" aria-label="Il tuo profilo">
       ${meName
         ? avatar(me, meName, "sm")
         : `<span class="avatar sm ghost">${icon("user", "tiny")}</span>`}
@@ -77,8 +83,9 @@ function renderTopbar(c) {
 function renderTabbar(c) {
   const liveOn = c.room.live && c.room.live.status === "playing";
   const tableOn = Object.keys(c.room.game || {}).length > 0;
-  return ORDER.map((key) => `
-    <a class="tab ${route === key ? "on" : ""}" href="#${key}">
+  const cur = shownRoute();
+  return visibleTabs().map((key) => `
+    <a class="tab ${cur === key ? "on" : ""}" href="#${key}">
       <span class="tab-ico">${icon(VIEWS[key].ico)}${(key === "partita" && liveOn) || (key === "tavolo" && tableOn) ? '<i class="live-dot"></i>' : ""}</span>
       <span class="tab-lbl">${VIEWS[key].title}</span>
     </a>`).join("");
@@ -154,7 +161,7 @@ function renderAccessGate(c) {
           <div class="empty-ico">${icon("user")}</div>
           <h2 class="section-title">Richiesta inviata${pendingName ? ` a nome di ${esc(pendingName)}` : ""}</h2>
           <p class="muted small">Chi gestisce la stanza deve approvarti (lo fa dal suo
-            telefono, in Setup → Membri). Appena lo fa, questa pagina si sblocca da sola.</p>
+            telefono, in Setup → Partecipanti). Appena lo fa, questa pagina si sblocca da sola.</p>
         </div>` : `
         <div class="card gate-card center">
           <div class="empty-ico">${icon("user")}</div>
@@ -234,13 +241,14 @@ export function render() {
     top.innerHTML = renderTopbar(c);
     tabs.innerHTML = renderTabbar(c);
     // la scivolata FLIP ha senso solo restando sulla stessa vista
-    const same = main.className === "view-" + route;
+    const view = shownRoute();
+    const same = main.className === "view-" + view;
     const before = same ? snapFlip(main) : null;
-    main.className = "view-" + route;
-    const html = VIEWS[route].view.render(c);
+    main.className = "view-" + view;
+    const html = VIEWS[view].view.render(c);
     // il tavolo online si ridisegna a ogni carta: si aggiorna solo cio' che
     // cambia, cosi' carte e righe restano gli stessi elementi e non scattano
-    if (same && route === "tavolo") morph(main, html);
+    if (same && view === "tavolo") morph(main, html);
     else main.innerHTML = html;
     playFlip(main, before);
   };
@@ -251,10 +259,10 @@ export function render() {
 
 // --- delega eventi -----------------------------------------------------------
 function lookup(kind, name) {
-  const current = VIEWS[route].view[kind];
+  const current = VIEWS[shownRoute()].view[kind];
   if (current && current[name]) return current[name];
-  for (const key of ORDER) {
-    const map = VIEWS[key].view[kind];
+  for (const view of [...ORDER.map((key) => VIEWS[key].view), ...SHARED]) {
+    const map = view[kind];
     if (map && map[name]) return map[name];
   }
   return null;
@@ -293,7 +301,6 @@ document.addEventListener("click", (ev) => {
   const name = el.dataset.action;
 
   if (name === "sheet-close") { ev.preventDefault(); closeSheet(); return; }
-  if (name === "go-setup") { ev.preventDefault(); location.hash = "#setup"; return; }
   if (name === "share-top") { ev.preventDefault(); shareRoom(); return; }
   if (name === "create-room") {
     ev.preventDefault();

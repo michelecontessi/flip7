@@ -9,6 +9,11 @@ const PATHS = {
   cards: `<rect x="2.6" y="6.4" width="9.6" height="14" rx="2.2" transform="rotate(-13 7.4 13.4)"/>
           <rect x="11" y="3.4" width="10.4" height="17.2" rx="2.4"/>
           <path d="M16.2 9.3h-2.1l2.2 2.9-2.4 3.6h2.6" stroke-width="1.5"/>`,
+  // il blocchetto del segnapunti: le partite dal vivo, con la matita
+  scorepad: `<rect x="3.6" y="4.2" width="13.2" height="16.6" rx="2.2"/>
+          <path d="M7.6 2.8v2.8M12.8 2.8v2.8"/>
+          <path d="M6.8 10h7M6.8 13.4h7M6.8 16.8h3.6" stroke-width="1.5"/>
+          <path d="m15.6 19.6.5-3 4.6-7.4 2 1.2-4.6 7.4Z" stroke-width="1.5"/>`,
   crown: `<path d="M3.2 18.2 2 7.6l5.1 3.6L12 4.4l4.9 6.8L22 7.6l-1.2 10.6Z"/>
           <path d="M5.4 21.2h13.2"/>`,
   crownFill: `<path d="M4 17.4 2.6 7.4l4.9 3.6L12 4.2l4.5 6.8 4.9-3.6-1.4 10Z" fill="currentColor" stroke-linejoin="round"/>

@@ -4,7 +4,7 @@
 // foglio di condivisione del telefono; dove non c'e', si scarica il PNG.
 // ---------------------------------------------------------------------------
 import { toast, initials, colorOf } from "./ui.js";
-import { playerAvatar, symbolSvg } from "./avatar.js";
+import { playerAvatar, symbolSvg, INITIALS_SYM } from "./avatar.js";
 
 const W = 1080, H = 1350;
 
@@ -23,6 +23,7 @@ async function avatarImage(pid) {
   const a = playerAvatar(pid);
   if (!a) return null;
   if (a.image) return { img: await loadImg(a.image), bg: null };
+  if (a.sym === INITIALS_SYM) return { img: null, bg: a.bg }; // le iniziali, sul colore scelto
   const svg = symbolSvg(a.sym).replace(/class="[^"]*"/, "").replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"');
   return { img: await loadImg("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg)), bg: a.bg };
 }

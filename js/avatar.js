@@ -266,11 +266,18 @@ export function symbolSvg(key, cls = "") {
 const IMAGE_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
+/**
+ * Le iniziali su un colore scelto da te: { sym: "iniziali", bg }. Sta nello
+ * stesso campo dei personaggi, cosi' il database lo accetta con le regole di
+ * sempre; un'app vecchia che non la conosce ripiega sulle iniziali normali.
+ */
+export const INITIALS_SYM = "iniziali";
+
 /** Avatar valido (forma controllata: arriva dal database, scritto da altri). */
 export function parseAvatar(a) {
   if (!a || typeof a !== "object") return null;
   if (typeof a.image === "string" && a.image.length <= 60000 && IMAGE_RE.test(a.image)) return { image: a.image };
-  if (typeof a.sym === "string" && AVATAR_SYMBOLS[a.sym]) {
+  if (typeof a.sym === "string" && (AVATAR_SYMBOLS[a.sym] || a.sym === INITIALS_SYM)) {
     return { sym: a.sym, bg: COLOR_RE.test(a.bg || "") ? a.bg : AVATAR_COLORS[0] };
   }
   return null;
@@ -282,9 +289,20 @@ export function playerAvatar(pid) {
   return parseAvatar(p && p.avatar);
 }
 
+/**
+ * Il colore di un giocatore: quello che si e' scelto per l'avatar (personaggio
+ * o iniziali), altrimenti quello che viene dal nome. Colora le sue linee nei
+ * grafici, le barre e l'anello al tavolo.
+ */
+export function playerColor(pid, name) {
+  const a = playerAvatar(pid);
+  return a && a.bg ? a.bg : colorOf(name);
+}
+
 /** HTML dell'avatar a partire dalla forma gia' controllata (o null → iniziali). */
 export function avatarHtml(a, name, cls = "sm") {
   if (a && a.image) return `<span class="avatar ${cls} img"><img src="${esc(a.image)}" alt="" draggable="false"></span>`;
+  if (a && a.sym === INITIALS_SYM) return `<span class="avatar ${cls}" style="background:${esc(a.bg)}">${initials(name)}</span>`;
   if (a && a.sym) return `<span class="avatar ${cls} sym" style="background:${esc(a.bg)}">${symbolSvg(a.sym)}</span>`;
   return `<span class="avatar ${cls}" style="background:${colorOf(name)}">${initials(name)}</span>`;
 }

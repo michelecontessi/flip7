@@ -10,7 +10,8 @@ e alimenta la **classifica perpetua**: ogni vittoria vale una **Crown** 👑.
 - 🧮 calcolatrice con le carte: numeri, `+2…+10`, `×2`, bonus **Flip 7** e sballo
 - 🕰️ inserimento di **partite vecchie**, giocate prima dell'app
 - 🔁 formazione libera: i giocatori possono cambiare da una partita all'altra
-- 🏅 **stagioni mensili**: chi chiude il mese con l'**Elo del mese** più alto (tutti da 1000 il primo del mese, con almeno 10 partite giocate) ne diventa il campione e si prende la carta di quel mese
+- 🏅 **stagioni mensili**: chi chiude il mese con l'**Elo del mese** più alto (tutti da 1000 il primo del mese; il titolo si assegna se nel mese si giocano almeno 10 partite in tutto) ne diventa il campione e si prende la carta di quel mese
+- 📈 a fine partita l'**Elo di quella partita**, spiegato: quanto si muove il rating di ognuno e contro chi (*+3 su Bea · −17 su Cal*)
 - 🔔 al tavolo online l'app **avvisa quando tocca a te** (suono, vibrazione, notifica), e chi sparisce
   si **blocca di comune accordo** senza chiudere la partita
 - 💸 **costo zero**: nessun dominio, nessun abbonamento
@@ -49,7 +50,7 @@ quello che consuma questa app.
 4. Torna in **Realtime Database** → scheda **Regole**, incolla il contenuto del file
    [`database.rules.json`](database.rules.json) e premi **Pubblica** — ma prima
    sostituisci `OWNER_UID` con l'**ID del tuo dispositivo** (lo trovi nell'app,
-   in Setup → Stanza, con un tocco lo copi). Puoi indicarne più di uno, ad esempio
+   in Setup → Avanzate, con un tocco lo copi). Puoi indicarne più di uno, ad esempio
    PC e telefono:
 
    ```
@@ -127,8 +128,14 @@ Per aggiornarla in futuro basta un `git push`: Pages ripubblica da solo.
    **Condividi il link** e mandalo nella chat dell'ufficio. I colleghi non creano
    niente: aprono il link, chiedono di entrare dicendo chi sono, tu li approvi da
    **Setup → Partecipanti** ed è fatta, per sempre.
-3. Su **Partita**: in cima trovi il riquadro *Chi segna i punti?* → premi
+3. Su **Segnapunti**: in cima trovi il riquadro *Chi segna i punti?* → premi
    **Segno io i punti**.
+
+**Segnapunti o Gioca online?** Le due schede in basso sono due cose diverse:
+**Segnapunti** è per le partite **dal vivo**, col mazzo vero sul tavolo — uno segna i
+punti, tutti gli altri seguono il tabellone in diretta; **Gioca online** è il **gioco
+vero e proprio**, ognuno dal suo telefono, con il mazzo virtuale. Tutte e due finiscono
+nello stesso storico e nella stessa classifica.
 
 **Ogni collega**, aperto il link: accede con Google → sceglie **chi è** fra i
 giocatori (o dice il suo nome) → chiede di entrare → tu lo approvi. Da quel momento
@@ -148,11 +155,14 @@ Da un'altra stanza*). Tutti gli altri passano dal link e dalla tua approvazione:
 **decidi tu chi entra, e dove**. Dall'elenco vedi anche quante **richieste in
 attesa** ci sono nelle altre stanze, senza doverci entrare.
 
-**Il Setup è del proprietario.** Chi non gestisce la stanza ci trova soltanto il
-proprio **profilo** (l'avatar), il tema e l'account: giocatori, richieste, codice e
-backup li vede e li tocca solo chi ha creato la stanza. Le cose più tecniche
-(segnapunti, obiettivo punti, codice stanza, ID del dispositivo, backup) stanno
-sotto **Avanzate**, chiuse finché non servono.
+**Il Setup è del proprietario, il profilo è di ognuno.** La scheda **Setup** la vede
+**solo chi ha creato la stanza**, e dentro ci sono soltanto le cose della stanza: nome,
+link, obiettivo punti e codice, i **partecipanti** (giocatori, richieste, account), il
+**Backup** (esporta / importa) e, sotto **Avanzate**, chi segna i punti dal vivo, l'ID
+del dispositivo e l'ingresso con un codice. Le cose **di ognuno** stanno nel **profilo**,
+che si apre toccando **la propria faccia in alto a destra**: l'avatar e il **colore**,
+gli avvisi del tavolo (suono, vibrazione, notifica), il **tema** chiaro o scuro e
+l'account.
 
 > **Ognuno può segnare i propri punti.** Chi non è segnapunti vede nel suo riquadro il
 > pulsante **Segna i miei punti** (e la casella del round sulla sua riga del tabellone):
@@ -169,7 +179,7 @@ sotto **Avanzate**, chiuse finché non servono.
 
 **Durante la partita** (solo il segnapunti)
 
-1. Tab **Partita** → tocca chi gioca **nell'ordine in cui siete seduti** (ogni avatar
+1. Tab **Segnapunti** → tocca chi gioca **nell'ordine in cui siete seduti** (ogni avatar
    prende il numero del posto) → **Inizia partita**. Chi apre la prima mano è sorteggiato,
    poi il giro segue quella sequenza; la striscia *Apre la mano* mostra l'ordine.
 2. A fine mano premi il pulsante **Segna i punti**: si apre il pannello sul primo
@@ -206,6 +216,12 @@ sotto **Avanzate**, chiuse finché non servono.
    oppure **Salva e basta**. Il vincitore incassa la sua Crown. **Condividi il podio**
    prepara un'immagine (marchio, data, i primi tre sui gradini, tutti gli altri sotto)
    e apre il foglio di condivisione del telefono: pronta per la chat dell'ufficio.
+   Sotto la corona c'è l'**Elo di questa partita**: per ognuno il rating prima e dopo
+   (*1001 → 1009*), lo spostamento (*+8*) e **come si è guadagnato**, avversario per
+   avversario (*+7 su Cal · +1 su Bea*): ogni avversario è una sfida a due, chi finisci
+   davanti ti dà punti e chi finisci dietro te li toglie. Un tocco passa dall'**Elo del
+   mese** (quello del titolo) all'**Elo di sempre**. Vale appena la partita va nello
+   storico; lo stesso riquadro si ritrova poi nel dettaglio della partita, dallo Storico.
 
 **Pareggio al traguardo? Si spareggia.** Se al traguardo si arriva **in parità**
 la partita non finisce: si gioca una **manche di spareggio** fra i soli pari
@@ -270,7 +286,7 @@ punteggi finali. Il vincitore è automatico (punteggio più alto) o lo scegli tu
 
 ## 5. Tavolo online
 
-La scheda **Tavolo** è separata apposta dal segnapunti: lì non si contano punti di una
+La scheda **Gioca online** è separata apposta dal segnapunti: lì non si contano punti di una
 partita fisica, **si gioca a Flip 7 per davvero**, ognuno dal proprio telefono, con le
 regole ufficiali del gioco:
 
@@ -335,7 +351,7 @@ esce una carta sola, quella che hai chiesto.
 **Quando tocca a te, l'app te lo dice.** Suono breve e vibrazione appena arriva il tuo
 turno (o devi scegliere il bersaglio di una carta azione), e — se l'app non è in vista —
 una **notifica di sistema** che riporta al tavolo con un tocco; lo stesso a fine round e
-a fine partita. Si attiva da **Setup → Avvisi del tavolo**: suono, vibrazione e
+a fine partita. Si attiva dal **profilo** (la tua faccia in alto a destra) → **Avvisi del tavolo**: suono, vibrazione e
 notifica si accendono e spengono una per una, e ognuno **si prova appena lo accendi**
 (il suono suona, il telefono vibra, un messaggio conferma che è attivo). Gli interruttori
 che questo dispositivo non può onorare restano spenti e lo dicono: gli iPhone non vibrano
@@ -419,7 +435,8 @@ segnata come tale, con la colonna **sp** nella tabella dei round.
 **La fine della partita si vede**: quando qualcuno supera l'obiettivo l'ultima mano resta
 sul tavolo, sballi e carte comprese, con la striscia che annuncia il vincitore. Il podio
 con la corona si apre con **Vai al podio**, e da lì si può tornare a **rivedere l'ultima
-mano**. Sballo, Seconda Chance bruciata e FLIP 7 hanno anche il loro avviso grande a
+mano**. Sul podio c'è anche l'**Elo di questa partita**, avversario per avversario, come
+al segnapunti: vale appena qualcuno la salva nello storico. Sballo, Seconda Chance bruciata e FLIP 7 hanno anche il loro avviso grande a
 centro schermo nell'istante in cui la carta si gira.
 
 A ogni mossa il tavolo **non viene ricostruito** ma solo aggiornato dove cambia
@@ -528,16 +545,20 @@ due edizioni dello stesso mese non si confondono. La carta resta per sempre acca
 nome in classifica e nella **Bacheca** della scheda, dove ogni riquadro prende la tinta
 del suo mese.
 
-Per prendersi il titolo bisogna **aver giocato almeno 10 partite in quel mese**: il
-campione è chi ha fatto la stagione, non chi passa di lì una sera fortunata e vince
-l'unica partita a cui si è seduto. Chi non ci arriva resta in classifica ma fuori dalla
-corsa, e un mese che si chiude senza nessuno a quota 10 resta **senza campione** (l'albo
-d'oro lo dice: *titolo non assegnato*). Valgono le partite dal vivo e quelle online
-insieme; a parità assoluta il titolo si condivide.
+Il titolo si assegna se nel mese si giocano **almeno 10 partite in tutto** — contate
+tutte insieme, **non a testa**: un mese con due serate non fa una stagione. Arrivati a
+quota sono in corsa tutti quelli che hanno giocato, e decide l'Elo del mese. Un mese che
+si chiude sotto le 10 partite resta **senza campione** (l'albo d'oro lo dice: *titolo
+non assegnato*), e durante il mese la riga sotto il podio conta quante ne mancano.
+Valgono le partite dal vivo e quelle online insieme; a parità assoluta il titolo si
+condivide.
 
 La **Classifica si apre sulla stagione in corso**, perché il mese conta più del
 totale di sempre: in cima il mese con i giorni che mancano e la barra del tempo, il
-podio del mese con chi è in testa (targhette con l'Elo del mese, e la carta ancora spenta), chi è in corsa per il titolo, il **campione in
+podio del mese con chi è in testa (targhette con l'Elo del mese, e la carta ancora spenta;
+i gradini sono **alti in proporzione al punteggio**, dal più basso del mese al primo, così
+due Elo vicini hanno gradini quasi pari e un distacco largo si vede — nel generale lo
+stesso con le Crown), quante partite mancano perché il titolo sia in palio, il **campione in
 carica** dell'ultimo mese chiuso, poi la classifica del mese, i record del mese e
 l'**albo d'oro**. Lo switch in alto (**Stagione / Generale**, c'è anche un pulsante in
 fondo) porta al generale: le Crown di sempre con i filtri di periodo e provenienza, i
@@ -611,6 +632,18 @@ gli esempi; la scheda giocatore ha lo stesso riquadro, e il suo rating si tocca 
 riaprire l'ultima partita che l'ha mosso. La formula è `eloRatings` in
 [js/stats.js](js/stats.js).
 
+**L'Elo di una partita, spiegato.** A fine partita (al segnapunti e sul podio del tavolo
+online) e nel dettaglio di ogni partita dello Storico c'è il riquadro **Elo di questa
+partita**: per ognuno il rating prima e dopo, lo spostamento e le sfide a due che lo
+compongono, una pastiglia per avversario (*+7 su Cal · −1 su Bea*, verde se ci ha
+guadagnato, rossa se ci ha perso; tenendoci il dito sopra si legge il risultato e la
+probabilità stimata). Gli spostamenti sono arrotondati come in classifica e **sommano
+esattamente** al totale della riga. Due pulsanti passano dall'**Elo del mese** all'**Elo
+di sempre**. Prima del salvataggio i numeri sono quelli che la partita *porterà*: la
+partita entra "per finta" nello storico, al suo posto in ordine di data. È
+`eloGameReport` in [js/stats.js](js/stats.js), disegnato da
+[js/views/elo-report.js](js/views/elo-report.js).
+
 Nella scheda giocatore c'è anche il **Testa a testa**, disegnato come una serie di
 duelli: a sinistra il giocatore della scheda, a destra ogni avversario, in mezzo quante
 volte è finito **davanti** e quante **dietro** (con le due parole scritte sotto i
@@ -628,18 +661,24 @@ Tre, quanti cuori ha regalato, quante volte si è fermato da sé.
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;
-- i giocatori **non si eliminano**: chi smette di giocare si **archivia** (Setup),
+- i giocatori **non si eliminano**: chi smette di giocare si **archivia** (Setup → Partecipanti),
   così sparisce dalle liste dei nuovi tavoli ma la classifica resta coerente.
 
-**Avatar**: di base ognuno è un cerchio con le iniziali sul colore del nome. Da
-**Setup → Il tuo avatar → Cambia** si apre il configuratore: scegli un **personaggio**
-fra i ventuno disegnati apposta per l'app (volpe, gufo, robot, dado, la carta col 7…,
-nello stesso stile di corona e trofei) e un **colore** di sfondo, oppure **carichi una foto**.
+**Avatar e colore**: di base ognuno è un cerchio con le iniziali sul colore del nome.
+Toccando **la propria faccia in alto a destra** si apre il profilo, e da **Avatar e
+colore** il configuratore: scegli un **colore** e tieni le **iniziali**, oppure un
+**personaggio** fra i ventuno disegnati apposta per l'app (volpe, gufo, robot, dado, la
+carta col 7…, nello stesso stile di corona e trofei) su quel colore, oppure **carichi una
+foto**. Il colore scelto è **il tuo colore** anche fuori dall'avatar: la tua linea nei
+grafici, le barre nello storico, l'anello e la barra al tavolo. Le iniziali sul colore
+scelto si salvano nello stesso campo dei personaggi (`{ sym: "iniziali", bg }`), quindi
+le regole del database non cambiano, e un'app non aggiornata ripiega sulle iniziali di
+sempre.
 La foto la **ritagli tu**: si apre un riquadro dove la trascini e la ingrandisci finché
 la faccia sta nel cerchio, e finché il pannello resta aperto puoi tornarci sopra con
 **Ricentra** quante volte vuoi. Quello che salvi è un francobollo, così pesa pochi KB e
 sta nel database insieme al resto. Ognuno cambia solo il proprio; il proprietario può
-sistemare quello di tutti (matita sull'avatar in Setup → Giocatori), utile per chi
+sistemare quello di tutti (matita sull'avatar in Setup → Partecipanti), utile per chi
 non ha un account.
 
 ---
@@ -693,7 +732,8 @@ js/game.js               motore del gioco online (regole ufficiali, blocco, chi 
 js/morph.js              ridisegno incrementale del tavolo (aggiorna solo cio' che cambia)
 js/notify.js             avvisi: suono, vibrazione, notifica locale dal service worker
 js/share.js              l'immagine del podio (canvas) da condividere
-js/views/                partita · tavolo · classifica · storico · setup · stanze
+js/views/                segnapunti (live.js) · gioca online (table.js) · classifica · storico
+                         · setup (solo proprietario) · profilo · stanze · Elo della partita
 database.rules.json      regole di sicurezza del database
 sw.js, manifest.webmanifest, icon.svg, icon-192/512.png    supporto PWA
 .github/workflows/test.yml   i test girano da soli a ogni push (GitHub Actions)
@@ -708,10 +748,10 @@ npm test
 ```
 
 **Versione e aggiornamenti.** Il numero di versione sta in `APP_VERSION`
-([js/config.js](js/config.js)) e si vede in fondo al Setup; a ogni pubblicazione va alzato
+([js/config.js](js/config.js)) e si vede in fondo al profilo e al Setup; a ogni pubblicazione va alzato
 insieme a `CACHE` in [sw.js](sw.js) (un test controlla che coincidano). Quando il service
 worker nuovo prende il controllo, in basso compare *C'è una versione nuova dell'app* con
-il pulsante **Ricarica**; *Controlla aggiornamenti* nel Setup forza il controllo.
+il pulsante **Ricarica**; *Controlla aggiornamenti* in fondo al profilo forza il controllo.
 
 ---
 
@@ -745,10 +785,10 @@ entra senza chiedere, col suo giocatore già collegato, e la stanza gli compare
 nell'elenco. Il suo avatar lo porta con sé, la classifica no: ogni stanza parte da zero.
 
 **Chiaro o scuro?** L'app segue il tema del telefono. Se preferisci forzarne uno:
-Setup → *Aspetto* → Chiaro / Scuro / Come il telefono.
+tocca la tua faccia in alto a destra → *Aspetto* → Chiaro / Scuro / Come il telefono.
 
-**Come faccio un backup?** Setup → **Esporta**: scarica un JSON con giocatori e storico,
-reimportabile con **Importa**.
+**Come faccio un backup?** Setup → **Backup** → **Esporta backup**: scarica un JSON con
+giocatori e storico, reimportabile con **Importa** (che aggiunge, non cancella).
 
 **Chi può vedere e scrivere?** Solo i dispositivi approvati dal proprietario (tu):
 è imposto dalle regole del database, non solo dall'interfaccia. Il codice stanza è
@@ -757,7 +797,8 @@ che si cambiano solo dalla console Firebase con il tuo account Google. Dentro la
 stanza, il tabellone live resta scrivibile dal solo segnapunti in carica, le partite
 chiuse le corregge o elimina solo il proprietario, e l'avatar lo cambia solo il
 diretto interessato (o il proprietario). Solo il proprietario può **creare stanze**
-e **approvare** chi entra: gli altri, nel Setup, vedono soltanto il proprio profilo.
+e **approvare** chi entra: gli altri la scheda Setup non ce l'hanno proprio, e le loro
+impostazioni stanno nel profilo (la faccia in alto a destra).
 
 **E se cambio telefono, rete o cancello i dati del browser?** Nessun problema:
 l'identità è l'**account Google**, non il dispositivo. Stesso account = stesso accesso

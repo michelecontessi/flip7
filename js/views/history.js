@@ -5,13 +5,14 @@
 // proprietario, correzione di una partita chiusa (mani comprese).
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
-import { esc, colorOf, fmtDate, fmtDateTime, inputDate, openSheet, closeSheet, askText, askConfirm, askChoice, toast, sheet, captureSheetInputs, openPage, closePage, page, capturePageInputs } from "../ui.js";
+import { esc, fmtDate, fmtDateTime, inputDate, openSheet, closeSheet, askText, askConfirm, askChoice, toast, sheet, captureSheetInputs, openPage, closePage, page, capturePageInputs } from "../ui.js";
 import { icon, crownEmblem, numberCard, modCard, flip7Card, heartCard, seasonBadge } from "../icons.js";
 import { historyList, roundCount, reviseGame, roundKey, playerTotal, tiebreakOf, gameProgress, fmtDuration, seasons, seasonShort } from "../stats.js";
 import { computeRound, isBlankEntry } from "../scoring.js";
-import { avatar } from "../avatar.js";
+import { avatar, playerColor } from "../avatar.js";
 import { renderScoreSheet, patchCalcSheet, makeCalcState, normalizeEntry } from "./live.js";
 import { sharePodium } from "../share.js";
+import { eloReportCard } from "./elo-report.js";
 
 const MONTHS = new Intl.DateTimeFormat("it-IT", { month: "short" });
 const TIME = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" });
@@ -71,7 +72,7 @@ function rankRows(g, { max = 6, cls = "" } = {}) {
         <span class="rank ${place <= 3 ? "medal m" + place : ""}">${place}</span>
         ${avatar(id, r.name, "xs")}
         <span class="hg-name">${esc(r.name)}${won ? crownEmblem("mini") : ""}${r.blockedRound !== undefined ? `<small class="tag">bloccato</small>` : ""}</span>
-        <span class="hg-bar"><i style="width:${top ? Math.max(3, (total / top) * 100).toFixed(1) : 0}%; background:${won ? "" : colorOf(r.name)}"></i></span>
+        <span class="hg-bar"><i style="width:${top ? Math.max(3, (total / top) * 100).toFixed(1) : 0}%; background:${won ? "" : playerColor(id, r.name)}"></i></span>
         <b>${total}</b>
       </li>`;
   }).join("");
@@ -367,11 +368,11 @@ export function progressChart(g, { mark = -1, height = 150, inset = 28 } = {}) {
         ${Array.from({ length: p.rounds }, (_, i) => `<text class="rx" x="${x(i).toFixed(1)}" y="${h - 6}">${i + 1}</text>`).join("")}
         ${mark >= 0 && mark < p.rounds ? `<line class="sel-line" x1="${x(mark).toFixed(1)}" y1="${padT - 4}" x2="${x(mark).toFixed(1)}" y2="${h - padB + 4}"/>` : ""}
         ${p.series.map((s) => `
-          <polyline class="${winners[s.playerId] ? "win" : ""}" stroke="${winners[s.playerId] ? "var(--gold)" : colorOf(s.name)}"
+          <polyline class="${winners[s.playerId] ? "win" : ""}" stroke="${winners[s.playerId] ? "var(--gold)" : playerColor(s.playerId, s.name)}"
             points="${s.totals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}"/>`).join("")}
         ${p.series.map((s) => {
           const i = mark >= 0 && mark < p.rounds ? mark : p.rounds - 1;
-          return `<circle cx="${x(i).toFixed(1)}" cy="${y(s.totals[i]).toFixed(1)}" r="4" fill="${winners[s.playerId] ? "var(--gold)" : colorOf(s.name)}"><title>${esc(s.name)}: ${s.totals[i]}</title></circle>`;
+          return `<circle cx="${x(i).toFixed(1)}" cy="${y(s.totals[i]).toFixed(1)}" r="4" fill="${winners[s.playerId] ? "var(--gold)" : playerColor(s.playerId, s.name)}"><title>${esc(s.name)}: ${s.totals[i]}</title></circle>`;
         }).join("")}
       </svg>
     </div></div>
@@ -463,6 +464,8 @@ function renderGameSheet(s) {
       </div>` : ""}
     ${hl.note ? `<p class="hl-note">${icon("star", "tiny")} ${esc(hl.note)}</p>` : ""}
 
+    ${eloReportCard(store.getRoom().history, s.id, store.getRoom().players, { me: store.currentPlayerId(), section: true })}
+
     <div class="sheet-actions stack">
       <div class="act-row">
         ${nRounds ? `<button class="btn" data-action="game-replay">${icon("replay", "tiny")} Rivedi</button>` : ""}
@@ -535,7 +538,7 @@ function renderReplayPage(s) {
             if (e && e.blocked) notes.push("bloccato qui");
             const state = !e ? (playoff ? "fuori dallo spareggio" : "non ha giocato") : e.busted ? "SBALLATO" : c.flip7 ? "FLIP 7" : "";
             return `
-            <li class="rp-row ${e && e.busted ? "bust" : ""} ${c && c.flip7 ? "flip7" : ""} ${leaders.has(r.playerId) ? "lead" : ""}" style="--pc:${colorOf(r.name)}">
+            <li class="rp-row ${e && e.busted ? "bust" : ""} ${c && c.flip7 ? "flip7" : ""} ${leaders.has(r.playerId) ? "lead" : ""}" style="--pc:${playerColor(r.playerId, r.name)}">
               <div class="rp-head">
                 ${avatar(r.playerId, r.name, "sm")}
                 <b class="rp-name">${esc(r.name)}</b>

@@ -1,18 +1,18 @@
 // ---------------------------------------------------------------------------
-// Vista "Setup". Due facce:
-//   - per chi gestisce la stanza (proprietario): la stanza, i partecipanti
-//     (giocatori, richieste e account in un elenco solo) e le cose avanzate;
-//   - per tutti gli altri: solo il proprio profilo, l'aspetto e l'account.
+// Vista "Setup": la vede solo chi gestisce la stanza (proprietario). Dentro
+// ci sono le cose della STANZA: il nome, il link e l'obiettivo, i
+// partecipanti (giocatori, richieste e account in un elenco solo), il backup
+// e le cose avanzate. Le cose di ognuno (avatar e colore, avvisi, tema,
+// account) stanno nel profilo, che si apre toccando la propria faccia in
+// alto a destra: vedi views/profile.js.
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
-import { prefs } from "../prefs.js";
-import { esc, toast, askText, askConfirm, askChoice, fmtDate, shareRoom, openSheet, closeSheet, sheet } from "../ui.js";
-import { isFirebaseConfigured, APP_VERSION } from "../config.js";
-import { NOTIFY_KEYS, wantsSound, wantsVibration, wantsPush, canPush, canVibrate, canSound, pushPermission, requestPush, unlockAudio, ding, buzz } from "../notify.js";
+import { esc, toast, askText, askConfirm, askChoice, fmtDate, shareRoom } from "../ui.js";
+import { isFirebaseConfigured } from "../config.js";
 import { icon } from "../icons.js";
-import { applyTheme } from "../theme.js";
-import { avatar, avatarHtml, playerAvatar, loadPhoto, centerCrop, cropToAvatarImage, openAvatarCropper, symbolSvg, AVATAR_SYMBOLS, AVATAR_COLORS } from "../avatar.js";
+import { avatar, avatarHtml } from "../avatar.js";
 import { roomsActions, roomsSubmits } from "./rooms.js";
+import { footNote } from "./profile.js";
 
 const localState = { showArchived: false, showAdvanced: false };
 
@@ -26,51 +26,24 @@ const memberLabel = (m) => (m && (m.email || m.name)) || "account";
 
 export const setupView = {
   render(ctx) {
-    return store.isOwner() ? renderOwner(ctx) : renderMember(ctx);
+    // chi non gestisce la stanza qui non arriva (la tab non c'e'); se ci
+    // capita da un vecchio link, lo si manda alle sue impostazioni
+    if (!store.isOwner()) {
+      return `
+        <section class="card empty-state">
+          <div class="empty-ico">${icon("sliders")}</div>
+          <h2 class="empty-title">Il Setup è di chi gestisce la stanza</h2>
+          <p class="muted">Il tuo avatar, il colore, gli avvisi e il tema li trovi toccando la tua faccia in alto a destra.</p>
+          <button class="btn primary" data-action="open-profile">${icon("user", "tiny")} Il tuo profilo</button>
+        </section>`;
+    }
+    return renderOwner(ctx);
   },
 
   actions: {
     ...roomsActions,
     "toggle-archived"() { localState.showArchived = !localState.showArchived; },
     "toggle-advanced"() { localState.showAdvanced = !localState.showAdvanced; },
-
-    // --- avatar: ognuno cambia il proprio, il proprietario quello di tutti ---
-    "avatar-edit"(ctx, el) {
-      const id = el.dataset.id;
-      const p = (ctx.room.players || {})[id];
-      if (!p) return;
-      if (!(store.isOwner() || ctx.me === id)) return toast("Puoi cambiare solo il tuo avatar", "warn");
-      openSheet({ type: "avatar", playerId: id, name: p.name, draft: playerAvatar(id), photo: null }, renderAvatarSheet);
-    },
-    "ava-sym"(ctx, el) {
-      const s = sheet.state;
-      s.draft = { sym: el.dataset.s, bg: (s.draft && s.draft.bg) || AVATAR_COLORS[0] };
-      return "sheet";
-    },
-    "ava-color"(ctx, el) {
-      const s = sheet.state;
-      s.draft = { sym: (s.draft && s.draft.sym) || Object.keys(AVATAR_SYMBOLS)[0], bg: el.dataset.c };
-      return "sheet";
-    },
-    "ava-reset"() { sheet.state.draft = null; sheet.state.photo = null; return "sheet"; },
-    // ricentrare la foto gia' caricata: si riparte dall'originale, non dal francobollo
-    async "ava-recenter"() {
-      const s = sheet.state;
-      if (!s.photo) return toast("Ricarica la foto per ricentrarla", "warn");
-      const crop = await openAvatarCropper(s.photo.src, s.photo.crop);
-      if (!crop || sheet.state !== s) return "sheet";
-      s.photo.crop = crop;
-      try { s.draft = { image: cropToAvatarImage(s.photo.src, crop) }; }
-      catch (e) { toast(e.message || "Foto non leggibile", "warn"); }
-      return "sheet";
-    },
-    async "ava-save"() {
-      const s = sheet.state;
-      try { await store.setPlayerAvatar(s.playerId, s.draft); }
-      catch { return toast("Il database non accetta la modifica: puoi cambiare solo il tuo avatar", "warn"); }
-      closeSheet();
-      toast(s.draft ? "Avatar aggiornato" : "Tornate le iniziali");
-    },
 
     // --- la stanza ---
     async "room-rename"(ctx) {
@@ -173,11 +146,6 @@ export const setupView = {
     },
     "sk-release"() { return store.releaseScorekeeper(); },
 
-    async "google-signout"() {
-      const ok = await askConfirm("Uscire dall'account?", { message: "Per rientrare dovrai rifare l'accesso con Google.", confirmLabel: "Esci" });
-      if (ok) await store.signOutUser();
-    },
-
     async "copy-uid"(ctx) {
       try {
         await navigator.clipboard.writeText(ctx.status.uid);
@@ -187,14 +155,7 @@ export const setupView = {
       }
     },
 
-    async "check-update"() {
-      toast("Controllo…");
-      try {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (reg) await reg.update();
-        setTimeout(() => location.reload(), 900);
-      } catch { location.reload(); }
-    },
+    // --- backup ---
     "export-json"() {
       const blob = new Blob([store.exportJSON()], { type: "application/json" });
       const a = document.createElement("a");
@@ -221,42 +182,6 @@ export const setupView = {
   },
 
   changes: {
-    "theme"(ctx, el) { prefs.set("theme", el.value); applyTheme(); },
-    // il tocco sull'interruttore e' il gesto che serve per sbloccare l'audio:
-    // si prova subito il suono, cosi' si sente che e' attivo davvero
-    "notify-sound"(ctx, el) {
-      prefs.set(NOTIFY_KEYS.sound, el.checked);
-      if (!el.checked) return toast("Suono spento");
-      unlockAudio();
-      ding("turn");
-      toast(canSound() ? "Suono attivo: lo senti quando tocca a te" : "Questo browser non sa produrre suoni", canSound() ? "info" : "warn");
-    },
-    "notify-vibrate"(ctx, el) {
-      prefs.set(NOTIFY_KEYS.vibrate, el.checked);
-      if (!el.checked) return toast("Vibrazione spenta");
-      buzz();
-      toast(canVibrate() ? "Vibrazione attiva: la senti quando tocca a te" : "Questo dispositivo non vibra dal browser", canVibrate() ? "info" : "warn");
-    },
-    async "notify-push"(ctx, el) {
-      if (!el.checked) { prefs.set(NOTIFY_KEYS.push, false); return; }
-      const res = await requestPush();
-      if (res === "granted") { prefs.set(NOTIFY_KEYS.push, true); toast("Notifiche attive: ti avviso quando tocca a te"); }
-      else { prefs.set(NOTIFY_KEYS.push, false); toast(res === "unsupported" ? "Questo browser non ha le notifiche (su iPhone servono l'app in Home e iOS 16.4+)" : "Permesso negato: si cambia dalle impostazioni del browser", "warn"); }
-    },
-    async "ava-file"(ctx, el) {
-      const file = el.files && el.files[0];
-      el.value = "";
-      const s = sheet.state;
-      if (!file || !s) return;
-      try {
-        const src = await loadPhoto(file);
-        const crop = await openAvatarCropper(src, centerCrop());
-        if (!crop || sheet.state !== s) return "sheet";
-        s.photo = { src, crop };
-        s.draft = { image: cropToAvatarImage(src, crop) };
-      } catch (e) { toast(e.message || "Foto non leggibile", "warn"); }
-      return "sheet";
-    },
     "room-target"(ctx, el) { return store.setTargetScore(el.value); },
     async "import-json"(ctx, el) {
       const file = el.files && el.files[0];
@@ -274,88 +199,10 @@ export const setupView = {
 };
 
 // ---------------------------------------------------------------------------
-// Pezzi comuni
-// ---------------------------------------------------------------------------
-function profileCard(room, me, { owner }) {
-  if (!(me && room.players[me])) {
-    return `
-      <section class="card">
-        <div class="card-head">${icon("user")}<span class="card-title">Il tuo profilo</span></div>
-        <p class="muted small">Non hai ancora scelto chi sei: vai su <b>Partita</b> e tocca il tuo nome.
-          ${owner ? "" : "Da quel momento il tuo account resta collegato a quel giocatore."}</p>
-      </section>`;
-  }
-  return `
-    <section class="card">
-      <div class="card-head">${icon("user")}<span class="card-title">Il tuo profilo</span></div>
-      <div class="ava-row">
-        ${avatar(me, room.players[me].name, "lg")}
-        <div class="ava-row-txt"><b>${esc(room.players[me].name)}</b><small class="muted">${playerAvatar(me) ? "avatar personalizzato" : "iniziali sul colore del nome"}</small></div>
-        <button class="btn small" data-action="avatar-edit" data-id="${me}">${icon("pencil", "tiny")} Cambia</button>
-      </div>
-      <p class="muted small">Un personaggio disegnato su un colore a scelta, oppure una tua foto: lo vedono tutti in classifica, nello storico e al tavolo online.</p>
-    </section>`;
-}
-
-function themeCard() {
-  return `
-    <section class="card">
-      <div class="card-head">${icon("eye")}<span class="card-title">Aspetto</span></div>
-      <label class="field inline">
-        <span>Tema</span>
-        <select data-change="theme" class="w-auto">
-          <option value="auto" ${prefs.get("theme", "auto") === "auto" ? "selected" : ""}>Come il telefono</option>
-          <option value="light" ${prefs.get("theme") === "light" ? "selected" : ""}>Chiaro</option>
-          <option value="dark" ${prefs.get("theme") === "dark" ? "selected" : ""}>Scuro</option>
-        </select>
-      </label>
-    </section>`;
-}
-
-function accountCard(room, status, me) {
-  if (!(status.mode === "firebase" && status.user)) return "";
-  return `
-    <section class="card">
-      <div class="card-head">${icon("user")}<span class="card-title">Account</span></div>
-      <div class="kv"><span>Accesso come</span><b>${esc(status.user.name)}</b></div>
-      ${status.user.email ? `<div class="kv"><span>Email</span><span class="mono">${esc(status.user.email)}</span></div>` : ""}
-      ${me && room.players[me] ? `<div class="kv"><span>Giochi come</span><b>${esc(room.players[me].name)}</b></div>` : ""}
-      <button class="btn ghost small" data-action="google-signout">Esci dall'account</button>
-    </section>`;
-}
-
-const footNote = `<p class="foot-note">Flip 7 Scoreboard · versione ${APP_VERSION} · nessun costo, nessun dominio: gira su GitHub Pages + Firebase (piani gratuiti).
-  <button class="link" data-action="check-update">Controlla aggiornamenti</button></p>`;
-
-/** Avvisi del tavolo online: suono, vibrazione e notifica quando tocca a te. */
-function alertsCard() {
-  const perm = pushPermission();
-  return `
-    <section class="card">
-      <div class="card-head">${icon("bell")}<span class="card-title">Avvisi del tavolo</span></div>
-      <p class="muted small">Quando al tavolo online tocca a te, l'app te lo dice: così si gioca anche una mano ogni tanto, senza restare a fissare lo schermo.</p>
-      <label class="switch-row"><span>${icon("sound", "tiny")} Suono</span><input type="checkbox" data-change="notify-sound" ${wantsSound() && canSound() ? "checked" : ""} ${canSound() ? "" : "disabled"}></label>
-      <label class="switch-row"><span>${icon("vibrate", "tiny")} Vibrazione</span><input type="checkbox" data-change="notify-vibrate" ${wantsVibration() && canVibrate() ? "checked" : ""} ${canVibrate() ? "" : "disabled"}></label>
-      <label class="switch-row"><span>${icon("bell", "tiny")} Notifica a schermo spento</span><input type="checkbox" data-change="notify-push" ${wantsPush() && perm === "granted" ? "checked" : ""} ${canPush() && perm !== "denied" ? "" : "disabled"}></label>
-      <p class="hint">${!canPush() ? "Le notifiche non sono disponibili in questo browser: su iPhone servono l'app aggiunta alla Home e iOS 16.4 o più recente."
-        : perm === "denied" ? "Le notifiche sono bloccate dalle impostazioni del browser per questo sito."
-        : "La notifica arriva solo quando l'app non è in vista; suono e vibrazione anche mentre la guardi."}${canVibrate() ? "" : " Questo dispositivo non vibra dal browser (gli iPhone non lo fanno): l'interruttore resta spento."}</p>
-    </section>`;
-}
-
-// ---------------------------------------------------------------------------
-// Chi non gestisce la stanza: il suo profilo e basta
-// ---------------------------------------------------------------------------
-function renderMember(ctx) {
-  const { room, status, me } = ctx;
-  return profileCard(room, me, { owner: false }) + alertsCard() + themeCard() + accountCard(room, status, me) + footNote;
-}
-
-// ---------------------------------------------------------------------------
-// Il proprietario: la stanza, i partecipanti, il resto sotto "Avanzate"
+// La stanza, i partecipanti, il backup; il resto sotto "Avanzate"
 // ---------------------------------------------------------------------------
 function renderOwner(ctx) {
-  const { room, status, me } = ctx;
+  const { room, status } = ctx;
   const players = Object.entries(room.players || {}).sort((a, b) => a[1].name.localeCompare(b[1].name, "it"));
   const archivedCount = players.filter(([, p]) => p.archived).length;
   const visible = players.filter(([, p]) => localState.showArchived || !p.archived);
@@ -366,6 +213,9 @@ function renderOwner(ctx) {
   const loose = Object.entries(members).filter(([uid]) => !(room.bindings || {})[uid] && uid !== status.uid);
   const requests = Object.entries(room.requests || {});
   const canInvite = online && store.knownPeople().some((p) => !members[p.uid]);
+  const modeBadge = online
+    ? `<span class="badge ${status.online ? "ok" : "warn"}">${status.online ? "Online — sincronizzata" : "Riconnessione…"}</span>`
+    : `<span class="badge warn">Solo su questo dispositivo</span>`;
 
   return `
     <section class="card">
@@ -377,6 +227,14 @@ function renderOwner(ctx) {
         <button class="btn primary" data-action="copy-link">${icon("link", "tiny")} Condividi</button>
         <button class="btn ghost" data-action="rooms-menu">${icon("door", "tiny")} Le tue stanze</button>
       </div>
+      <label class="field inline">
+        <span>Obiettivo punti</span>
+        <input type="number" min="10" step="10" inputmode="numeric" value="${room.meta.targetScore || 200}" data-change="room-target">
+      </label>
+      <div class="kv"><span>Stato</span>${modeBadge}</div>
+      <div class="kv"><span>Codice stanza</span><b class="mono">${esc(store.getRoomId())}</b></div>
+      <div class="kv"><span>Creata il</span><span>${fmtDate(room.meta.createdAt)}</span></div>
+      <div class="kv"><span>In archivio</span><span>${gamesTxt(Object.keys(room.history || {}).length)} · ${players.length === 1 ? "1 giocatore" : `${players.length} giocatori`}</span></div>
       ${status.error ? `<p class="err small">${esc(status.error)}</p>` : ""}
       ${store.canRetryOnline() ? `<button class="btn ghost" data-action="retry-online">${icon("refresh", "tiny")} Riprova il collegamento</button>` : ""}
     </section>
@@ -427,30 +285,36 @@ function renderOwner(ctx) {
       </div>
       <p class="muted small">${online
         ? "Chi apre il tuo link chiede di entrare e sceglie chi è: la richiesta compare qui e la approvi tu. Chi smette di giocare si archivia dal menu della riga: resta in classifica col suo storico."
-        : "Chi smette di giocare si archivia dal menu della riga: sparisce dalle liste dei nuovi tavoli ma resta in classifica col suo storico."}</p>
+        : "Chi smette di giocare si archivia dal menu della riga: sparisce dalle liste dei nuovi tavoli ma resta in classifica col suo storico."}
+        Il proprio avatar e il colore ognuno se li cambia dal suo profilo; da qui li cambi tu per tutti.</p>
     </section>
 
-    ${profileCard(room, me, { owner: true })}
-    ${alertsCard()}
-    ${themeCard()}
-    ${accountCard(room, status, me)}
+    <section class="card">
+      <div class="card-head">${icon("download")}<span class="card-title">Backup</span></div>
+      <p class="muted small">Una copia di tutta la stanza in un file: giocatori, storico delle partite e classifica.
+        Tienila da parte ogni tanto. Importare un backup <b>aggiunge</b> quello che manca e non cancella niente.</p>
+      <div class="btn-row">
+        <button class="btn" data-action="export-json">${icon("download", "tiny")} Esporta backup</button>
+        <label class="btn ghost file">${icon("upload", "tiny")} Importa<input type="file" accept="application/json,.json" data-change="import-json" hidden></label>
+      </div>
+    </section>
+
     ${advancedCard(room, status)}
-    ${footNote}`;
+    ${footNote()}`;
 }
+
+const gamesTxt = (n) => (n === 1 ? "1 partita" : `${n} partite`);
 
 function advancedCard(room, status) {
   const open = localState.showAdvanced;
   const sk = room.control;
-  const modeBadge = status.mode === "firebase"
-    ? `<span class="badge ${status.online ? "ok" : "warn"}">${status.online ? "Online — sincronizzato" : "Riconnessione…"}</span>`
-    : `<span class="badge warn">Modalità locale — solo questo dispositivo</span>`;
   return `
     <section class="card">
       <button class="card-head as-button" data-action="toggle-advanced" aria-expanded="${open}">
         ${icon("sliders")}<span class="card-title">Avanzate</span>
         <span class="chev ml-auto ${open ? "open" : ""}">${icon("chevron")}</span>
       </button>
-      ${!open ? `<p class="muted small">Segnapunti, obiettivo punti, codice stanza, backup.</p>` : `
+      ${!open ? `<p class="muted small">Chi segna i punti dal vivo, l'ID di questo dispositivo, entrare con un codice.</p>` : `
       <div class="kv"><span>Segnapunti</span>
         ${store.isScorekeeper()
           ? `<span class="sk-inline you">${icon("check", "tiny")} Sei tu <button class="btn ghost small" data-action="sk-release">Lascia</button></span>`
@@ -458,70 +322,11 @@ function advancedCard(room, status) {
             ? `<span class="sk-inline">${esc(sk.name)} <button class="btn ghost small" data-action="sk-claim">Prendi</button></span>`
             : `<span class="sk-inline none">Nessuno <button class="btn small" data-action="sk-claim">Diventa segnapunti</button></span>`}
       </div>
-      <label class="field inline">
-        <span>Obiettivo punti</span>
-        <input type="number" min="10" step="10" inputmode="numeric" value="${room.meta.targetScore || 200}" data-change="room-target">
-      </label>
-      <div class="kv"><span>Stato</span>${modeBadge}</div>
-      <div class="kv"><span>Codice stanza</span><b class="mono">${esc(store.getRoomId())}</b></div>
       <div class="kv"><span>ID di questo dispositivo</span>
         <button class="link mono small" data-action="copy-uid" title="Copia">${esc(status.uid)}</button></div>
-      <div class="kv"><span>Stanza creata il</span><span>${fmtDate(room.meta.createdAt)}</span></div>
       <div class="btn-row">
-        <button class="btn ghost" data-action="export-json">${icon("download", "tiny")} Esporta backup</button>
-        <label class="btn ghost file">${icon("upload", "tiny")} Importa<input type="file" accept="application/json,.json" data-change="import-json" hidden></label>
         <button class="btn ghost" data-action="room-code">${icon("refresh", "tiny")} Entra con un codice</button>
       </div>
       ${!isFirebaseConfigured ? `<p class="warn-note small">Firebase non è configurato: i dati restano su questo dispositivo. Vedi <b>README.md</b> per attivare la sincronia live.</p>` : ""}`}
     </section>`;
-}
-
-// --- sheet: configuratore avatar --------------------------------------------
-function renderAvatarSheet(s) {
-  const a = s.draft;
-  const sym = a && a.sym ? a.sym : null;
-  const bg = (a && a.bg) || AVATAR_COLORS[0];
-  return `
-    <div class="sheet-head">
-      <div>
-        <div class="sheet-title">Avatar di ${esc(s.name)}</div>
-        <div class="sheet-sub">Un personaggio su un colore, oppure una foto</div>
-      </div>
-      <button class="icon-btn" data-action="sheet-close" aria-label="Chiudi">${icon("close")}</button>
-    </div>
-
-    <div class="ava-preview">
-      ${avatarHtml(a, s.name, "xl")}
-      <span class="ava-preview-name">${esc(s.name)}</span>
-    </div>
-
-    <div class="calc-section">
-      <div class="calc-label"><span>Personaggio</span>${sym ? `<span>${esc(AVATAR_SYMBOLS[sym].name)}</span>` : ""}</div>
-      <div class="ava-grid">
-        ${Object.entries(AVATAR_SYMBOLS).map(([key, def]) => `<button class="ava-pick ${sym === key ? "on" : ""}" data-action="ava-sym" data-s="${key}" ${sym === key ? `style="background:${bg}"` : ""} aria-label="${esc(def.name)}" title="${esc(def.name)}">${symbolSvg(key)}</button>`).join("")}
-      </div>
-    </div>
-
-    <div class="calc-section">
-      <div class="calc-label"><span>Colore</span></div>
-      <div class="ava-colors">
-        ${AVATAR_COLORS.map((c) => `<button class="ava-color ${sym && bg === c ? "on" : ""}" data-action="ava-color" data-c="${c}" style="background:${c}" aria-label="Colore ${c}"></button>`).join("")}
-      </div>
-    </div>
-
-    <div class="calc-section">
-      <div class="calc-label"><span>Oppure una foto</span></div>
-      <div class="ava-photo-row">
-        <label class="btn ghost file">${icon("upload", "tiny")} ${a && a.image ? "Cambia foto" : "Carica una foto"}<input type="file" accept="image/*" data-change="ava-file" hidden></label>
-        ${s.photo ? `<button class="btn ghost" data-action="ava-recenter">${icon("target", "tiny")} Ricentra</button>` : ""}
-      </div>
-      <p class="muted small">${s.photo
-        ? "Puoi ricentrarla quante volte vuoi finché questo pannello resta aperto."
-        : "La ritagli tu prima di salvarla, poi resta un francobollo: la vedono solo i membri della stanza."}</p>
-    </div>
-
-    <div class="sheet-actions">
-      <button class="btn ghost" data-action="ava-reset" ${a ? "" : "disabled"}>Iniziali</button>
-      <button class="btn primary" data-action="ava-save">${icon("check", "tiny")} Salva</button>
-    </div>`;
 }

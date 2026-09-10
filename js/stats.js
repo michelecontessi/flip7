@@ -517,21 +517,8 @@ export function leaderboardTrend(history, players, opts = {}) {
       winRate: e.games ? e.crowns / e.games : 0
     }));
     // stesso calcolo di eloRatings(), applicato partita per partita
-    const ids = Object.keys(game.results || {});
-    if (ids.length > 1) {
-      const total = (pid) => Number(game.results[pid].total) || 0;
-      const delta = {};
-      for (const a of ids) {
-        let d = 0;
-        for (const b of ids) {
-          if (a === b) continue;
-          const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
-          d += eloSwing(eloOf(a), eloOf(b), actual, ELO_K / (ids.length - 1));
-        }
-        delta[a] = d;
-      }
-      for (const a of ids) elo.set(a, eloOf(a) + delta[a]);
-    }
+    const step = eloStep(game, eloOf);
+    if (step) for (const [pid, s] of Object.entries(step)) elo.set(pid, eloOf(pid) + s.delta);
     const snap = {};
     sortLeaderboard(rows).forEach((r, i) => { snap[r.playerId] = { rank: i + 1, avg: r.avg, elo: Math.round(eloOf(r.playerId)) }; });
     steps.push({ playedAt: game.playedAt || 0, snap });
@@ -755,9 +742,10 @@ export function historyList(history) {
 // guadagno atteso e' zero per tutti). Lo prende chi in quel mese ha battuto
 // di piu', e i piu' forti. A parita' di Elo decidono le Crown, poi la quota
 // di vittorie, poi la media. Valgono le partite dal vivo e quelle online
-// insieme. Il mese in corso non e' ancora assegnato: e' "in corso", con chi e'
-// in testa adesso. L'Elo generale resta una statistica a se': non vale per il
-// titolo.
+// insieme, e il titolo si assegna solo se il mese ne ha almeno
+// SEASON_MIN_GAMES in tutto. Il mese in corso non e' ancora assegnato: e' "in
+// corso", con chi e' in testa adesso. L'Elo generale resta una statistica a
+// se': non vale per il titolo.
 // ---------------------------------------------------------------------------
 export const MONTHS_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 export const MONTHS_SHORT = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
@@ -793,9 +781,9 @@ export const SEASON_CHAIN = ["elo", ...TIEBREAK];
 const sameStanding = (a, b) => SEASON_CHAIN.every((k) => (a[k] || 0) === (b[k] || 0));
 
 /**
- * Partite che servono, a testa, per essere in corsa per il titolo del mese:
- * il campione e' chi ha giocato la stagione, non chi passa di li' una sera
- * fortunata. Chi non ci arriva resta in classifica, ma fuori dal titolo.
+ * Partite che servono NEL MESE, in tutto (non a testa), perche' il titolo si
+ * assegni: un mese con due serate non fa una stagione. Arrivati a quota, il
+ * titolo va a chi ha l'Elo del mese piu' alto, comunque abbia giocato.
  */
 export const SEASON_MIN_GAMES = 10;
 
@@ -833,24 +821,28 @@ export function seasons(history, players, opts = {}) {
       let rank = 0;
       sorted.forEach((r, i) => { if (!i || !sameStanding(r, sorted[i - 1])) rank = i + 1; r.rank = rank; });
       const min = opts.minGames === undefined ? SEASON_MIN_GAMES : opts.minGames;
-      // in corsa per il titolo solo chi ha giocato abbastanza quel mese
-      const eligible = sorted.filter((r) => (r.games || 0) >= min);
-      const top = eligible[0] || null;
-      const tied = top ? eligible.filter((r) => sameStanding(r, top)) : [];
+      const count = Object.keys(games).length;
+      // il titolo e' in palio quando il mese ha abbastanza partite IN TUTTO:
+      // da li' sono in corsa tutti quelli che hanno giocato
+      const enough = count >= min;
+      const eligible = enough ? sorted : [];
+      const top = sorted[0] || null;
+      const tied = top ? sorted.filter((r) => sameStanding(r, top)) : [];
       const closed = seasonClosed(key, now);
       const { year, month } = monthOf(key);
       return {
         key, year, month,
         label: seasonLabel(key), short: seasonShort(key),
-        games: Object.keys(games).length,
+        games: count,
         rows: sorted,
-        // chi e' in corsa (>= minGames) e chi guida comunque la classifica
+        // chi e' in corsa (tutti, se il mese e' a quota) e chi guida la classifica
         eligible,
         minGames: min,
-        champions: closed ? tied : [],
-        leader: closed ? null : (top || sorted[0] || null),
-        // il mese e' chiuso ma nessuno ha fatto le partite che servono
-        noChampion: closed && !tied.length,
+        enough,
+        champions: closed && enough ? tied : [],
+        leader: closed ? null : top,
+        // il mese e' chiuso senza le partite che servono
+        noChampion: closed && !enough,
         tie: tied.length > 1,
         closed
       };
@@ -867,6 +859,21 @@ export function seasonTitles(history, players, opts = {}) {
     }
   }
   return out;
+}
+
+/**
+ * L'altezza in pixel dei gradini del podio: segue il punteggio, non il
+ * posto. A pari punti gradini pari, un distacco largo si vede. Le Crown si
+ * contano da zero (il doppio delle Crown, il gradino alto il doppio). L'Elo
+ * uno zero non ce l'ha: con `floor` (l'Elo piu' basso della classifica del
+ * mese) la scala va da li', gradino minimo, al primo, gradino pieno.
+ */
+export function podiumHeights(values, { floor = null, min = 30, max = 72 } = {}) {
+  if (!values.length) return [];
+  const hi = Math.max(...values);
+  if (floor === null) return values.map((v) => (hi > 0 ? Math.max(min, Math.round((max * v) / hi)) : min));
+  const lo = Math.min(floor, ...values);
+  return values.map((v) => (hi > lo ? Math.round(min + ((max - min) * (v - lo)) / (hi - lo)) : max));
 }
 
 // ---------------------------------------------------------------------------
@@ -994,37 +1001,58 @@ export const eloExpected = (a, b) => 1 / (1 + Math.pow(10, (b - a) / 400));
  * Utile per gli esempi: a 1000 contro 1000 una vittoria vale +16.
  */
 export const eloSwing = (a, b, actual, k = ELO_K) => k * (actual - eloExpected(a, b));
+
+/**
+ * Una partita, dal punto di vista del rating: per ogni presente lo
+ * spostamento totale (`delta`) e quello contro ciascuno degli altri (`vs`:
+ * risultato 1 / 0.5 / 0, probabilita' stimata, spostamento). `get(pid)` e' il
+ * rating prima della partita. Null con meno di due giocatori: non muove niente.
+ */
+function eloStep(game, get, K = ELO_K) {
+  const ids = Object.keys((game && game.results) || {});
+  if (ids.length < 2) return null;
+  const total = (pid) => Number(game.results[pid].total) || 0;
+  const k = K / (ids.length - 1);
+  const out = {};
+  for (const a of ids) {
+    const vs = {};
+    let delta = 0;
+    for (const b of ids) {
+      if (a === b) continue;
+      const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
+      const swing = eloSwing(get(a), get(b), actual, k);
+      vs[b] = { actual, expected: eloExpected(get(a), get(b)), swing };
+      delta += swing;
+    }
+    out[a] = { delta, vs };
+  }
+  return out;
+}
+
+/** Le partite su cui gira il rating, in ordine di data (a pari data, l'ordine dello storico). */
+const eloGames = (history, opts = {}) => Object.entries(history || {})
+  .map(([id, g]) => ({ id, ...g }))
+  .filter((g) => matchesSource(g, opts.source))
+  .sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
+
 export function eloRatings(history, players, opts = {}) {
   const K = opts.k || ELO_K;
-  const games = Object.entries(history || {})
-    .map(([id, g]) => ({ id, ...g }))
-    .filter((g) => matchesSource(g, opts.source))
-    .sort((a, b) => (a.playedAt || 0) - (b.playedAt || 0));
   const rating = new Map();
   const played = new Map();
   const peak = new Map();
   const last = new Map();      // l'ultimo spostamento di ognuno, e in quale partita
   const get = (pid) => (rating.has(pid) ? rating.get(pid) : ELO_START);
-  for (const g of games) {
-    const ids = Object.keys(g.results || {});
-    if (ids.length < 2) continue;
-    const total = (pid) => Number(g.results[pid].total) || 0;
-    const delta = {};
-    for (const a of ids) {
-      let d = 0;
-      for (const b of ids) {
-        if (a === b) continue;
-        const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
-        d += eloSwing(get(a), get(b), actual, K / (ids.length - 1));
-      }
-      delta[a] = d;
-    }
-    for (const a of ids) {
-      const next = get(a) + delta[a];
+  for (const g of eloGames(history, opts)) {
+    const step = eloStep(g, get, K);
+    if (!step) continue;
+    for (const [a, s] of Object.entries(step)) {
+      const prev = get(a);
+      const next = prev + s.delta;
       rating.set(a, next);
       played.set(a, (played.get(a) || 0) + 1);
       peak.set(a, Math.max(peak.get(a) || ELO_START, next));
-      last.set(a, { delta: delta[a], gameId: g.id, playedAt: g.playedAt || 0 });
+      // come si legge in classifica: la differenza fra i due valori tondi
+      last.set(a, { delta: Math.round(next) - Math.round(prev), gameId: g.id, playedAt: g.playedAt || 0 });
     }
   }
   return [...rating.entries()]
@@ -1034,13 +1062,77 @@ export function eloRatings(history, players, opts = {}) {
       elo: Math.round(r),
       peak: Math.round(peak.get(pid) || ELO_START),
       games: played.get(pid) || 0,
-      // "+12 nell'ultima partita": arrotondato, con la partita da riaprire
-      last: Math.round((last.get(pid) || {}).delta || 0),
+      // "+12 nell'ultima partita", con la partita da riaprire
+      last: (last.get(pid) || {}).delta || 0,
       lastGameId: (last.get(pid) || {}).gameId || null,
       lastPlayedAt: (last.get(pid) || {}).playedAt || 0
     }))
     .sort((a, b) => b.elo - a.elo || a.name.localeCompare(b.name, "it"))
     .map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/**
+ * Arrotonda ogni valore all'intero in modo che la somma faccia esattamente
+ * `target`: prima il valore tondo piu' vicino, poi l'unita' che manca va a
+ * chi l'arrotondamento aveva sacrificato di piu'.
+ */
+export function splitRounded(values, target) {
+  const out = values.map((v) => Math.round(v) || 0);
+  let diff = target - out.reduce((a, b) => a + b, 0);
+  while (diff !== 0 && out.length) {
+    const dir = diff > 0 ? 1 : -1;
+    let best = 0, gap = -Infinity;
+    values.forEach((v, i) => { const g = (v - out[i]) * dir; if (g > gap) { gap = g; best = i; } });
+    out[best] += dir;
+    diff -= dir;
+  }
+  return out;
+}
+
+/**
+ * Com'e' cambiato il rating in UNA partita, e perche': per ognuno il valore
+ * prima e dopo, e lo spostamento contro ciascuno degli altri ("+3 su Bea,
+ * −17 su Cal"). Con `month: true` e' l'Elo del mese di quella partita (tutti
+ * da 1000 il primo del mese, solo le partite del mese); senza, l'Elo di
+ * sempre. I numeri sono quelli tondi della classifica: `delta` e' la
+ * differenza fra prima e dopo, e gli spostamenti contro i singoli avversari
+ * sommano esattamente a `delta`. Null se la partita non c'e' o ha un
+ * giocatore solo.
+ * @returns {{gameId, month, rows: {playerId, name, total, before, after, delta, vs: {playerId, name, result, expected, swing, before}[]}[]}|null}
+ */
+export function eloGameReport(history, gameId, players = null, opts = {}) {
+  const target = history && history[gameId];
+  if (!target) return null;
+  const key = monthKey(target.playedAt || 0);
+  const games = eloGames(history, opts).filter((g) => !opts.month || monthKey(g.playedAt || 0) === key);
+  const rating = new Map();
+  const get = (pid) => (rating.has(pid) ? rating.get(pid) : ELO_START);
+  for (const g of games) {
+    const step = eloStep(g, get, opts.k || ELO_K);
+    if (g.id !== gameId) {
+      if (step) for (const [pid, s] of Object.entries(step)) rating.set(pid, get(pid) + s.delta);
+      continue;
+    }
+    if (!step) return null;
+    const nameOf = (pid) => (players && players[pid] && players[pid].name) || (g.results[pid] && g.results[pid].name) || "?";
+    // in ordine di arrivo: a pari punti prima chi ha vinto (lo spareggio, o la scelta del segnapunti)
+    const won = (pid) => (g.winnerIds && g.winnerIds[pid] ? 1 : 0);
+    const rows = Object.entries(step).map(([pid, s]) => {
+      const before = Math.round(get(pid));
+      const after = Math.round(get(pid) + s.delta);
+      const ids = Object.keys(s.vs);
+      const shares = splitRounded(ids.map((b) => s.vs[b].swing), after - before);
+      return {
+        playerId: pid, name: nameOf(pid),
+        total: Number(g.results[pid].total) || 0,
+        before, after, delta: after - before,
+        vs: ids.map((b, i) => ({ playerId: b, name: nameOf(b), result: s.vs[b].actual, expected: s.vs[b].expected, swing: shares[i], before: Math.round(get(b)) }))
+          .sort((x, y) => y.swing - x.swing || x.name.localeCompare(y.name, "it"))
+      };
+    }).sort((a, b) => b.total - a.total || won(b.playerId) - won(a.playerId) || b.delta - a.delta || a.name.localeCompare(b.name, "it"));
+    return { gameId, month: opts.month ? key : null, rows };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

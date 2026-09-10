@@ -675,6 +675,15 @@ export function bindMember(uid, playerId) {
 export function myPlayerId() {
   return (room.bindings || {})[status.uid] || null;
 }
+/**
+ * Il giocatore "mio" per l'interfaccia: il collegamento fisso account ->
+ * giocatore vince sulla scelta locale (che resta come ripiego in modalita'
+ * locale).
+ */
+export function currentPlayerId() {
+  const bound = (room.bindings || {})[status.uid];
+  return bound && room.players[bound] ? bound : prefs.get("me");
+}
 
 /**
  * Il proprietario della stanza: in modalita' locale chiunque; su Firebase chi

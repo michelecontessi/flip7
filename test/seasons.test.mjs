@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, SEASON_MIN_GAMES, headToHead, roomRecords, eloRatings, eloSwing, ELO_START, leaderboardTrend, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
+import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, SEASON_MIN_GAMES, headToHead, roomRecords, eloRatings, eloSwing, eloGameReport, splitRounded, podiumHeights, ELO_START, leaderboardTrend, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
 
 const at = (y, m, d = 10) => new Date(y, m, d, 20).getTime();
 const game = (id, playedAt, totals, extra = {}) => {
@@ -111,21 +111,35 @@ test("monthKey e seasonClosed seguono il calendario locale", () => {
 });
 
 
-test("stagioni: il titolo va solo a chi ha giocato almeno 10 partite quel mese", () => {
+test("stagioni: il titolo si assegna con 10 partite nel mese in tutto, non a testa", () => {
   const now = at(2026, 8, 5);
   const entries = [];
-  for (let i = 0; i < 12; i++) entries.push(game("g" + i, at(2026, 7, i + 1), { ada: 200, bea: 100 }));
-  // Cal passa di li' una sera sola e vince: niente titolo, non ha giocato la stagione
-  entries.push(game("cal", at(2026, 7, 20), { cal: 300, bea: 10 }));
+  // 10 partite in tutto, ma nessuno ne ha giocate 10: Ada 7, Bea 7, Cal 6
+  for (let i = 0; i < 4; i++) entries.push(game("ab" + i, at(2026, 7, i + 1), { ada: 200, bea: 100 }));
+  for (let i = 0; i < 3; i++) entries.push(game("bc" + i, at(2026, 7, i + 10), { bea: 200, cal: 100 }));
+  for (let i = 0; i < 3; i++) entries.push(game("ac" + i, at(2026, 7, i + 20), { ada: 200, cal: 100 }));
   const s = seasons(Object.fromEntries(entries), players, { now })[0];
   assert.equal(SEASON_MIN_GAMES, 10);
   assert.equal(s.minGames, 10);
-  assert.deepEqual(s.eligible.map((r) => r.playerId).sort(), ["ada", "bea"], "in corsa solo chi arriva a 10");
+  assert.equal(s.games, 10);
+  assert.equal(s.enough, true);
+  assert.deepEqual(s.eligible.map((r) => r.playerId).sort(), ["ada", "bea", "cal"], "in corsa tutti quelli che hanno giocato");
   assert.deepEqual(s.champions.map((r) => r.playerId), ["ada"]);
   assert.equal(s.noChampion, false);
+  // chi passa una sera sola e vince e' in corsa anche lui: decide l'Elo del mese
+  const oneNight = Object.fromEntries([...entries, game("dan", at(2026, 7, 28), { dan: 300, bea: 10 })]);
+  const t = seasons(oneNight, { ...players, dan: { name: "Dan" } }, { now })[0];
+  assert.ok(t.eligible.some((r) => r.playerId === "dan"));
+  assert.equal(t.rows.find((r) => r.playerId === "dan").games, 1);
+  // con 9 partite in tutto il titolo non si assegna, anche se il primo e' chiaro
+  const nine = Object.fromEntries(entries.slice(0, 9));
+  const u = seasons(nine, players, { now })[0];
+  assert.equal(u.enough, false);
+  assert.equal(u.noChampion, true);
+  assert.deepEqual(u.champions, []);
 });
 
-test("stagioni: mese chiuso senza nessuno a 10 partite = titolo non assegnato", () => {
+test("stagioni: mese chiuso con meno di 10 partite in tutto = titolo non assegnato", () => {
   const now = at(2026, 8, 5);
   const history = Object.fromEntries([
     game("g1", at(2026, 7, 3), { ada: 210, bea: 150 }),
@@ -139,7 +153,7 @@ test("stagioni: mese chiuso senza nessuno a 10 partite = titolo non assegnato", 
   assert.equal(seasonTitles(history, players, { now }).ada, undefined, "nessuna carta in bacheca");
 });
 
-test("stagione in corso: chi guida si vede anche se non e' ancora in corsa per il titolo", () => {
+test("stagione in corso: chi guida si vede anche se il mese non e' ancora a quota", () => {
   const now = at(2026, 8, 9);
   const history = Object.fromEntries([game("g1", at(2026, 8, 2), { ada: 210, bea: 150 })]);
   const s = seasons(history, players, { now })[0];
@@ -230,6 +244,51 @@ test("Elo: chi batte i forti sale di piu', e tutti partono da 1000", () => {
   assert.equal(by.ada.peak >= by.ada.elo, true);
 });
 
+test("Elo della partita: prima, dopo e quanto contro ciascuno, e i conti tornano", () => {
+  const history = Object.fromEntries([
+    game("g1", at(2026, 7, 3), { ada: 210, bea: 150 }),
+    game("g2", at(2026, 7, 5), { ada: 100, bea: 210, cal: 180 }),
+    game("g3", at(2026, 8, 2), { cal: 205, ada: 190, bea: 120 })
+  ]);
+  const rep = eloGameReport(history, "g2", players);
+  assert.deepEqual(rep.rows.map((r) => r.playerId), ["bea", "cal", "ada"], "in ordine di arrivo");
+  const by = Object.fromEntries(rep.rows.map((r) => [r.playerId, r]));
+  assert.equal(by.ada.before, 1016);
+  assert.equal(by.bea.before, 984);
+  assert.equal(by.cal.before, ELO_START, "chi gioca la prima volta parte da 1000");
+  for (const r of rep.rows) {
+    assert.equal(r.after - r.before, r.delta);
+    assert.equal(r.vs.length, 2);
+    assert.equal(r.vs.reduce((a, v) => a + v.swing, 0), r.delta, "gli spostamenti contro i singoli fanno il totale");
+  }
+  assert.ok(by.bea.vs.every((v) => v.swing > 0 && v.result === 1), "Bea davanti a tutti e due: guadagna su entrambi");
+  assert.ok(by.cal.vs.find((v) => v.playerId === "ada").swing > 0, "Cal davanti ad Ada: guadagna su di lei");
+  assert.ok(by.cal.vs.find((v) => v.playerId === "bea").swing < 0, "e dietro a Bea: perde su di lei");
+  assert.equal(by.bea.vs.find((v) => v.playerId === "ada").before, 1016, "accanto a ogni avversario, il suo rating prima della partita");
+  // coincide con la classifica: l'ultima partita di ognuno e' g3
+  const elo = Object.fromEntries(eloRatings(history, players).map((r) => [r.playerId, r]));
+  for (const r of eloGameReport(history, "g3", players).rows) {
+    assert.equal(r.after, elo[r.playerId].elo);
+    assert.equal(r.delta, elo[r.playerId].last);
+  }
+  // l'Elo del mese: g3 e' la prima di settembre, tutti ripartono da 1000
+  const month = eloGameReport(history, "g3", players, { month: true });
+  assert.equal(month.month, "2026-09");
+  assert.ok(month.rows.every((r) => r.before === ELO_START));
+  // una partita da soli non muove niente, una che non c'e' nemmeno
+  assert.equal(eloGameReport(Object.fromEntries([game("solo", at(2026, 7, 1), { ada: 200 })]), "solo", players), null);
+  assert.equal(eloGameReport(history, "nope", players), null);
+});
+
+test("splitRounded: interi vicini ai valori che sommano esattamente al totale", () => {
+  const cases = [[[2.6, 2.6], 5], [[8.4, -3.6, 0.2], 5], [[-8.37, -8.73], -17], [[0.4, 0.4, 0.4], 0], [[], 0]];
+  for (const [values, target] of cases) {
+    const out = splitRounded(values, target);
+    assert.equal(out.reduce((a, b) => a + b, 0), target);
+    out.forEach((v, i) => assert.ok(Math.abs(v - values[i]) < 1.5, `${v} resta vicino a ${values[i]}`));
+  }
+});
+
 test("il corso della partita: totali dopo ogni round e cambi in testa", () => {
   const g = {
     results: { ada: { name: "Ada", total: 22 }, bea: { name: "Bea", total: 23 } },
@@ -300,4 +359,18 @@ test("andamento: la serie porta anche il rating Elo, partita per partita", () =>
   // e il valore finale coincide con la classifica Elo vera
   const elo = eloRatings(history, players, {});
   assert.equal(steps[2].snap.ada.elo, elo.find((r) => r.playerId === "ada").elo);
+});
+
+test("podio: i gradini seguono il punteggio, non il posto", () => {
+  // Crown da zero: il doppio delle Crown, il gradino alto il doppio (col minimo per la targhetta)
+  assert.deepEqual(podiumHeights([10, 5, 1]), [72, 36, 30]);
+  assert.deepEqual(podiumHeights([4, 4, 2]), [72, 72, 36], "a pari Crown gradini pari");
+  // Elo: dal piu' basso del mese (gradino minimo) al primo (gradino pieno)
+  const [a, b, c] = podiumHeights([1050, 1048, 960], { floor: 900 });
+  assert.equal(a, 72);
+  assert.ok(a - b <= 1, "due Elo quasi uguali, gradini quasi uguali");
+  assert.ok(b - c > 15, "un distacco largo si vede");
+  assert.deepEqual(podiumHeights([1016, 984], { floor: 984 }), [72, 30]);
+  assert.deepEqual(podiumHeights([1000, 1000], { floor: 1000 }), [72, 72], "tutti pari: tutti pieni");
+  assert.deepEqual(podiumHeights([]), []);
 });

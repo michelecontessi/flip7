@@ -30,6 +30,6 @@ export const DEFAULTS = {
 
 export const isFirebaseConfigured = Boolean(firebaseConfig.databaseURL && firebaseConfig.apiKey);
 
-// Versione dell'app: si mostra in Setup e serve all'avviso "c'e' una versione
+// Versione dell'app: si mostra nel profilo e in Setup e serve all'avviso "c'e' una versione
 // nuova". Va alzata insieme a CACHE in sw.js (un test controlla che coincidano).
-export const APP_VERSION = "70";
+export const APP_VERSION = "71";

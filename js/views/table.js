@@ -21,8 +21,8 @@
 // ---------------------------------------------------------------------------
 import * as store from "../store.js";
 import { prefs } from "../prefs.js";
-import { esc, colorOf, toast, askText, askConfirm, askChoice, relTime, fmtDate, openSheet, closeSheet } from "../ui.js";
-import { avatar } from "../avatar.js";
+import { esc, toast, askText, askConfirm, askChoice, relTime, fmtDate, openSheet, closeSheet } from "../ui.js";
+import { avatar, playerColor } from "../avatar.js";
 import { icon, wordmark, crownEmblem, fanArt, numberCard, modCard, roundCard, cardBack, flip7Card, vCard, sticker, STICKERS } from "../icons.js";
 import * as engine from "../game.js";
 import * as V from "../vengeance.js";
@@ -33,6 +33,7 @@ let swapPick = null;
 let giveOpen = false;
 import { alertUser, pushLocal } from "../notify.js";
 import { sharePodium } from "../share.js";
+import { eloReportCard } from "./elo-report.js";
 
 // "stay" copre anche chi viene chiuso d'ufficio a fine round (flip7 altrui,
 // carte finite): "ha incassato" e' vero in entrambi i casi, "si e' fermato" no
@@ -902,7 +903,7 @@ function renderLobby(g, ctx) {
           const seat = g.seats[sid];
           const on = !seat.bot && isOnline(g, seat.uid, ctx.status.uid);
           const tile = `
-              <span class="pg-ava" style="--pc:${colorOf(seat.name)}">
+              <span class="pg-ava" style="--pc:${playerColor(seat.playerId, seat.name)}">
                 ${avatar(seat.playerId, seat.name, "lg")}
                 <i class="pg-check">${icon(seat.bot ? "sliders" : "check", "tiny")}</i>
                 ${seat.bot ? "" : `<i class="pg-presence ${on ? "on" : ""}" title="${on ? "collegato" : "non collegato"}"></i>`}
@@ -960,8 +961,8 @@ function raceBoard(g, me) {
         <div class="race-row ${sid === me ? "me" : ""}" title="${esc(seat.name)}" data-key="${sid}" data-flip="race:${sid}">
           ${avatar(seat.playerId, seat.name, "xs")}
           <span class="race-track">
-            <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>
-            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%${sid === me ? `; background:${colorOf(seat.name)}` : ""}"></i>` : ""}
+            <i style="width:${((b / max) * 100).toFixed(1)}%${sid === me ? `; background:${playerColor(seat.playerId, seat.name)}` : ""}"></i>
+            ${r ? `<i class="prov" style="width:${((r / max) * 100).toFixed(1)}%${sid === me ? `; background:${playerColor(seat.playerId, seat.name)}` : ""}"></i>` : ""}
           </span>
           <b>${r ? b + r : b}${r ? `<small>+${r}</small>` : ""}</b>
         </div>`;
@@ -1186,7 +1187,7 @@ function renderSeatRow(g, sid, ctx, max, me) {
     : isTurn ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? `<i class="seat-state s-wait">in attesa</i>` : "";
   const total = seat.total || 0;
-  const color = colorOf(seat.name);
+  const color = playerColor(seat.playerId, seat.name);
   // posizione nel giro (1 = chi apre): chi e' fuori dallo spareggio non ne ha
   const order = playingSeats(g);
   const pos = order.indexOf(sid) + 1;
@@ -1337,7 +1338,7 @@ function renderSeatRowV(g, sid, ctx, max, me) {
     : isTurn ? `<i class="seat-state s-turn">${mine(g, ctx, sid) ? "tocca a te" : "il suo turno"}</i>`
     : g.status === "playing" ? (zero ? `<i class="seat-state s-mustdraw">deve pescare</i>` : `<i class="seat-state s-wait">in attesa</i>`) : "";
   const total = seat.total || 0;
-  const color = colorOf(seat.name);
+  const color = playerColor(seat.playerId, seat.name);
   const orderRow = playingSeats(g);
   const pos = orderRow.indexOf(sid) + 1;
   const opens = orderRow[0] === sid && g.status !== "over";
@@ -1386,7 +1387,7 @@ function useBody(g, p) {
       <div class="pgrid">
         ${p.options.map((sid) => `
           <button class="pg" data-action="tbl-give" data-id="${sid}" data-at="${g.updatedAt || 0}">
-            <span class="pg-ava" style="--pc:${colorOf(g.seats[sid].name)}">${avatar(g.seats[sid].playerId, g.seats[sid].name, "lg")}</span>
+            <span class="pg-ava" style="--pc:${playerColor(g.seats[sid].playerId, g.seats[sid].name)}">${avatar(g.seats[sid].playerId, g.seats[sid].name, "lg")}</span>
             <span class="pg-name">${esc(g.seats[sid].name)}</span>
           </button>`).join("")}
       </div>
@@ -1606,7 +1607,7 @@ function renderControls(g, ctx, me) {
         <div class="pgrid">
           ${p.options.map((sid) => `
             <button class="pg" data-action="tbl-target" data-id="${sid}" data-at="${g.updatedAt || 0}">
-              <span class="pg-ava ${sid === p.chooser ? "holo-ring" : ""}" style="--pc:${colorOf(g.seats[sid].name)}">
+              <span class="pg-ava ${sid === p.chooser ? "holo-ring" : ""}" style="--pc:${playerColor(g.seats[sid].playerId, g.seats[sid].name)}">
                 ${avatar(g.seats[sid].playerId, g.seats[sid].name, "lg")}
               </span>
               <span class="pg-name">${sid === p.chooser ? "me stesso" : esc(g.seats[sid].name)}</span>
@@ -1774,7 +1775,27 @@ function renderOver(g, ctx) {
         <button class="ghost-btn" data-action="tbl-list">${icon("cardFan", "tiny")} Tavoli aperti</button>
         ${isTableOwner(g, ctx) ? `<button class="ghost-btn danger" data-action="tbl-close">Chiudi senza salvare</button>` : ""}
       </div>
-    </section>`;
+    </section>
+    ${isVg(g) ? "" : tableEloReport(g, ctx)}`;
+}
+
+/**
+ * L'Elo della partita appena finita al tavolo, prima di salvarla: la
+ * partita entra "per finta" nello storico, con gli stessi giocatori e totali
+ * che ci scrivera' il salvataggio (With a Vengeance non conta: e' in prova).
+ */
+function tableEloReport(g, ctx) {
+  const keyOf = (sid) => (g.seats[sid] && g.seats[sid].playerId) || sid;
+  const seats = g.order.filter((sid) => g.seats[sid]);
+  const gid = "__table_" + g.id;
+  const pending = {
+    playedAt: g.startedAt || Date.now(),
+    source: "online",
+    results: Object.fromEntries(seats.map((sid) => [keyOf(sid), { name: g.seats[sid].name, total: Number(g.seats[sid].total) || 0 }])),
+    winnerIds: Object.fromEntries((g.winners && g.winners.length ? g.winners : [winnerOf(g)]).filter((sid) => g.seats[sid]).map((sid) => [keyOf(sid), true]))
+  };
+  const me = mySeat(g, ctx);
+  return eloReportCard({ ...(ctx.room.history || {}), [gid]: pending }, gid, ctx.room.players, { me: me ? keyOf(me) : ctx.me, pending: true });
 }
 
 /**
