@@ -324,8 +324,12 @@ function needsAuto(g, sid) {
   const seat = g.seats[sid];
   if (seat.bot) return true;
   if (g.flip3 && g.flip3.target === sid && canForceDraw(g, sid)) return true;
-  return !g.pending && !g.flip3 && g.turn === sid && !g.hands[sid].out && emptyHand(g.hands[sid]);
+  if (g.pending || g.flip3 || g.turn !== sid || g.hands[sid].out) return false;
+  // la prima carta del round, e con The Zero in mano OGNI carta: pescare e' obbligato
+  return emptyHand(g.hands[sid]) || mustDraw(g, sid);
 }
+/** Con The Zero in fila non ci si puo' fermare: la pescata al proprio turno e' obbligata. */
+const mustDraw = (g, sid) => isVg(g) && V.hasZero(g.hands[sid]);
 
 // ritmo della pescata: la carta atterra in mano dopo circa 1,2 secondi,
 // le mosse automatiche partono subito dopo (cosi' il gioco scorre senza pause)
@@ -433,6 +437,22 @@ let lastAnimKey = null;
 // pescata in volo: il render disegna la carta appena presa come segnaposto
 let landingActive = false;
 let landingToken = 0;
+let landingSince = 0;
+// la carta azione in volo verso il bersaglio ha un contatore TUTTO SUO: se
+// pescata e assegnazione partono nello stesso ridisegno (succede sul secondo
+// dispositivo, o tornando dallo sfondo), ognuna deve chiudere il proprio
+// segnaposto senza farsi "superare" dall'altra, altrimenti la carta resta
+// invisibile in fila
+let resolveToken = 0;
+let resolveSince = 0;
+// rete di sicurezza: un segnaposto piu' vecchio di cosi' si apre comunque
+const STUCK_MS = 4000;
+function unstickAnimations() {
+  const now = Date.now();
+  if (landingActive && now - landingSince > STUCK_MS) landingActive = false;
+  if (resolveTargetSid && now - resolveSince > STUCK_MS) resolveTargetSid = null;
+  if (moveHold && now - moveHold.since > STUCK_MS) { moveHold = null; revealSpoilers(); }
+}
 // niente spoiler: gli indizi dello sballo (chip, nota del doppione, riga
 // spenta) restano nascosti finche' la carta pescata non si e' girata
 let spoilerHold = false;
@@ -462,6 +482,7 @@ function scheduleDrawAnim(g) {
   if (reducedMotion()) { announceDraw(); return; }
   const card = g.lastDraw.card;
   landingActive = true;
+  landingSince = Date.now();
   spoilerHold = true;
   const token = ++landingToken;
   deferFrame(() => runDrawAnim(card, token));
@@ -640,15 +661,16 @@ function checkPendingFlight(g) {
   parkedCard = null;
   if (reducedMotion()) return;
   const target = g.lastAction && g.lastAction.type === card ? g.lastAction.target : null;
-  const token = ++landingToken;
+  const token = ++resolveToken;
   resolveTargetSid = target; // il render tiene come segnaposto la carta ricevuta
+  resolveSince = Date.now();
   deferFrame(() => { runResolveFly(card, token, target); });
 }
 
 function runResolveFly(card, token, targetSid) {
   let done = false;
   const open = () => {
-    if (token !== landingToken) return;
+    if (token !== resolveToken) return; // e' gia' partita un'altra carta azione
     resolveTargetSid = null;
     document.querySelectorAll(".t-seats .fcard.landing.rl").forEach((el) => el.classList.remove("landing", "rl"));
   };
@@ -727,7 +749,7 @@ function scheduleMoveAnim(g) {
     if (el) rects.set(mv.from + ":" + mv.card, el.getBoundingClientRect());
   }
   const token = ++moveToken;
-  moveHold = { moves: m.moves, wipe: m.wipe || null, rects, token, started: false, by: m.by };
+  moveHold = { moves: m.moves, wipe: m.wipe || null, rects, token, started: false, by: m.by, since: Date.now() };
   // lo sballo (o il Flip 7) portato da una carta rubata resta segreto finche' non atterra
   if (m.moves.some((mv) => mv.to && g.hands[mv.to] && (g.hands[mv.to].out === "bust" || g.hands[mv.to].out === "flip7"))) spoilerHold = true;
   // se nello stesso colpo vola ancora la pescata (l'Unlucky 7 appena girato) o la
@@ -1013,14 +1035,14 @@ function statusStrip(g, ctx, me) {
       sub = jom ? "Just One More: poi si ferma" : isVg(g) ? "Flip Four: le carte arrivano da sole" : "Pesca Tre: le carte arrivano da sole";
     } else if (actor && g.seats[actor]) {
       const first = emptyHand(g.hands[actor]);
-      const zero = isVg(g) && V.hasZero(g.hands[actor]);
+      const zero = mustDraw(g, actor);
       if (mine(g, ctx, actor)) {
         cls = "you";
         title = "Tocca a te";
-        sub = first ? "la prima carta arriva da sola…" : zero ? "hai The Zero: devi pescare" : "pesca o fermati";
+        sub = first ? "la prima carta arriva da sola…" : zero ? "hai The Zero: la carta arriva da sola…" : "pesca o fermati";
       } else {
         title = `Tocca a ${nm(actor)}`;
-        sub = first ? "la prima carta arriva da sola…" : zero ? "ha The Zero: deve pescare" : "deve pescare o fermarsi";
+        sub = first ? "la prima carta arriva da sola…" : zero ? "ha The Zero: la carta arriva da sola…" : "deve pescare o fermarsi";
         // fermo da un po': lo dice la striscia, prima ancora del riquadro del blocco
         const ms = stalledFor(g);
         if (ms >= 20e3) { sub = `fermo da ${fmtStall(ms)}`; cls = ms >= STALL_MS ? "stalled" : cls; }
@@ -1605,16 +1627,19 @@ function renderControls(g, ctx, me) {
       : `${esc(shortName(g.seats[t]))} pesca ${left}${tail}`) + stallBox(g, ctx, me);
   }
 
+  if (iAct && !g.hands[actor].out && mustDraw(g, actor)) {
+    // The Zero: niente da decidere, la carta parte da sola (come la prima del round)
+    return `<p class="hint">Hai <b>The Zero</b>: la mano vale 0 finché non fai Flip 7 e non puoi fermarti. La carta arriva da sola…</p>`;
+  }
   if (iAct && !g.hands[actor].out && !emptyHand(g.hands[actor])) {
     // la mia carta sta ancora volando: il bottone mostra il valore di prima
     const flying = landingActive && g.lastDraw && g.lastDraw.seat === actor && !g.pending;
     const pts = flying ? pointsBefore(g.hands[actor], g.lastDraw) : engine.handPoints(g.hands[actor]);
-    const zero = isVg(g) && V.hasZero(g.hands[actor]);
     return `
       <div class="table-actions">
         <button class="btn go big" data-action="tbl-hit" data-at="${g.updatedAt || 0}">Pesca</button>
-        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}" ${zero ? "disabled" : ""}>Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
-      </div>${zero ? `<p class="hint">Hai <b>The Zero</b>: la mano vale 0 finché non fai Flip 7, e non puoi fermarti.</p>` : flying ? "" : riskLine(g, actor)}`;
+        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}">Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
+      </div>${flying ? "" : riskLine(g, actor)}`;
   }
   // fuori dallo spareggio: niente comandi, si guarda e basta
   if (me && g.seats[me] && g.seats[me].blocked) return blockedBox(g, ctx, me) + stallBox(g, ctx, me);
@@ -1782,6 +1807,7 @@ export const tableView = {
     syncTable(g);
     keepTicking(g, ctx);
     if (!g) return list.length ? renderTables(list, ctx) : renderIntro(ctx);
+    unstickAnimations();
     if (g.status === "playing") scheduleAuto(g, ctx);
     if (!g.pending || g.pending.kind !== "use") { swapPick = null; giveOpen = false; }
     // anche l'ultima pescata della partita si anima: la fine si vede, non si intuisce
