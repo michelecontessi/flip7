@@ -32,4 +32,4 @@ export const isFirebaseConfigured = Boolean(firebaseConfig.databaseURL && fireba
 
 // Versione dell'app: si mostra nel profilo e in Setup e serve all'avviso "c'e' una versione
 // nuova". Va alzata insieme a CACHE in sw.js (un test controlla che coincidano).
-export const APP_VERSION = "71";
+export const APP_VERSION = "72";

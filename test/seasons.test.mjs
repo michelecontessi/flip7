@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import test from "node:test";
 import assert from "node:assert/strict";
-import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, SEASON_MIN_GAMES, headToHead, roomRecords, eloRatings, eloSwing, eloGameReport, splitRounded, podiumHeights, ELO_START, leaderboardTrend, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
+import { seasons, seasonTitles, seasonShort, seasonClosed, monthKey, SEASON_MIN_GAMES, headToHead, roomRecords, eloRatings, eloSwing, eloGameReport, eloPoints, podiumHeights, ELO_START, leaderboardTrend, gameProgress, leaderboard, awards, interactionCredits, tracksInteractions, playerHighlights, INTERACTIONS_SINCE, fmtDuration } from "../js/stats.js";
 
 const at = (y, m, d = 10) => new Date(y, m, d, 20).getTime();
 const game = (id, playedAt, totals, extra = {}) => {
@@ -223,7 +223,8 @@ test("Elo: ogni riga dice quanto si e' mossa nell'ultima partita, e la somma deg
   // g2: Ada arriva dietro a entrambi, Bea davanti a entrambi
   assert.equal(by.ada.lastGameId, "g2");
   assert.ok(by.ada.last < 0 && by.bea.last > 0);
-  assert.equal(by.ada.last + by.bea.last + by.cal.last <= 1 && by.ada.last + by.bea.last + by.cal.last >= -1, true, "arrotondati a parte, i punti passano di mano");
+  assert.equal(by.ada.last + by.bea.last + by.cal.last, 0, "i punti passano di mano: la somma e' zero, anche nei numeri tondi");
+  assert.ok(elo.every((r) => Number.isInteger(r.elo)), "i rating restano interi");
   assert.equal(by.cal.lastPlayedAt, at(2026, 7, 5));
   // gli esempi della spiegazione: contro uno piu' forte di 200 si guadagna piu' di quanto si rischia
   assert.ok(Math.abs(eloSwing(1000, 1200, 1)) > Math.abs(eloSwing(1000, 1200, 0)));
@@ -280,13 +281,32 @@ test("Elo della partita: prima, dopo e quanto contro ciascuno, e i conti tornano
   assert.equal(eloGameReport(history, "nope", players), null);
 });
 
-test("splitRounded: interi vicini ai valori che sommano esattamente al totale", () => {
-  const cases = [[[2.6, 2.6], 5], [[8.4, -3.6, 0.2], 5], [[-8.37, -8.73], -17], [[0.4, 0.4, 0.4], 0], [[], 0]];
-  for (const [values, target] of cases) {
-    const out = splitRounded(values, target);
-    assert.equal(out.reduce((a, b) => a + b, 0), target);
-    out.forEach((v, i) => assert.ok(Math.abs(v - values[i]) < 1.5, `${v} resta vicino a ${values[i]}`));
+test("Elo a punti interi: la somma fa zero e le sfide a due si specchiano", () => {
+  // il caso della schermata: uno un po' sopra 1000 che chiude davanti a due nuovi
+  const history = Object.fromEntries([
+    game("w1", at(2026, 7, 1), { ada: 200, bea: 150 }),
+    game("w2", at(2026, 7, 2), { cal: 200, ada: 150 }),
+    game("w3", at(2026, 7, 3), { ada: 200, cal: 190 }),
+    game("t", at(2026, 7, 5), { ada: 210, dan: 150, eva: 90 })
+  ]);
+  const ppl = { ...players, dan: { name: "Bot Bruno" }, eva: { name: "Bot Ada" } };
+  for (const month of [false, true]) {
+    const rep = eloGameReport(history, "t", ppl, { month });
+    assert.equal(rep.rows.reduce((a, r) => a + r.delta, 0), 0, "quello che uno prende gli altri lo perdono");
+    for (const r of rep.rows) {
+      assert.equal(r.after - r.before, r.delta);
+      assert.ok(Number.isInteger(r.before) && Number.isInteger(r.delta));
+      assert.equal(r.vs.reduce((a, v) => a + v.swing, 0), r.delta);
+      for (const v of r.vs) {
+        const back = rep.rows.find((x) => x.playerId === v.playerId).vs.find((x) => x.playerId === r.playerId);
+        assert.equal(v.swing + back.swing, 0, `${r.name} su ${v.name} e ${v.name} su ${r.name} si specchiano`);
+      }
+    }
   }
+  assert.equal(eloPoints(7.5), 8);
+  assert.equal(eloPoints(-7.5), -8, "la meta' si arrotonda allo stesso modo nei due versi");
+  assert.equal(eloPoints(-0.2), 0);
+  assert.ok(Object.is(eloPoints(-0.2), 0), "niente −0");
 });
 
 test("il corso della partita: totali dopo ogni round e cambi in testa", () => {

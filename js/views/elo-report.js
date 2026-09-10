@@ -51,7 +51,8 @@ export function eloReportCard(history, gameId, players, { me = null, pending = f
             <span class="er-vs">${r.vs.map((v) => `<i class="${tone(v.swing)}" title="${esc(why(v))}">${signed(v.swing)} su ${esc(v.name)}</i>`).join("")}</span>
           </li>`).join("")}
       </ul>
-      <p class="er-note">Ogni avversario è una sfida a due: chi finisci davanti ti dà punti, chi finisci dietro te li toglie.
+      <p class="er-note">Ogni avversario è una sfida a due: chi finisci davanti ti dà punti, chi finisci dietro te li toglie,
+        e quello che prendi da uno lui lo perde, così la somma fa sempre zero.
         Battere chi ha un Elo più alto rende di più, perdere con chi ce l'ha più basso costa di più.${scope === "month" ? " Nel mese tutti ripartono da 1000: è l'Elo che assegna il titolo." : ""}</p>`;
   if (section) {
     return `

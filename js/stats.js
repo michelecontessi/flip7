@@ -985,9 +985,12 @@ export function fmtDuration(ms) {
 // (davanti = 1, pari = 0.5, dietro = 0) e si sposta il rating di
 // K x (risultato - atteso), con K = 32 diviso per il numero di avversari.
 // Cosi' battere uno piu' forte rende molto, battere uno piu' debole poco,
-// e una partita a 5 muove al massimo quanto una a 2. La somma degli
-// spostamenti di una partita e' sempre zero: i punti passano di mano, non
-// si creano. Le partite si contano in ordine di data, tutte (nessun
+// e una partita a 5 muove al massimo quanto una a 2. Ogni sfida a due vale
+// un numero INTERO di punti (arrotondato una volta sola, come fanno le
+// federazioni degli scacchi): quello che uno prende l'altro lo perde, i
+// rating restano interi e la somma degli spostamenti di una partita e'
+// esattamente zero, anche nei numeri che si leggono. I punti passano di
+// mano, non si creano. Le partite si contano in ordine di data, tutte (nessun
 // periodo): il rating e' la storia intera di ognuno, una statistica a se'.
 // Per il titolo del mese c'e' l'Elo del mese (vedi seasons): stessa
 // formula, ma tutti da 1000 il primo del mese e con le sole partite del mese.
@@ -1003,28 +1006,36 @@ export const eloExpected = (a, b) => 1 / (1 + Math.pow(10, (b - a) / 400));
 export const eloSwing = (a, b, actual, k = ELO_K) => k * (actual - eloExpected(a, b));
 
 /**
+ * Una sfida a due in punti interi, arrotondata allo stesso modo nei due
+ * versi (la meta' si allontana dallo zero): se A prende 8 su B, B perde
+ * esattamente 8 su A.
+ */
+export const eloPoints = (raw) => Math.sign(raw) * Math.round(Math.abs(raw)) || 0;
+
+/**
  * Una partita, dal punto di vista del rating: per ogni presente lo
  * spostamento totale (`delta`) e quello contro ciascuno degli altri (`vs`:
- * risultato 1 / 0.5 / 0, probabilita' stimata, spostamento). `get(pid)` e' il
- * rating prima della partita. Null con meno di due giocatori: non muove niente.
+ * risultato 1 / 0.5 / 0, probabilita' stimata, spostamento). Ogni coppia si
+ * calcola una volta sola, in punti interi: quello che uno prende l'altro lo
+ * perde. `get(pid)` e' il rating prima della partita. Null con meno di due
+ * giocatori: non muove niente.
  */
 function eloStep(game, get, K = ELO_K) {
   const ids = Object.keys((game && game.results) || {});
   if (ids.length < 2) return null;
   const total = (pid) => Number(game.results[pid].total) || 0;
   const k = K / (ids.length - 1);
-  const out = {};
-  for (const a of ids) {
-    const vs = {};
-    let delta = 0;
-    for (const b of ids) {
-      if (a === b) continue;
+  const out = Object.fromEntries(ids.map((pid) => [pid, { delta: 0, vs: {} }]));
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const a = ids[i], b = ids[j];
       const actual = total(a) > total(b) ? 1 : total(a) < total(b) ? 0 : 0.5;
-      const swing = eloSwing(get(a), get(b), actual, k);
-      vs[b] = { actual, expected: eloExpected(get(a), get(b)), swing };
-      delta += swing;
+      const swing = eloPoints(eloSwing(get(a), get(b), actual, k));
+      out[a].vs[b] = { actual, expected: eloExpected(get(a), get(b)), swing };
+      out[b].vs[a] = { actual: 1 - actual, expected: eloExpected(get(b), get(a)), swing: -swing || 0 };
+      out[a].delta += swing;
+      out[b].delta -= swing;
     }
-    out[a] = { delta, vs };
   }
   return out;
 }
@@ -1051,8 +1062,7 @@ export function eloRatings(history, players, opts = {}) {
       rating.set(a, next);
       played.set(a, (played.get(a) || 0) + 1);
       peak.set(a, Math.max(peak.get(a) || ELO_START, next));
-      // come si legge in classifica: la differenza fra i due valori tondi
-      last.set(a, { delta: Math.round(next) - Math.round(prev), gameId: g.id, playedAt: g.playedAt || 0 });
+      last.set(a, { delta: next - prev, gameId: g.id, playedAt: g.playedAt || 0 });
     }
   }
   return [...rating.entries()]
@@ -1072,32 +1082,15 @@ export function eloRatings(history, players, opts = {}) {
 }
 
 /**
- * Arrotonda ogni valore all'intero in modo che la somma faccia esattamente
- * `target`: prima il valore tondo piu' vicino, poi l'unita' che manca va a
- * chi l'arrotondamento aveva sacrificato di piu'.
- */
-export function splitRounded(values, target) {
-  const out = values.map((v) => Math.round(v) || 0);
-  let diff = target - out.reduce((a, b) => a + b, 0);
-  while (diff !== 0 && out.length) {
-    const dir = diff > 0 ? 1 : -1;
-    let best = 0, gap = -Infinity;
-    values.forEach((v, i) => { const g = (v - out[i]) * dir; if (g > gap) { gap = g; best = i; } });
-    out[best] += dir;
-    diff -= dir;
-  }
-  return out;
-}
-
-/**
  * Com'e' cambiato il rating in UNA partita, e perche': per ognuno il valore
  * prima e dopo, e lo spostamento contro ciascuno degli altri ("+3 su Bea,
  * −17 su Cal"). Con `month: true` e' l'Elo del mese di quella partita (tutti
  * da 1000 il primo del mese, solo le partite del mese); senza, l'Elo di
- * sempre. I numeri sono quelli tondi della classifica: `delta` e' la
- * differenza fra prima e dopo, e gli spostamenti contro i singoli avversari
- * sommano esattamente a `delta`. Null se la partita non c'e' o ha un
- * giocatore solo.
+ * sempre. I rating sono interi, quindi i numeri sono gli stessi della
+ * classifica: `after - before = delta`, gli spostamenti contro i singoli
+ * avversari sommano a `delta`, quelli di due avversari si specchiano (+8 su
+ * Bea, −8 su di te) e i `delta` della partita sommano a zero. Null se la
+ * partita non c'e' o ha un giocatore solo.
  * @returns {{gameId, month, rows: {playerId, name, total, before, after, delta, vs: {playerId, name, result, expected, swing, before}[]}[]}|null}
  */
 export function eloGameReport(history, gameId, players = null, opts = {}) {
@@ -1118,15 +1111,12 @@ export function eloGameReport(history, gameId, players = null, opts = {}) {
     // in ordine di arrivo: a pari punti prima chi ha vinto (lo spareggio, o la scelta del segnapunti)
     const won = (pid) => (g.winnerIds && g.winnerIds[pid] ? 1 : 0);
     const rows = Object.entries(step).map(([pid, s]) => {
-      const before = Math.round(get(pid));
-      const after = Math.round(get(pid) + s.delta);
-      const ids = Object.keys(s.vs);
-      const shares = splitRounded(ids.map((b) => s.vs[b].swing), after - before);
+      const before = get(pid);
       return {
         playerId: pid, name: nameOf(pid),
         total: Number(g.results[pid].total) || 0,
-        before, after, delta: after - before,
-        vs: ids.map((b, i) => ({ playerId: b, name: nameOf(b), result: s.vs[b].actual, expected: s.vs[b].expected, swing: shares[i], before: Math.round(get(b)) }))
+        before, after: before + s.delta, delta: s.delta,
+        vs: Object.entries(s.vs).map(([b, v]) => ({ playerId: b, name: nameOf(b), result: v.actual, expected: v.expected, swing: v.swing, before: get(b) }))
           .sort((x, y) => y.swing - x.swing || x.name.localeCompare(y.name, "it"))
       };
     }).sort((a, b) => b.total - a.total || won(b.playerId) - won(a.playerId) || b.delta - a.delta || a.name.localeCompare(b.name, "it"));

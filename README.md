@@ -620,7 +620,11 @@ una vittoria vale +16 e una sconfitta −16; contro uno più forte di 200 punti 
 +24 e perdere solo −8; contro uno più debole vincere vale +8 e perdere −24. Con più
 giocatori al tavolo la partita è un giro di sfide a due contro ognuno degli altri, i
 punti in gioco si dividono per il numero di avversari (una partita a 5 pesa quanto una
-a 2) e la somma degli spostamenti fa sempre zero. Le partite si contano in ordine di
+a 2) e la somma degli spostamenti fa sempre zero. Ogni sfida a due vale un numero
+**intero** di punti, arrotondato una volta sola (come fanno le federazioni degli
+scacchi): quello che uno prende l'altro lo perde esattamente, i rating restano interi e
+i conti tornano anche nei numeri che si leggono — prima i rating avevano i decimali, e
+le differenze fra valori tondi potevano non sommare a zero (*+15, ±0, −16*). Le partite si contano in ordine di
 data, tutte, senza stagioni: è una statistica a sé e **non vale per il titolo del mese**,
 che segue l'Elo del mese (stessa formula, ma da 1000 ogni mese, con le sole partite del
 mese: è `seasons` in [js/stats.js](js/stats.js)). Il grafico **Andamento → Rating Elo**
@@ -637,8 +641,9 @@ online) e nel dettaglio di ogni partita dello Storico c'è il riquadro **Elo di 
 partita**: per ognuno il rating prima e dopo, lo spostamento e le sfide a due che lo
 compongono, una pastiglia per avversario (*+7 su Cal · −1 su Bea*, verde se ci ha
 guadagnato, rossa se ci ha perso; tenendoci il dito sopra si legge il risultato e la
-probabilità stimata). Gli spostamenti sono arrotondati come in classifica e **sommano
-esattamente** al totale della riga. Due pulsanti passano dall'**Elo del mese** all'**Elo
+probabilità stimata). Sono i punti interi delle sfide a due: **sommano esattamente**
+al totale della riga, quelli di due avversari si specchiano (*+8 su Bea* da una parte,
+*−8 su di te* dall'altra) e i totali della partita fanno zero. Due pulsanti passano dall'**Elo del mese** all'**Elo
 di sempre**. Prima del salvataggio i numeri sono quelli che la partita *porterà*: la
 partita entra "per finta" nello storico, al suo posto in ordine di data. È
 `eloGameReport` in [js/stats.js](js/stats.js), disegnato da
