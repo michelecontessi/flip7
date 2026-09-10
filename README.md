@@ -181,12 +181,15 @@ sotto **Avanzate**, chiuse finché non servono.
    - **Congelato** segna che quel giocatore è stato fermato da un *Congela*: i punti
      restano quelli delle carte, ma si capisce perché la mano è corta (e conta per il
      record *Surgelato*). Sotto compare la fila **congelato da**: un tocco sull'avatar di
-     chi ha tirato la carta (facoltativo) e quella congelata va a credito suo, per il
-     record *Iceman* e per la *nemesi* nella scheda giocatore
+     chi ha tirato la carta (facoltativo) e nel dettaglio della partita si legge
+     *congelato da …*. È solo un appunto: al tavolo vero non si sa davvero chi tira a
+     chi, quindi il record *Iceman* e la *nemesi* della scheda giocatore contano solo
+     le partite online
    - **Vita extra** conta le carte col **cuore** (la *Seconda Chance*) finite in mano
-     in quel round: **non danno punti**, si segnano solo per la statistica (il record
-     *Sette Vite*). Ogni tocco ne aggiunge una — *1 vita extra*, *2 vite extra* — e
-     dopo la terza si torna a zero
+     in quel round: **non danno punti**, restano come appunto nel dettaglio della
+     partita. Ogni tocco ne aggiunge una — *1 vita extra*, *2 vite extra* — e dopo la
+     terza si torna a zero. Il record *Sette Vite* non le guarda: dal vivo ci si
+     dimentica di segnarle, e conta solo le partite online
    - sotto il punteggio della mano c'è il **totale provvisorio**: *totale partita 123 → 157*,
      cioè dove arriverebbe il giocatore salvando questa mano, e quanti punti gli mancano
      al traguardo (o *traguardo tagliato*); si aggiorna a ogni carta toccata
@@ -514,12 +517,14 @@ cerchiata in oro; lo stesso vale per i riquadri corrispondenti nella scheda gioc
   arrivato), sballi
   compresi: la carta l'aveva in mano comunque
 - **Iceman**, **Bullo** e **Generoso**: chi tira più Congela, chi rifila più Pesca Tre,
-  chi regala più Seconde Chance. Sono i record "attivi": contano dalle partite online
-  giocate da quando il tavolo segna chi ha fatto cosa (`INTERACTIONS_SINCE` in
-  [js/stats.js](js/stats.js)) e da quelle dal vivo in cui il segnapunti ha indicato
-  *congelato da*. **Bullo** e **Generoso** portano la pastiglia **solo online**: dal vivo
-  il segnapunti non segna chi tira il Pesca Tre né chi regala la Seconda Chance, quindi
-  quei due si fanno solo al tavolo
+  chi regala più Seconde Chance. Sono i record "attivi" e portano la pastiglia
+  **solo online**: contano soltanto le partite al tavolo online giocate da quando il
+  tavolo segna chi ha fatto cosa (`INTERACTIONS_SINCE` in [js/stats.js](js/stats.js)).
+  Dal vivo non si sa davvero chi tira a chi (il *congelato da* del pannello punti è un
+  appunto facoltativo, e nessuno segna chi tira il Pesca Tre o regala la Seconda
+  Chance), quindi quelle partite non concorrono. La carta tirata a se stessi — il Pesca
+  Tre o il Congela quando si è l'unico ancora in gioco, o per scelta — non è un
+  dispetto a nessuno e non conta
 
 Poi i **Primati della stanza**: non "chi è il migliore in X" ma "la partita più…" — la
 maratona (più mani), la partita lampo, il punteggio di sempre, la passeggiata (vittoria
@@ -551,14 +556,14 @@ volte è finito **davanti** e quante **dietro** (con le due parole scritte sotto
 numeri, così non c'è niente da indovinare), un verdetto (*in vantaggio*, *sempre
 davanti*, *in parità*…), la barra verde/grigia/rossa e sotto le partite insieme, i pari,
 le vittorie di ciascuno e le medie. "Davanti" vuol dire più punti dell'altro in quella
-partita, anche senza vincerla. E dalle partite che lo sanno: la
+partita, anche senza vincerla. E dalle partite online, le uniche che lo sanno: la
 sua **nemesi** (chi lo congela di più), la sua vittima preferita, chi gli tira più Pesca
 Tre, quanti cuori ha regalato, quante volte si è fermato da sé.
 - **Sette Vite**: chi raccoglie più carte col **cuore** (la *Seconda Chance*). Le vite
   extra non danno punti: si contano e basta, sia quelle pescate sia quelle **regalate**
   da un altro giocatore, e valgono anche se poi vengono spese per annullare un doppione.
-  Contano solo le partite in cui i cuori sono stati segnati davvero: nelle partite
-  archiviate prima di questo aggiornamento il dato non esiste proprio, e non fa media
+  Anche questo è **solo online**: al tavolo online il cuore lo segna il mazzo, dal vivo
+  il tasto *Vita extra* a volte si dimentica e farebbe torto a chi le segna sempre
 
 I giocatori sono identificati da un id interno, quindi:
 - se **rinomini** qualcuno, tutto il suo storico lo segue;

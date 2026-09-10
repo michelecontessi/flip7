@@ -26,7 +26,7 @@ const GAME_RECORDS = {
     note: `dopo il round ${r.bestComebackRound + 1} era sotto di ${r.bestComeback} punti, poi ha vinto` })
 };
 
-/** L'etichetta dei record che si fanno solo al tavolo online (Bullo, Generoso). */
+/** L'etichetta dei record che si fanno solo al tavolo online (Sette Vite, Iceman, Bullo, Generoso). */
 const onlineOnlyTag = () => `<span class="award-only" title="si fa solo al tavolo online">${icon("wifi", "tiny")}solo online</span>`;
 
 /** Pulsante "Vedi" verso la partita del record (vuoto se il record non ne ha una). */
@@ -792,8 +792,8 @@ function awardRowSub(a, r) {
   if (a.key === "bestComeback") return r.comebackWins === 1 ? "1 vittoria in rimonta" : `${r.comebackWins} vittorie in rimonta`;
   if (a.key === "seconds") return `${r.crowns === 1 ? "1 vittoria" : r.crowns + " vittorie"} su ${r.games === 1 ? "1 partita" : r.games + " partite"}`;
   if (a.key === "flip7s") return `in ${r.tracked === 1 ? "1 partita tracciata" : r.tracked + " partite tracciate"}`;
-  if (a.key === "hearts") return `in ${r.heartTracked === 1 ? "1 partita con i cuori segnati" : r.heartTracked + " partite con i cuori segnati"}`;
-  if (a.key === "froze" || a.key === "fl3" || a.key === "gave") return `in ${r.interTracked === 1 ? "1 partita che lo sa" : r.interTracked + " partite che lo sanno"}`;
+  if (a.key === "hearts") return `in ${r.heartTracked === 1 ? "1 partita online" : r.heartTracked + " partite online"}`;
+  if (a.key === "froze" || a.key === "fl3" || a.key === "gave") return `in ${r.interTracked === 1 ? "1 partita online" : r.interTracked + " partite online"}`;
   return `media ${fmtNum(r.avg, 1)}`;
 }
 
@@ -823,7 +823,7 @@ function renderAwardPage(a) {
             </li>`).join("")}
         </ul>
       </section>
-      <p class="foot-note">${a.pick === "min" ? "Vince chi ha il valore più basso." : "Vince chi ha il valore più alto."}${a.key === "best" ? "" : " Contano solo le partite segnate round per round."}${a.online ? " Questo record si fa solo al tavolo online: dal vivo il segnapunti non segna chi ha tirato la carta." : ""}</p>
+      <p class="foot-note">${a.pick === "min" ? "Vince chi ha il valore più basso." : "Vince chi ha il valore più alto."}${a.key === "best" ? "" : " Contano solo le partite segnate round per round."}${a.online ? " Questo record si fa solo al tavolo online: dal vivo questo dato non si segna, o non sempre." : ""}${a.key === "froze" || a.key === "fl3" ? " La carta tirata a se stessi non conta." : ""}</p>
     </div>`;
 }
 
@@ -1000,7 +1000,7 @@ function renderPlayerPage(s) {
           ${h.interGames ? `
           <div class="hl tone-ice">
             <b>${h.froze}</b>
-            <span>${h.froze === 1 ? "congelata tirata" : "congelate tirate"}<small>${h.victim ? `soprattutto a ${esc(nameOf(h.victim.playerId))} (${h.victim.n}×)` : `in ${h.interGames === 1 ? "1 partita" : h.interGames + " partite"} che lo sanno`}</small></span>
+            <span>${h.froze === 1 ? "congelata tirata" : "congelate tirate"}<small>${h.victim ? `soprattutto a ${esc(nameOf(h.victim.playerId))} (${h.victim.n}×)` : `in ${h.interGames === 1 ? "1 partita online" : h.interGames + " partite online"}`}</small></span>
           </div>
           <div class="hl tone-fire">
             <b>${h.fl3}</b>

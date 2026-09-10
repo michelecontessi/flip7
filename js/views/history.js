@@ -387,7 +387,8 @@ function resultNotes(r, g, pid) {
   if (r.freezes) notes.push(`${r.freezes}× congelato`);
   if (r.hearts) notes.push(`${r.hearts}× cuore`);
   const rows = (g.rounds && g.rounds[pid]) || {};
-  const froze = Object.values(g.rounds || {}).reduce((n, other) => n + Object.values(other || {}).filter((e) => e && e.frozenBy === pid).length, 0);
+  // le congelate tirate agli altri: quella su se stessi non e' un dispetto
+  const froze = Object.entries(g.rounds || {}).reduce((n, [victim, other]) => n + (victim === pid ? 0 : Object.values(other || {}).filter((e) => e && e.frozenBy === pid).length), 0);
   if (froze) notes.push(`ha congelato ${froze}×`);
   const stays = Object.values(rows).filter((e) => e && e.stayed).length;
   if (stays && Object.keys(rows).length) notes.push(`fermato ${stays}×`);

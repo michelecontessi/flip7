@@ -234,9 +234,9 @@ test("chi ha fatto cosa: Iceman, Bullo e Generoso contano solo dove il dato esis
   const h = playerHighlights(games.filter((g) => g.results.bea), "bea");
   assert.deepEqual(h.nemesis, { playerId: "ada", n: 1 });
   assert.equal(h.gave, 1);
-  // una partita dal vivo conta se il segnapunti ha segnato un "da chi"
-  assert.equal(tracksInteractions({ source: "live", rounds: { x: { r0: { numbers: [1], frozen: true, frozenBy: "y" } } } }), true);
-  assert.equal(tracksInteractions({ source: "live", rounds: { x: { r0: { numbers: [1], frozen: true } } } }), false);
+  // dal vivo non conta mai, nemmeno se il segnapunti ha segnato un "da chi"
+  assert.equal(tracksInteractions({ source: "live", playedAt: since, rounds: { x: { r0: { numbers: [1], frozen: true, frozenBy: "y" } } } }), false);
+  assert.equal(tracksInteractions({ source: "live", playedAt: since, rounds: { x: { r0: { numbers: [1], frozen: true } } } }), false);
 });
 
 test("andamento: la serie porta anche il rating Elo, partita per partita", () => {

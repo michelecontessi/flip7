@@ -602,27 +602,31 @@ test("le vite extra non toccano il punteggio, ma si vedono nella formula", () =>
   assert.equal(computeRound({ hearts: 9 }).hearts, 3);
 });
 
-test("trofei: Sette Vite va a chi prende piu' cuori, e le partite senza il dato non contano", () => {
+test("trofei: Sette Vite va a chi prende piu' cuori, e contano solo le partite online", () => {
   const hist = {
-    g1: { playedAt: 1, winnerIds: { a: true },
+    g1: { playedAt: 1, winnerIds: { a: true }, source: "online",
       results: { a: { name: "Ale", total: 100, hearts: 1 }, b: { name: "Bea", total: 90, hearts: 3 } } },
-    g2: { playedAt: 2, winnerIds: { a: true },
+    g2: { playedAt: 2, winnerIds: { a: true }, source: "online",
       results: { a: { name: "Ale", total: 100, hearts: 2 }, b: { name: "Bea", total: 90, hearts: 1 } } },
     // partita vecchia: il campo non c'e' proprio, e non deve pesare
     g3: { playedAt: 3, winnerIds: { c: true },
-      results: { a: { name: "Ale", total: 10 }, c: { name: "Cri", total: 200 } } }
+      results: { a: { name: "Ale", total: 10 }, c: { name: "Cri", total: 200 } } },
+    // dal vivo le vite extra si segnano quando ci si ricorda: non fanno record
+    g4: { playedAt: 4, winnerIds: { c: true }, source: "live",
+      results: { a: { name: "Ale", total: 10, hearts: 1 }, c: { name: "Cri", total: 200, hearts: 3 } } }
   };
   const rows = leaderboard(hist, {}).rows;
   const by = (id) => rows.find((r) => r.playerId === id);
   assert.equal(by("a").hearts, 3);
   assert.equal(by("a").heartTracked, 2);
+  assert.equal(by("c").hearts, 0);
   assert.equal(by("c").heartTracked, 0);
   const tro = awards(rows).find((x) => x.id === "settevite");
   assert.deepEqual(tro.winners.map((w) => w.playerId), ["b"]);
   assert.equal(tro.value, 4);
   assert.equal(tro.unit(1), "1 vita extra");
   assert.equal(tro.unit(3), "3 vite extra");
-  // chi non ha mai giocato una partita con i cuori segnati resta fuori
+  // chi non ha mai giocato una partita online resta fuori
   assert.deepEqual(awardRanking(rows, "settevite").rows.map((r) => r.playerId), ["b", "a"]);
 });
 

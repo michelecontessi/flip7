@@ -205,28 +205,37 @@ const tracksFreezes = (game, res) => res.freezes !== undefined && (game.playedAt
  * Da quando il tavolo online scrive CHI ha congelato, chi ha tirato il Pesca
  * Tre e chi ha regalato la Seconda Chance. Prima non c'era il dato, quindi
  * quelle partite non concorrono ai record "attivi" (Iceman, Bullo, Generoso).
- * Una partita dal vivo conta se il segnapunti ha segnato almeno un "da chi".
+ * Le partite dal vivo non contano mai: il "congelato da" del pannello punti
+ * e' un appunto facoltativo, e al tavolo vero non si sa davvero chi tira a chi.
  */
 export const INTERACTIONS_SINCE = Date.parse("2026-09-09T12:00:00+02:00");
 const listOf = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
-export function tracksInteractions(game) {
-  if (!game || !game.rounds) return false;
-  if (game.source === "online" && (game.playedAt || 0) >= INTERACTIONS_SINCE) return true;
-  return Object.values(game.rounds).some((rows) => Object.values(rows || {}).some((e) => e && (e.frozenBy || listOf(e.fl3By).length || listOf(e.scFrom).length)));
-}
+export const tracksInteractions = (game) =>
+  Boolean(game && game.rounds && game.source === "online" && (game.playedAt || 0) >= INTERACTIONS_SINCE);
+
+/**
+ * Le vite extra si contano solo al tavolo online, dove il cuore lo segna il
+ * mazzo: dal vivo il tasto "Vita extra" a volte si dimentica, e farebbe torto
+ * a chi le segna sempre.
+ */
+export const tracksHearts = (game, res) => game.source === "online" && res.hearts !== undefined;
+
 /**
  * Chi ha fatto cosa in una partita, a credito di chi l'ha fatto:
  * pid -> { froze, fl3, gave, frozeWhom: {pid: n}, fl3Whom: {pid: n} }.
+ * La carta tirata a se stessi (unico ancora in gioco, o per scelta) non e' un
+ * dispetto a nessuno e non va a credito.
  */
 export function interactionCredits(game) {
   const out = {};
   const at = (pid) => out[pid] || (out[pid] = { froze: 0, fl3: 0, gave: 0, frozeWhom: {}, fl3Whom: {}, gaveWhom: {} });
   for (const [victim, rows] of Object.entries((game && game.rounds) || {})) {
+    const others = (v) => listOf(v).filter((by) => by && by !== victim);
     for (const e of Object.values(rows || {})) {
       if (!e) continue;
-      if (e.frozenBy) { const c = at(e.frozenBy); c.froze += 1; c.frozeWhom[victim] = (c.frozeWhom[victim] || 0) + 1; }
-      for (const by of listOf(e.fl3By)) { const c = at(by); c.fl3 += 1; c.fl3Whom[victim] = (c.fl3Whom[victim] || 0) + 1; }
-      for (const by of listOf(e.scFrom)) { const c = at(by); c.gave += 1; c.gaveWhom[victim] = (c.gaveWhom[victim] || 0) + 1; }
+      if (e.frozenBy && e.frozenBy !== victim) { const c = at(e.frozenBy); c.froze += 1; c.frozeWhom[victim] = (c.frozeWhom[victim] || 0) + 1; }
+      for (const by of others(e.fl3By)) { const c = at(by); c.fl3 += 1; c.fl3Whom[victim] = (c.fl3Whom[victim] || 0) + 1; }
+      for (const by of others(e.scFrom)) { const c = at(by); c.gave += 1; c.gaveWhom[victim] = (c.gaveWhom[victim] || 0) + 1; }
     }
   }
   return out;
@@ -308,9 +317,9 @@ export function leaderboard(history, players, opts = {}) {
         e.freezes += Number(res.freezes) || 0;
         e.frozenTracked += 1;
       }
-      // le vite extra si contano solo dove sono state segnate davvero: nelle
-      // partite piu' vecchie il campo non c'e' proprio, e non fanno media
-      if (res.hearts !== undefined) {
+      // le vite extra si contano solo al tavolo online: dal vivo non si segnano
+      // sempre, e nelle partite piu' vecchie il campo non c'e' proprio
+      if (tracksHearts(game, res)) {
         e.hearts += Number(res.hearts) || 0;
         e.heartTracked += 1;
       }
@@ -325,7 +334,7 @@ export function leaderboard(history, players, opts = {}) {
       if (cb.deficit > 0) e.comebackWins += 1;
       if (cb.deficit > e.bestComeback) { e.bestComeback = cb.deficit; e.bestComebackGame = game.id; e.bestComebackRound = cb.round; }
       // chi ha congelato, chi ha tirato il Pesca Tre, chi ha regalato il cuore:
-      // solo nelle partite che lo sanno
+      // solo al tavolo online, e mai per la carta tirata a se stessi
       if (inter) {
         e.interTracked += 1;
         const c = credits[pid];
@@ -398,13 +407,13 @@ export const AWARDS = [
     unit: (v) => v === 1 ? "1 ×2 pescato" : `${v} ×2 pescati` },
   { id: "rosicone", key: "seconds", title: "Rosicone", desc: "il secondo posto è casa sua, e ancora rosica", emblem: "rosicone", tone: "silver",
     unit: (v) => v === 1 ? "1 secondo posto" : `${v} secondi posti` },
-  { id: "settevite", key: "hearts", title: "Sette Vite", desc: "le carte col cuore finiscono sempre in mano sua", emblem: "settevite", tone: "rose",
+  // `online`: questi quattro si fanno solo al tavolo online. Dal vivo le vite
+  // extra e il "congelato da" si segnano quando ci si ricorda, e chi tira il
+  // Pesca Tre o regala la Seconda Chance non lo segna proprio nessuno.
+  { id: "settevite", key: "hearts", title: "Sette Vite", desc: "le carte col cuore finiscono sempre in mano sua", emblem: "settevite", tone: "rose", online: true,
     unit: (v) => v === 1 ? "1 vita extra" : `${v} vite extra` },
-  { id: "iceman", key: "froze", title: "Iceman", desc: "il Congela lo tira lui, e sempre a qualcun altro", emblem: "iceman", tone: "ice",
+  { id: "iceman", key: "froze", title: "Iceman", desc: "il Congela lo tira lui, e sempre a qualcun altro", emblem: "iceman", tone: "ice", online: true,
     unit: (v) => v === 1 ? "1 congelata tirata" : `${v} congelate tirate` },
-  // `online`: dal vivo il segnapunti non segna chi tira il Pesca Tre ne' chi
-  // regala la Seconda Chance, quindi questi due si fanno solo al tavolo online
-  // (il Congela invece ha il "congelato da" anche sul pannello punti)
   { id: "bullo", key: "fl3", title: "Bullo", desc: "il Pesca Tre lo rifila agli altri", emblem: "bullo", tone: "fire", online: true,
     unit: (v) => v === 1 ? "1 Pesca Tre tirato" : `${v} Pesca Tre tirati` },
   { id: "generoso", key: "gave", title: "Generoso", desc: "regala la Seconda Chance a chi ne ha bisogno", emblem: "generoso", tone: "rose", online: true,
@@ -413,8 +422,8 @@ export const AWARDS = [
 
 // Flip 7, sballi e congelate esistono solo nelle partite segnate round per
 // round (`tracked`); le mani lunghe solo dove le carte sono state segnate una
-// per una (`hands`); le vite extra solo da quando si segnano (`heartTracked`).
-// Chi ha solo totali recuperati a mano non concorre.
+// per una (`hands`); le vite extra e i dispetti solo al tavolo online
+// (`heartTracked`, `interTracked`). Chi ha solo totali recuperati a mano non concorre.
 const awardPool = (a, rows) =>
   a.key === "freezeRate" ? rows.filter((r) => r.frozenTracked > 0)
     : a.key === "flip7s" || a.key === "bustRate" ? rows.filter((r) => r.tracked > 0)
@@ -581,8 +590,8 @@ export function playerHighlights(games, playerId) {
       }
       for (const e of Object.values((g.rounds && g.rounds[playerId]) || {})) {
         if (!e) continue;
-        if (e.frozenBy) bump(frozenBy, e.frozenBy);
-        for (const by of listOf(e.fl3By)) bump(fl3By, by);
+        if (e.frozenBy && e.frozenBy !== playerId) bump(frozenBy, e.frozenBy);
+        for (const by of listOf(e.fl3By)) if (by !== playerId) bump(fl3By, by);
       }
     }
     stays += Object.values((g.rounds && g.rounds[playerId]) || {}).filter((x) => x && x.stayed).length;
@@ -605,7 +614,7 @@ export function playerHighlights(games, playerId) {
     best: best.total < 0 ? { total: 0, playedAt: 0, gameId: null } : best,
     played: chrono.length,
     detailedGames: detailed,
-    // chi ha fatto cosa a chi (solo dalle partite che lo sanno)
+    // chi ha fatto cosa a chi (solo dalle partite online, mai a se stessi)
     froze, fl3, gave, interGames, stays,
     nemesis: topOf(frozenBy),     // chi lo congela di piu'
     victim: topOf(frozeWhom),     // chi congela di piu'
