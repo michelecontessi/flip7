@@ -273,7 +273,9 @@ export const SORTS = {
   games: { label: "Partite", cmp: (a, b) => b.games - a.games || b.crowns - a.crowns },
   points: { label: "Punti totali", cmp: (a, b) => b.points - a.points || b.crowns - a.crowns },
   best: { label: "Record", cmp: (a, b) => b.best - a.best || b.crowns - a.crowns },
-  winRate: { label: "Vinte %", cmp: (a, b) => b.winRate - a.winRate || b.crowns - a.crowns || b.avg - a.avg }
+  winRate: { label: "Vinte %", cmp: (a, b) => b.winRate - a.winRate || b.crowns - a.crowns || b.avg - a.avg },
+  // l'Elo del mese (solo nelle classifiche di stagione): a parita' le Crown
+  elo: { label: "Elo del mese", cmp: (a, b) => (b.elo || 0) - (a.elo || 0) || b.crowns - a.crowns || b.winRate - a.winRate }
 };
 
 /**
@@ -744,10 +746,18 @@ export function historyList(history) {
 
 // ---------------------------------------------------------------------------
 // Stagioni: un mese di calendario = una stagione. Si calcolano dallo storico,
-// niente da scrivere nel database. Il campione del mese e' chi guida la
-// classifica di quel mese (stessa formula: Crown, quota vittorie, media...);
-// valgono le partite dal vivo e quelle online insieme. Il mese in corso non
-// e' ancora assegnato: e' "in corso", con chi e' in testa adesso.
+// niente da scrivere nel database. Il campione del mese e' chi chiude il mese
+// con l'ELO DEL MESE piu' alto: lo stesso calcolo del rating generale, ma
+// tutti ripartono da 1000 il primo del mese e contano solo le partite di quel
+// mese, in ordine di data. Cosi' il titolo non lo prende chi gioca di piu'
+// (le Crown si sommano) ne' chi fa un mese sopra il proprio livello (il
+// guadagno sull'Elo generale, a rating assestati, e' una lotteria: il
+// guadagno atteso e' zero per tutti). Lo prende chi in quel mese ha battuto
+// di piu', e i piu' forti. A parita' di Elo decidono le Crown, poi la quota
+// di vittorie, poi la media. Valgono le partite dal vivo e quelle online
+// insieme. Il mese in corso non e' ancora assegnato: e' "in corso", con chi e'
+// in testa adesso. L'Elo generale resta una statistica a se': non vale per il
+// titolo.
 // ---------------------------------------------------------------------------
 export const MONTHS_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 export const MONTHS_SHORT = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
@@ -777,8 +787,10 @@ export function seasonClosed(key, now = Date.now()) {
   return new Date(year, month + 1, 1).getTime() <= now;
 }
 
+/** La catena della classifica di stagione: prima l'Elo del mese, poi gli spareggi di sempre. */
+export const SEASON_CHAIN = ["elo", ...TIEBREAK];
 /** Stesso posto in classifica: uguali su tutta la catena degli spareggi. */
-const sameStanding = (a, b) => TIEBREAK.every((k) => (a[k] || 0) === (b[k] || 0));
+const sameStanding = (a, b) => SEASON_CHAIN.every((k) => (a[k] || 0) === (b[k] || 0));
 
 /**
  * Partite che servono, a testa, per essere in corsa per il titolo del mese:
@@ -788,7 +800,8 @@ const sameStanding = (a, b) => TIEBREAK.every((k) => (a[k] || 0) === (b[k] || 0)
 export const SEASON_MIN_GAMES = 10;
 
 /**
- * Le stagioni, dalla piu' recente. Ognuna porta la classifica del mese, il
+ * Le stagioni, dalla piu' recente. Ognuna porta la classifica del mese
+ * (ordinata per Elo del mese: ogni riga ha `elo`, `eloPeak`, `eloLast`), il
  * campione (o i campioni, a pari merito assoluto) se il mese e' chiuso, e
  * chi e' in testa se e' ancora in corso.
  * @returns {{key, label, short, year, month, games, rows, champions, leader, closed}[]}
@@ -806,7 +819,19 @@ export function seasons(history, players, opts = {}) {
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .map(([key, games]) => {
       const { rows } = leaderboard(games, players, { source: opts.source, skipTitles: true });
-      const sorted = sortLeaderboard(rows, "crowns");
+      // l'Elo del mese: stesso calcolo del rating generale, ma tutti da 1000
+      // il primo del mese e con le sole partite di questo mese
+      const elo = new Map(eloRatings(games, players, { source: opts.source }).map((r) => [r.playerId, r]));
+      for (const r of rows) {
+        const e = elo.get(r.playerId);
+        r.elo = e ? e.elo : ELO_START;
+        r.eloPeak = e ? e.peak : ELO_START;
+        r.eloLast = e ? e.last : 0;
+        r.eloLastGameId = e ? e.lastGameId : null;
+      }
+      const sorted = sortLeaderboard(rows, "elo");
+      let rank = 0;
+      sorted.forEach((r, i) => { if (!i || !sameStanding(r, sorted[i - 1])) rank = i + 1; r.rank = rank; });
       const min = opts.minGames === undefined ? SEASON_MIN_GAMES : opts.minGames;
       // in corsa per il titolo solo chi ha giocato abbastanza quel mese
       const eligible = sorted.filter((r) => (r.games || 0) >= min);
@@ -832,13 +857,13 @@ export function seasons(history, players, opts = {}) {
     });
 }
 
-/** Titoli di stagione per giocatore: pid -> [{key, label, short, games, shared}], dal piu' recente. */
+/** Titoli di stagione per giocatore: pid -> [{key, label, short, games, shared, crowns, elo}], dal piu' recente. */
 export function seasonTitles(history, players, opts = {}) {
   if (opts.skipTitles) return {};
   const out = {};
   for (const s of seasons(history, players, opts)) {
     for (const r of s.champions) {
-      (out[r.playerId] = out[r.playerId] || []).push({ key: s.key, label: s.label, short: s.short, games: s.games, shared: s.champions.length > 1, crowns: r.crowns });
+      (out[r.playerId] = out[r.playerId] || []).push({ key: s.key, label: s.label, short: s.short, games: s.games, shared: s.champions.length > 1, crowns: r.crowns, elo: r.elo });
     }
   }
   return out;
@@ -956,7 +981,9 @@ export function fmtDuration(ms) {
 // e una partita a 5 muove al massimo quanto una a 2. La somma degli
 // spostamenti di una partita e' sempre zero: i punti passano di mano, non
 // si creano. Le partite si contano in ordine di data, tutte (nessun
-// periodo): il rating e' la storia intera di ognuno.
+// periodo): il rating e' la storia intera di ognuno, una statistica a se'.
+// Per il titolo del mese c'e' l'Elo del mese (vedi seasons): stessa
+// formula, ma tutti da 1000 il primo del mese e con le sole partite del mese.
 // ---------------------------------------------------------------------------
 export const ELO_START = 1000;
 export const ELO_K = 32;

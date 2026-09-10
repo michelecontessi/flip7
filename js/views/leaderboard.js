@@ -1,10 +1,12 @@
 // ---------------------------------------------------------------------------
 // Vista "Classifica". In cima la STAGIONE in corso (un mese = una stagione):
 // il podio del mese, la classifica del mese, i record del mese e l'albo
-// d'oro dei campioni passati. Con lo switch si passa al GENERALE: le Crown
-// perpetue (una vittoria = una Crown) con i filtri, i record, i primati
-// della stanza, il rating Elo e l'andamento nel tempo. Toccando un giocatore
-// si apre la sua scheda.
+// d'oro dei campioni passati. Il mese si ordina e si assegna sull'ELO DEL
+// MESE (tutti da 1000 il primo del mese); le Crown restano in riga come
+// spareggio. Con lo switch si passa al GENERALE: le Crown perpetue (una
+// vittoria = una Crown) con i filtri, i record, i primati della stanza, il
+// rating Elo di sempre (una statistica a se', non vale per il titolo) e
+// l'andamento nel tempo. Toccando un giocatore si apre la sua scheda.
 // ---------------------------------------------------------------------------
 import { esc, initials, colorOf, fmtNum, fmtDate, openPage } from "../ui.js";
 import { avatar } from "../avatar.js";
@@ -40,15 +42,26 @@ function gameLink(key, r, cls = "rewatch") {
 }
 
 // `scope`: "season" = il mese in corso (la vista di partenza), "all" = il generale
-const localState = { scope: "season", period: "all", source: "all", sort: "crowns", dir: -1, trendMetric: "rank", trendSel: null, showElo: false, showHow: false, showRecords: true, showSeasons: true };
+// `sort`/`dir` ordinano il generale (Crown), `sSort`/`sDir` il mese (Elo del mese)
+const localState = { scope: "season", period: "all", source: "all", sort: "crowns", dir: -1, sSort: "elo", sDir: -1, trendMetric: "rank", trendSel: null, showElo: false, showHow: false, showMonthHow: false, showRecords: true, showSeasons: true };
 /** "+12" / "−8" / "±0", per gli spostamenti di rating. */
 const signed = (d) => (d > 0 ? `+${d}` : d < 0 ? `−${Math.abs(d)}` : "±0");
 const filters = () => ({ period: localState.period, source: localState.source });
+const crownsTxt = (n) => (n === 1 ? "1 Crown" : `${n} Crown`);
+const gamesTxt = (n) => (n === 1 ? "1 partita" : `${n} partite`);
 
 const COLUMNS = [
   { key: "crowns", label: "crown", icon: "crownFill" },
   { key: "winRate", label: "vinte" },
   { key: "avg", label: "media" },
+  { key: "games", label: "part." }
+];
+// nel mese la prima colonna e' l'Elo del mese, che decide il titolo; la media
+// resta nel generale e nella scheda (sul telefono lo spazio in riga e' quello)
+const SEASON_COLUMNS = [
+  { key: "elo", label: "Elo" },
+  { key: "crowns", label: "crown", icon: "crownFill" },
+  { key: "winRate", label: "vinte" },
   { key: "games", label: "part." }
 ];
 
@@ -78,6 +91,13 @@ function winRing(rate) {
 }
 
 const sortRows = (rows) => sortLeaderboard(rows, localState.sort, localState.dir);
+const sortSeasonRows = (rows) => sortLeaderboard(rows, localState.sSort, localState.sDir);
+
+/** L'Elo del mese in riga: verde sopra i 1000 di partenza, rosso sotto. */
+function eloChip(v) {
+  const n = Number(v) || ELO_START;
+  return `<span class="elo-chip ${n > ELO_START ? "up" : n < ELO_START ? "down" : "flat"}" title="Elo del mese: ${n}">${n}</span>`;
+}
 
 /**
  * Fino a 5 Crown le disegna tutte; da 6 in su una corona sola e il numero,
@@ -110,18 +130,21 @@ function badgeRow(list, max = 3, cls = "xs") {
 }
 
 /**
- * Podio delle Crown: i primi tre sui gradini oro/argento/bronzo, il leader
- * al centro sotto la corona. Il podio segue sempre le Crown, qualunque
- * ordinamento sia attivo nella lista sotto.
+ * Podio: i primi tre sui gradini oro/argento/bronzo, il leader al centro
+ * sotto la corona. Nel generale segue sempre le Crown, nel mese l'Elo del
+ * mese, qualunque ordinamento sia attivo nella lista sotto.
  */
-/** I tre gradini, dati i primi tre (gia' ordinati). Serve al generale e alla stagione. */
-function podiumCols(top) {
+/** I tre gradini, dati i primi tre (gia' ordinati). Con `elo` la targhetta porta l'Elo del mese. */
+function podiumCols(top, { elo = false } = {}) {
+  const tally = (r) => elo
+    ? `<span class="pod-tally elo"><small>Elo</small><b>${r.elo}</b></span>`
+    : `<span class="pod-tally">${crownEmblem("mini")}<b>${r.crowns}</b></span>`;
   const col = (r, place) => r ? `
     <div class="pod-col p${place}">
       ${place === 1 ? `<div class="pod-crown">${crownEmblem("big")}</div>` : ""}
       ${avatar(r.playerId, r.name, place === 1 ? "lg" : "")}
       <span class="pod-name">${esc(r.name)}</span>
-      <div class="pod-step"><span class="pod-tally">${crownEmblem("mini")}<b>${r.crowns}</b></span></div>
+      <div class="pod-step">${tally(r)}</div>
     </div>` : "";
   return `<div class="pod-row">${col(top[1], 2)}${col(top[0], 1)}${col(top[2], 3)}</div>`;
 }
@@ -148,34 +171,42 @@ function renderScopeSwitch() {
     </div>`;
 }
 
-/** L'intestazione delle colonne, con i tasti di ordinamento (condivisi fra stagione e generale). */
-function renderListHead() {
+/**
+ * L'intestazione delle colonne, con i tasti di ordinamento. Nel generale le
+ * Crown, la quota, la media e le partite; nel mese (`season`) prima l'Elo del
+ * mese, con il suo ordinamento separato.
+ */
+function renderListHead(season = false) {
+  const cols = season ? SEASON_COLUMNS : COLUMNS;
+  const sort = season ? localState.sSort : localState.sort;
+  const dir = season ? localState.sDir : localState.dir;
   return `
-    <div class="lb-head">
+    <div class="lb-head ${season ? "with-elo" : ""}">
       <span></span>
       <span>Giocatore</span>
-      ${COLUMNS.map((c) => `
-        <button class="lb-sort ${localState.sort === c.key ? "on" : ""}" data-action="lb-sort" data-k="${c.key}">
+      ${cols.map((c) => `
+        <button class="lb-sort ${sort === c.key ? "on" : ""}" data-action="lb-sort" data-k="${c.key}" data-scope="${season ? "season" : "all"}">
           ${c.icon ? icon(c.icon, "tiny") : c.label}
-          ${localState.sort === c.key ? `<i class="arrow ${localState.dir === -1 ? "down" : "up"}">${icon("chevron", "tiny")}</i>` : ""}
+          ${sort === c.key ? `<i class="arrow ${dir === -1 ? "down" : "up"}">${icon("chevron", "tiny")}</i>` : ""}
         </button>`).join("")}
     </div>`;
 }
 
-/** Una riga della classifica (stessa forma nel generale e nella stagione). */
-function listRow(r, i, me, titles) {
+/** Una riga della classifica (stessa forma nel generale e nel mese; nel mese l'Elo al posto della media). */
+function listRow(r, i, me, titles, season = false) {
   return `
     <li class="lbrow ${r.playerId === me ? "me" : ""} ${r.archived ? "arch" : ""} ${i === 0 ? "top" : ""}"
         data-action="lb-detail" data-id="${r.playerId}">
       <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
       <span class="lbname">
         ${avatar(r.playerId, r.name, "sm")}
-        <span class="txt">${esc(r.name)}${badgeRow(titles[r.playerId])}
-          <small>rec. ${r.best}</small></span>
+        <span class="txt">${esc(r.name)}${badgeRow((titles || {})[r.playerId])}
+          <small>rec. ${r.best}${season ? ` · media ${fmtNum(r.avg, 1)}` : ""}</small></span>
       </span>
+      ${season ? eloChip(r.elo) : ""}
       <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
       ${winRing(r.winRate)}
-      <span class="col avg">${fmtNum(r.avg, 1)}</span>
+      ${season ? "" : `<span class="col avg">${fmtNum(r.avg, 1)}</span>`}
       <span class="col games">${r.games}</span>
     </li>`;
 }
@@ -208,8 +239,8 @@ function renderSeasonHome(room, me) {
   const pct = Math.max(2, Math.min(100, Math.round(((now - start) / (end - start)) * 100)));
   const monthName = MONTHS_IT[d.getMonth()];
   const lastDay = new Date(end - 1).getDate();
-  const rows = live ? live.rows : [];
-  const top = rows.filter((r) => r.crowns > 0).slice(0, 3);
+  const rows = live ? live.rows : []; // gia' ordinate per Elo del mese
+  const top = rows.slice(0, 3);
   const leader = live ? live.leader : null;
   const titles = seasonTitles(room.history, room.players, { source: localState.source, now });
 
@@ -226,15 +257,15 @@ function renderSeasonHome(room, me) {
       </div>
       <div class="sn-track" aria-hidden="true"><i style="width:${pct}%"></i></div>
       ${top.length ? `
-      ${podiumCols(top)}
+      ${podiumCols(top, { elo: true })}
       <div class="ch-sub">${leader
-        ? `in testa <b>${esc(leader.name)}</b> con ${leader.crowns === 1 ? "1 Crown" : leader.crowns + " Crown"} su ${live.games === 1 ? "1 partita" : live.games + " partite"}${live.tie ? " · a pari merito" : ""} · il titolo si assegna il ${lastDay}`
+        ? `in testa <b>${esc(leader.name)}</b> con Elo del mese <b>${leader.elo}</b> · ${crownsTxt(leader.crowns)} su ${gamesTxt(live.games)}${live.tie ? " · a pari merito" : ""} · il titolo si assegna il ${lastDay}`
         : ""}</div>
       <div class="sn-need">${seasonNeedLine(live)}</div>` : `
       <div class="sn-empty">
         ${crownEmblem("big")}
         <b>Ancora nessuna partita a ${monthName}</b>
-        <small>La prima Crown del mese è in palio: chi guida la classifica il ${lastDay} ${monthName} diventa il campione e si prende la carta del mese, purché abbia giocato almeno ${SEASON_MIN_GAMES} partite.</small>
+        <small>Il titolo del mese è in palio: chi il ${lastDay} ${monthName} ha l'Elo del mese più alto diventa il campione e si prende la carta del mese, purché abbia giocato almeno ${SEASON_MIN_GAMES} partite. Tutti ripartono da ${ELO_START}.</small>
       </div>`}
       ${holder ? `
       <button class="sn-holder" data-action="season-open" data-key="${holder.key}">
@@ -256,9 +287,10 @@ function renderSeasonHome(room, me) {
         <span class="ml-auto"></span>
         ${sourceSelect()}
       </div>
-      ${renderListHead()}
-      <ul class="lb-list">${sortRows(rows).map((r, i) => listRow(r, i, me, titles)).join("")}</ul>
-      <p class="foot-note">Il campione del mese è chi guida questa classifica l'ultimo giorno: prima le Crown, poi la quota di vittorie, poi la media.</p>
+      ${renderListHead(true)}
+      <ul class="lb-list with-elo">${sortSeasonRows(rows).map((r, i) => listRow(r, i, me, titles, true)).join("")}</ul>
+      ${monthHow()}
+      <p class="foot-note">Il campione del mese è chi chiude il mese con l'Elo del mese più alto: tutti ripartono da ${ELO_START} il primo del mese. A parità decidono le Crown, poi la quota di vittorie, poi la media.</p>
     </section>` : "";
 
   return `
@@ -275,7 +307,7 @@ function renderGoldBook(closed) {
     return `
     <section class="card">
       <div class="card-head"><h2 class="section-title">Albo d'oro</h2></div>
-      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi guida la classifica del mese ne diventa il campione — servono almeno ${SEASON_MIN_GAMES} partite giocate in quel mese — e la carta resta per sempre nella sua scheda.</p>
+      <p class="muted small">Il primo titolo si assegna alla fine del mese: chi chiude il mese con l'Elo del mese più alto ne diventa il campione — servono almeno ${SEASON_MIN_GAMES} partite giocate in quel mese — e la carta resta per sempre nella sua scheda.</p>
     </section>`;
   }
   const open = localState.showSeasons;
@@ -297,14 +329,14 @@ function renderGoldBook(closed) {
               <span class="sr-txt">
                 <b>${s.champions.length ? esc(s.champions.map((r) => r.name).join(" e ")) : "Titolo non assegnato"}</b>
                 <small>${esc(s.label)} · ${s.champions.length
-                  ? `${s.champions[0].crowns === 1 ? "1 Crown" : s.champions[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"}${s.tie ? " · titolo condiviso" : ""}`
+                  ? `Elo del mese ${s.champions[0].elo} · ${crownsTxt(s.champions[0].crowns)} su ${gamesTxt(s.games)}${s.tie ? " · titolo condiviso" : ""}`
                   : `nessuno è arrivato a ${s.minGames || SEASON_MIN_GAMES} partite`}</small>
               </span>
               ${icon("chevron", "tiny turn-r")}
             </button>
           </li>`).join("")}
       </ul>
-      <p class="foot-note">Un mese, una stagione: valgono le partite dal vivo e quelle online, e per il titolo servono almeno ${SEASON_MIN_GAMES} partite giocate nel mese. La carta resta per sempre nella scheda del campione.</p>` : ""}
+      <p class="foot-note">Un mese, una stagione: tutti ripartono da ${ELO_START} il primo del mese, valgono le partite dal vivo e quelle online, e per il titolo servono almeno ${SEASON_MIN_GAMES} partite giocate nel mese. La carta resta per sempre nella scheda del campione.</p>` : ""}
     </section>`;
 }
 
@@ -381,8 +413,11 @@ function renderRoomRecords(room) {
 /** Quanto vale, in punti tondi, vincere o perdere un duello a due partendo da 1000 contro 1000 + diff. */
 const swing = (diff, win) => Math.round(Math.abs(eloSwing(ELO_START, ELO_START + diff, win ? 1 : 0)));
 
-/** Il blocco "come si calcola": stesso testo in classifica e nella scheda giocatore. */
-function eloHowBox() {
+/**
+ * Il blocco "come si calcola": stesso testo in classifica e nella scheda
+ * giocatore. Con `month` chiude sull'Elo del mese, che decide il titolo.
+ */
+function eloHowBox({ month = false } = {}) {
   return `
     <div class="how-box">
       <p><b>Tutti partono da ${ELO_START}.</b> Il rating non conta <i>quante</i> partite vinci ma <b>chi</b> ti lasci dietro: prima di ogni partita, dalla differenza fra i rating, si stima quanto è probabile che tu finisca davanti a ciascuno degli altri; poi si guarda com'è andata davvero e ci si sposta di conseguenza.</p>
@@ -392,8 +427,18 @@ function eloHowBox() {
         <li><span>Contro uno più debole di 200</span><b>vinci +${swing(-200, true)} · perdi −${swing(-200, false)}</b></li>
       </ul>
       <p>Con più giocatori al tavolo la partita vale come un giro di <b>sfide a due</b> contro ognuno degli altri: davanti = vinta, dietro = persa, pari punti = mezza. I punti in gioco si dividono per il numero di avversari, così una partita a 5 pesa quanto una a 2, e quello che uno guadagna lo perdono gli altri: la somma fa sempre zero.</p>
-      <p>Le partite si contano <b>in ordine di data</b>, tutte quelle dello storico, senza stagioni: il rating è la storia intera di ognuno. Il <b>picco</b> è il valore più alto mai toccato; <b>ultima</b> è quanto ci si è mossi nell'ultima partita giocata.</p>
+      ${month
+        ? `<p><b>L'Elo del mese</b> è lo stesso calcolo, ma <b>tutti ripartono da ${ELO_START} il primo del mese</b> e contano solo le partite di quel mese, in ordine di data. Chi chiude il mese col numero più alto, con almeno ${SEASON_MIN_GAMES} partite, è il campione; a parità decidono le Crown, poi la quota di vittorie, poi la media. Il rating della classifica generale è un'altra cosa: la storia intera di ognuno, e non vale per il titolo.</p>`
+        : `<p>Le partite si contano <b>in ordine di data</b>, tutte quelle dello storico, senza stagioni: il rating è la storia intera di ognuno, una statistica a sé che <b>non vale per il titolo del mese</b> (quello segue l'Elo del mese, che riparte da ${ELO_START} ogni mese). Il <b>picco</b> è il valore più alto mai toccato; <b>ultima</b> è quanto ci si è mossi nell'ultima partita giocata.</p>`}
     </div>`;
+}
+
+/** Il tasto "come si calcola" dell'Elo del mese, con la spiegazione sotto quando e' aperto. */
+function monthHow() {
+  const open = localState.showMonthHow;
+  return `
+      <button class="how-toggle" data-action="lb-toggle" data-k="showMonthHow" aria-expanded="${open}">${icon("eye", "tiny")} Come si calcola l'Elo del mese ${icon("chevron", `tiny ${open ? "turn-u" : ""}`)}</button>
+      ${open ? eloHowBox({ month: true }) : ""}`;
 }
 
 function renderElo(room, me) {
@@ -404,7 +449,7 @@ function renderElo(room, me) {
   return `
     <section class="card">
       <button class="card-head as-button" data-action="lb-toggle" data-k="showElo" aria-expanded="${open}">
-        <h2 class="section-title">Rating Elo</h2>
+        <h2 class="section-title">Rating Elo di sempre</h2>
         <span class="muted small ml-auto">chi batte i forti sale di più</span>
         <span class="chev ${open ? "open" : ""}">${icon("chevron")}</span>
       </button>
@@ -422,7 +467,8 @@ function renderElo(room, me) {
           </li>`).join("")}
       </ul>
       <button class="how-toggle" data-action="lb-toggle" data-k="showHow" aria-expanded="${how}">${icon("eye", "tiny")} Come si calcola ${icon("chevron", `tiny ${how ? "turn-u" : ""}`)}</button>
-      ${how ? eloHowBox() : ""}` : ""}
+      ${how ? eloHowBox() : ""}
+      <p class="foot-note">La storia intera di ognuno, una statistica a sé: per il titolo del mese conta l'Elo del mese, che riparte da ${ELO_START} ogni mese.</p>` : ""}
     </section>`;
 }
 
@@ -613,8 +659,10 @@ export const leaderboardView = {
   actions: {
     "lb-sort"(ctx, el) {
       const k = el.dataset.k;
-      if (localState.sort === k) localState.dir = -localState.dir;
-      else { localState.sort = k; localState.dir = -1; }
+      const season = el.dataset.scope === "season";
+      const sortKey = season ? "sSort" : "sort", dirKey = season ? "sDir" : "dir";
+      if (localState[sortKey] === k) localState[dirKey] = -localState[dirKey];
+      else { localState[sortKey] = k; localState[dirKey] = -1; }
     },
     "lb-toggle"(ctx, el) { localState[el.dataset.k] = !localState[el.dataset.k]; },
     "lb-scope"(ctx, el) {
@@ -658,14 +706,15 @@ export const leaderboardView = {
       const key = el.dataset.key;
       const s = seasons(ctx.room.history, ctx.room.players, { source: localState.source }).find((x) => x.key === key);
       if (!s) return "page";
-      const rows = s.rows.map((r) => ({ playerId: r.playerId, name: r.name, total: r.crowns }));
+      const rows = s.rows.map((r) => ({ playerId: r.playerId, name: r.name, total: r.elo }));
       const winners = new Set((s.closed ? s.champions : s.leader ? [s.leader] : []).map((r) => r.playerId));
+      const hero = s.champions[0] || s.leader || null;
       await sharePodium(rows, winners, {
         title: s.noChampion ? `${s.short}: titolo non assegnato` : s.closed ? `Campione di ${s.short}` : `${s.label}: in testa`,
         room: ctx.room.meta.name || "",
         dateLabel: s.label,
-        subtitle: `${s.champions[0] ? s.champions[0].crowns : s.leader ? s.leader.crowns : 0} Crown su ${s.games} ${s.games === 1 ? "partita" : "partite"}`,
-        foot: "Flip 7 · le Crown del mese · una stagione al mese",
+        subtitle: `Elo del mese ${hero ? hero.elo : ELO_START} · ${crownsTxt(hero ? hero.crowns : 0)} su ${gamesTxt(s.games)}`,
+        foot: "Flip 7 · l'Elo del mese · una stagione al mese",
         filename: `flip7-${key}.png`,
         text: s.noChampion ? `Flip 7 · ${s.short}: titolo non assegnato` : s.closed ? `Flip 7 · Campione di ${s.short}: ${s.champions.map((r) => r.name).join(" e ")}` : `Flip 7 · ${s.label}, in testa ${s.leader ? s.leader.name : "—"}`
       });
@@ -708,7 +757,6 @@ function openSeasonPage(key) {
 
 function renderSeasonPage(st) {
   const s = st.season;
-  const top = s.rows.slice(0, 3);
   const heroes = s.closed ? s.champions : s.leader ? [s.leader] : [];
   const list = awards(s.rows);
   return `
@@ -726,23 +774,15 @@ function renderSeasonPage(st) {
         <div class="sh-name">${s.noChampion ? "Titolo non assegnato" : esc(heroes.map((r) => r.name).join(" e ")) || "—"}</div>
         <div class="sh-sub">${s.noChampion
           ? `il mese si è chiuso senza nessuno a ${s.minGames || SEASON_MIN_GAMES} partite: il titolo resta in bacheca`
-          : `${heroes[0] ? `${heroes[0].crowns === 1 ? "1 Crown" : heroes[0].crowns + " Crown"} su ${s.games === 1 ? "1 partita" : s.games + " partite"} · media ${fmtNum(heroes[0].avg, 1)}` : "ancora nessuna partita"}${s.closed ? "" : " · il titolo si assegna a fine mese"}`}</div>
+          : `${heroes[0] ? `Elo del mese <b>${heroes[0].elo}</b> · ${crownsTxt(heroes[0].crowns)} su ${gamesTxt(s.games)} · media ${fmtNum(heroes[0].avg, 1)}` : "ancora nessuna partita"}${s.closed ? "" : " · il titolo si assegna a fine mese"}`}</div>
         ${s.closed ? "" : `<div class="sh-need">${seasonNeedLine(s)}</div>`}
       </section>
 
       <section class="card tight">
-        <div class="card-head"><h2 class="section-title">Classifica del mese</h2><span class="muted small ml-auto">${s.games} ${s.games === 1 ? "partita" : "partite"}</span></div>
-        <ul class="lb-list">
-          ${s.rows.map((r, i) => `
-            <li class="lbrow ${i === 0 ? "top" : ""}" data-action="lb-detail" data-id="${r.playerId}">
-              <span class="rank ${i < 3 ? "medal m" + (i + 1) : ""}">${i + 1}</span>
-              <span class="lbname">${avatar(r.playerId, r.name, "sm")}<span class="txt">${esc(r.name)}<small>rec. ${r.best}</small></span></span>
-              <span class="crown-chip ${r.crowns ? "" : "zero"}">${r.crowns ? crownEmblem("mini") : icon("crownFill")}<b>${r.crowns}</b></span>
-              ${winRing(r.winRate)}
-              <span class="col avg">${fmtNum(r.avg, 1)}</span>
-              <span class="col games">${r.games}</span>
-            </li>`).join("")}
-        </ul>
+        <div class="card-head"><h2 class="section-title">Classifica del mese</h2><span class="muted small ml-auto">${gamesTxt(s.games)}</span></div>
+        ${renderListHead(true)}
+        <ul class="lb-list with-elo">${sortSeasonRows(s.rows).map((r, i) => listRow(r, i, null, {}, true)).join("")}</ul>
+        ${monthHow()}
       </section>
 
       ${list.length ? `
@@ -770,7 +810,7 @@ function renderSeasonPage(st) {
           }).join("") || `<li class="muted">Nessuna partita</li>`}
         </ul>
       </section>
-      <p class="foot-note">${s.closed ? "Il titolo è assegnato: resta per sempre nella scheda del campione." : "Il mese non è finito: chi è in testa oggi potrebbe non esserlo il 30."}</p>
+      <p class="foot-note">${s.closed ? "Il titolo è assegnato sull'Elo del mese: resta per sempre nella scheda del campione." : `Il mese non è finito: chi è in testa oggi potrebbe non esserlo l'ultimo giorno. Tutti sono ripartiti da ${ELO_START} il primo del mese.`}</p>
     </div>`;
 }
 
@@ -879,7 +919,7 @@ function renderTitles(titles) {
           <button class="title-tile" data-action="season-open" data-key="${t.key}" style="--tone:${seasonTone(t.key)}">
             ${seasonBadge(t.key, { cls: "big" })}
             <b>${esc(t.short)}</b>
-            <small>${t.crowns === 1 ? "1 Crown" : t.crowns + " Crown"} su ${t.games}${t.shared ? " · condiviso" : ""}</small>
+            <small>Elo ${t.elo} · ${crownsTxt(t.crowns)} su ${t.games}${t.shared ? " · condiviso" : ""}</small>
           </button>`).join("")}
       </div>
     </section>`;
@@ -981,7 +1021,7 @@ function renderPlayerPage(s) {
         ${elo ? `
         <div class="hl tone-silver ${elo.lastGameId ? "tap" : ""}" ${elo.lastGameId ? `data-action="award-game" data-g="${elo.lastGameId}" data-note="${esc(`${signed(elo.last)} di rating in questa partita`)}"` : ""}>
           <b>${elo.elo}</b>
-          <span>rating Elo<small>${elo.rank}º in stanza · ${signed(elo.last)} nell'ultima · picco ${elo.peak}</small></span>
+          <span>rating Elo di sempre<small>${elo.rank}º in stanza · ${signed(elo.last)} nell'ultima · picco ${elo.peak}</small></span>
         </div>` : ""}
         ${h.detailedGames ? `
           <div class="hl tone-gold">

@@ -35,7 +35,9 @@ test("stagioni: un mese chiuso ha il suo campione, quello in corso solo chi e' i
   assert.equal(list[1].label, "Agosto 2026");
   assert.equal(list[1].short, "Agosto 26");
   assert.equal(list[1].games, 3);
-  assert.deepEqual(list[1].champions.map((r) => r.playerId), ["ada"], "2 Crown su 3: e' Ada la campionessa");
+  assert.deepEqual(list[1].champions.map((r) => r.playerId), ["ada"], "l'Elo del mese piu' alto: e' Ada la campionessa");
+  assert.ok(list[1].rows[0].elo > ELO_START, "la classifica del mese porta l'Elo del mese");
+  assert.deepEqual(list[1].rows.map((r) => r.playerId), ["ada", "bea", "cal"], "ordinata per Elo del mese, a parita' le Crown");
   const titles = seasonTitles(history, players, { now, minGames: 1 });
   assert.equal(titles.ada.length, 1);
   assert.equal(titles.ada[0].key, "2026-08");
@@ -48,15 +50,57 @@ test("stagioni: un mese chiuso ha il suo campione, quello in corso solo chi e' i
 
 test("stagioni: vale tutto insieme, dal vivo e online; a parita' assoluta il titolo si condivide", () => {
   const now = at(2026, 9, 1);
+  // due partite chiuse alla pari: stesse Crown, stesso Elo del mese (1000), stessa media
   const history = Object.fromEntries([
-    game("a", at(2026, 8, 1), { ada: 200, bea: 100 }, { source: "online" }),
-    game("b", at(2026, 8, 2), { ada: 100, bea: 200 })
+    game("a", at(2026, 8, 1), { ada: 200, bea: 200 }, { source: "online" }),
+    game("b", at(2026, 8, 2), { ada: 150, bea: 150 })
   ]);
   const s = seasons(history, players, { now, minGames: 1 })[0];
   assert.equal(s.games, 2, "la partita online conta come quella dal vivo");
   assert.deepEqual(s.champions.map((r) => r.playerId).sort(), ["ada", "bea"]);
   assert.equal(s.tie, true);
   assert.equal(seasonTitles(history, players, { now, minGames: 1 }).ada[0].shared, true);
+  // una vittoria a testa non e' una parita': chi vince l'ultima sfida batte uno gia' avanti, e sta davanti
+  const swap = Object.fromEntries([
+    game("a", at(2026, 8, 1), { ada: 200, bea: 100 }),
+    game("b", at(2026, 8, 2), { ada: 100, bea: 200 })
+  ]);
+  const t = seasons(swap, players, { now, minGames: 1 })[0];
+  assert.equal(t.tie, false);
+  assert.deepEqual(t.champions.map((r) => r.playerId), ["bea"]);
+});
+
+test("stagioni: il titolo segue l'Elo del mese, non le Crown, e il mese prima non conta", () => {
+  const now = at(2026, 9, 1);
+  const history = Object.fromEntries([
+    // agosto: Cal domina, ma e' un altro mese
+    game("p1", at(2026, 7, 1), { cal: 200, ada: 50, bea: 40 }),
+    game("p2", at(2026, 7, 2), { cal: 200, ada: 50, bea: 40 }),
+    // settembre: Ada vince 4 volte, ma sempre contro Cal che perde e basta;
+    // Bea vince 2 volte, contro Ada che e' la piu' forte del mese
+    game("g1", at(2026, 8, 1), { ada: 200, cal: 100 }),
+    game("g2", at(2026, 8, 2), { ada: 200, cal: 100 }),
+    game("g3", at(2026, 8, 3), { ada: 200, cal: 100 }),
+    game("g4", at(2026, 8, 4), { bea: 200, ada: 100 }),
+    game("g5", at(2026, 8, 5), { bea: 200, ada: 100 }),
+    game("g6", at(2026, 8, 6), { ada: 200, cal: 100 })
+  ]);
+  const s = seasons(history, players, { now, minGames: 1 }).find((x) => x.key === "2026-09");
+  const by = Object.fromEntries(s.rows.map((r) => [r.playerId, r]));
+  assert.equal(by.ada.crowns, 4);
+  assert.equal(by.bea.crowns, 2);
+  assert.ok(by.bea.elo > by.ada.elo, "battere Ada vale piu' di 4 Crown contro Cal");
+  assert.deepEqual(s.rows.map((r) => r.playerId), ["bea", "ada", "cal"], "la classifica del mese e' per Elo del mese");
+  assert.deepEqual(s.champions.map((r) => r.playerId), ["bea"]);
+  assert.equal(s.rows[0].rank, 1);
+  assert.equal(s.rows[1].rank, 2);
+  // tutti da 1000 il primo del mese: il dominio di Cal ad agosto non conta a settembre
+  assert.ok(by.cal.elo < ELO_START);
+  const general = Object.fromEntries(eloRatings(history, players).map((r) => [r.playerId, r]));
+  assert.notEqual(general.cal.elo, by.cal.elo, "il rating di sempre e' un'altra cosa");
+  const titles = seasonTitles(history, players, { now, minGames: 1 });
+  assert.equal(titles.bea[0].elo, by.bea.elo, "la carta in bacheca porta l'Elo del mese");
+  assert.equal(titles.ada, undefined);
 });
 
 test("monthKey e seasonClosed seguono il calendario locale", () => {

@@ -10,7 +10,7 @@ e alimenta la **classifica perpetua**: ogni vittoria vale una **Crown** 👑.
 - 🧮 calcolatrice con le carte: numeri, `+2…+10`, `×2`, bonus **Flip 7** e sballo
 - 🕰️ inserimento di **partite vecchie**, giocate prima dell'app
 - 🔁 formazione libera: i giocatori possono cambiare da una partita all'altra
-- 🏅 **stagioni mensili**: chi guida il mese (con almeno 10 partite giocate) ne diventa il campione e si prende la carta di quel mese
+- 🏅 **stagioni mensili**: chi chiude il mese con l'**Elo del mese** più alto (tutti da 1000 il primo del mese, con almeno 10 partite giocate) ne diventa il campione e si prende la carta di quel mese
 - 🔔 al tavolo online l'app **avvisa quando tocca a te** (suono, vibrazione, notifica), e chi sparisce
   si **blocca di comune accordo** senza chiudere la partita
 - 💸 **costo zero**: nessun dominio, nessun abbonamento
@@ -510,9 +510,17 @@ uno dall'altro invece di una griglia tutta uguale:
   stringono al crescere dello storico, si scorre lateralmente e si apre già sull'ultima
   partita giocata. In oro le vittorie, la tratteggiata è l'obiettivo.
 
-**Le stagioni.** Un mese di calendario è una stagione: alla fine del mese, chi guida la
-classifica di quel mese (stessa formula: Crown, quota di vittorie, media) ne diventa il
-**campione** e si prende **la carta di quel mese**. Non una medaglia e non una coccarda:
+**Le stagioni.** Un mese di calendario è una stagione: alla fine del mese, chi chiude
+con l'**Elo del mese** più alto ne diventa il **campione** e si prende **la carta di
+quel mese**. L'Elo del mese è lo stesso calcolo del rating Elo (più sotto), ma **tutti
+ripartono da 1000 il primo del mese** e contano solo le partite di quel mese, in ordine
+di data. Così il titolo non va a chi gioca di più (le Crown si sommano, e con presenze
+diverse premiano la frequenza) e non è nemmeno il guadagno sul rating di sempre, che a
+rating assestati è una lotteria: il guadagno atteso è zero per tutti, forti e deboli.
+A parità di Elo decidono le Crown, poi la quota di vittorie, poi la media. La classifica
+del mese si ordina per Elo del mese (verde sopra i 1000, rosso sotto), con le Crown, la
+quota di vittorie e le partite in riga e la media sotto il nome; il pulsante **Come si
+calcola l'Elo del mese** apre la spiegazione. Non una medaglia e non una coccarda:
 la carta del mazzo di Flip 7 che porta il numero del mese — maggio è la **5**, dicembre è
 la **12** — col colore che quel numero ha nel gioco, la cornice d'oro da campione e l'anno
 nel cartiglio in basso. La faccia è crema negli anni pari e notte in quelli dispari, così
@@ -529,12 +537,13 @@ insieme; a parità assoluta il titolo si condivide.
 
 La **Classifica si apre sulla stagione in corso**, perché il mese conta più del
 totale di sempre: in cima il mese con i giorni che mancano e la barra del tempo, il
-podio del mese con chi è in testa (e la carta ancora spenta), chi è in corsa per il titolo, il **campione in
+podio del mese con chi è in testa (targhette con l'Elo del mese, e la carta ancora spenta), chi è in corsa per il titolo, il **campione in
 carica** dell'ultimo mese chiuso, poi la classifica del mese, i record del mese e
 l'**albo d'oro**. Lo switch in alto (**Stagione / Generale**, c'è anche un pulsante in
 fondo) porta al generale: le Crown di sempre con i filtri di periodo e provenienza, i
-record, i primati della stanza, il rating Elo e l'andamento (**Posizione**, **Media
-punti** e **Rating Elo**: tre letture dello stesso storico, una per pulsante). Toccando un mese dell'albo
+record, i primati della stanza, il rating Elo di sempre (una statistica a sé: non vale
+per il titolo del mese) e l'andamento (**Posizione**, **Media punti** e **Rating Elo**:
+tre letture dello stesso storico, una per pulsante). Toccando un mese dell'albo
 si apre la sua pagina: campione, classifica del mese, record del mese, le partite, e il
 pulsante per condividere l'immagine. Non c'è niente da chiudere a mano: si calcola
 dallo storico.
@@ -591,7 +600,10 @@ una vittoria vale +16 e una sconfitta −16; contro uno più forte di 200 punti 
 giocatori al tavolo la partita è un giro di sfide a due contro ognuno degli altri, i
 punti in gioco si dividono per il numero di avversari (una partita a 5 pesa quanto una
 a 2) e la somma degli spostamenti fa sempre zero. Le partite si contano in ordine di
-data, tutte, senza stagioni. Il grafico **Andamento → Rating Elo** lo racconta nel tempo:
+data, tutte, senza stagioni: è una statistica a sé e **non vale per il titolo del mese**,
+che segue l'Elo del mese (stessa formula, ma da 1000 ogni mese, con le sole partite del
+mese: è `seasons` in [js/stats.js](js/stats.js)). Il grafico **Andamento → Rating Elo**
+lo racconta nel tempo:
 una linea per giocatore, il rating dopo ogni partita, e si tocca una colonna per leggere
 i valori di quel giorno. La lista mostra rating, picco e lo spostamento dell'ultima
 partita (*+12 ultima*), e il pulsante **Come si calcola** apre questa spiegazione con
