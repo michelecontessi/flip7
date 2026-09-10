@@ -1637,8 +1637,8 @@ function renderControls(g, ctx, me) {
     const pts = flying ? pointsBefore(g.hands[actor], g.lastDraw) : engine.handPoints(g.hands[actor]);
     return `
       <div class="table-actions">
-        <button class="btn go big" data-action="tbl-hit" data-at="${g.updatedAt || 0}">Pesca</button>
-        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}">Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
+        <button class="btn go big" data-action="tbl-hit" data-at="${g.updatedAt || 0}" ${flying ? "disabled" : ""}>Pesca</button>
+        <button class="btn stop big" data-action="tbl-stay" data-at="${g.updatedAt || 0}" ${flying ? "disabled" : ""}>Mi fermo · +${pts} <i class="btn-tot">${(g.seats[actor].total || 0) + pts}</i></button>
       </div>${flying ? "" : riskLine(g, actor)}`;
   }
   // fuori dallo spareggio: niente comandi, si guarda e basta
